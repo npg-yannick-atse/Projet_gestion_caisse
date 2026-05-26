@@ -1,0 +1,1089 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 2280" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .hdr-sec { fill: #8e44ad; }
+      .hdr-ref { fill: #27ae60; }
+      .hdr-fin { fill: #e67e22; }
+      .hdr-trx { fill: #2980b9; }
+      .hdr-aud { fill: #c0392b; }
+      .tbody { fill: #f7f9fc; stroke: #d5dbe3; stroke-width: 1; }
+      .tbody-new { fill: #fff8e1; stroke: #f1c40f; stroke-width: 1.6; }
+      .tbody-mod { fill: #eaf6ff; stroke: #2980b9; stroke-width: 1.6; }
+      .t-title { fill: white; font-weight: bold; font-size: 10.5px; }
+      .col { fill: #2c3e50; font-size: 8.5px; }
+      .pk { fill: #e74c3c; font-size: 8.5px; font-weight: bold; }
+      .fk { fill: #3498db; font-size: 8.5px; }
+      .new { fill: #d35400; font-size: 8.5px; font-weight: bold; }
+      .note { fill: #27ae60; font-size: 8px; font-style: italic; }
+      .note-new { fill: #d35400; font-size: 8px; font-style: italic; font-weight: bold; }
+      .rel { stroke: #3498db; stroke-width: 1.3; fill: none; marker-end: url(#arr-blue); }
+      .rel-event { stroke: #e67e22; stroke-width: 1.3; fill: none; marker-end: url(#arr-orange); stroke-dasharray: 6,3; }
+      .rel-new { stroke: #d35400; stroke-width: 1.5; fill: none; marker-end: url(#arr-orange-solid); }
+      .title-main { font-size: 22px; font-weight: bold; fill: #2c3e50; }
+      .subtitle { font-size: 13px; fill: #7f8c8d; }
+      .version { font-size: 12px; fill: #d35400; font-weight: bold; }
+      .domain-label { font-size: 14px; font-weight: bold; }
+      .domain-box { rx: 8; ry: 8; stroke-width: 2; fill-opacity: 0.05; }
+    </style>
+    <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3498db"/>
+    </marker>
+    <marker id="arr-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#e67e22"/>
+    </marker>
+    <marker id="arr-orange-solid" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#d35400"/>
+    </marker>
+  </defs>
+  <rect width="2400" height="2280" fill="#f8f9fa" rx="10"/>
+  <text x="1200" y="35" text-anchor="middle" class="title-main">Application Fond de Caisse — Modele Conceptuel de Donnees</text>
+  <text x="1200" y="58" text-anchor="middle" class="subtitle">47 tables | Prefixes par domaine | Partie double | Event Sourcing | Pattern Outbox | Idempotence</text>
+  <text x="1200" y="78" text-anchor="middle" class="version">VERSION 2 — Profils, Partenaires unifies, Nature Comptable, Sites, Multi-validateur, Audit permissions</text>
+
+  <!-- Legend -->
+  <rect x="20" y="95" width="2360" height="44" fill="white" stroke="#ddd" rx="5"/>
+  <rect x="40" y="108" width="12" height="12" class="hdr-sec" rx="2"/>
+  <text x="58" y="118" class="col" font-size="10">sec_ Securite (13)</text>
+  <rect x="200" y="108" width="12" height="12" class="hdr-ref" rx="2"/>
+  <text x="218" y="118" class="col" font-size="10">ref_ Referentiel (9)</text>
+  <rect x="360" y="108" width="12" height="12" class="hdr-fin" rx="2"/>
+  <text x="378" y="118" class="col" font-size="10">fin_ Financier (7)</text>
+  <rect x="510" y="108" width="12" height="12" class="hdr-trx" rx="2"/>
+  <text x="528" y="118" class="col" font-size="10">trx_ Transactionnel (9)</text>
+  <rect x="690" y="108" width="12" height="12" class="hdr-aud" rx="2"/>
+  <text x="708" y="118" class="col" font-size="10">aud_ Audit (9)</text>
+
+  <rect x="870" y="105" width="14" height="14" class="tbody-new"/>
+  <text x="890" y="118" class="col" font-size="10">Table NOUVELLE (v2)</text>
+  <rect x="1030" y="105" width="14" height="14" class="tbody-mod"/>
+  <text x="1050" y="118" class="col" font-size="10">Table MODIFIEE (v2)</text>
+
+  <line x1="1230" y1="112" x2="1255" y2="112" class="rel" style="marker-end:none"/>
+  <text x="1262" y="116" class="col" font-size="10">FK directe</text>
+  <line x1="1350" y1="112" x2="1375" y2="112" class="rel-event" style="marker-end:none"/>
+  <text x="1382" y="116" class="col" font-size="10">Lien audit / evenement</text>
+  <line x1="1530" y1="112" x2="1555" y2="112" class="rel-new" style="marker-end:none"/>
+  <text x="1562" y="116" class="col" font-size="10">FK nouvelle / modifiee (v2)</text>
+
+  <text x="1780" y="128" class="note" font-size="10">NB: ref_partenaire remplace ref_client + ref_fournisseur (unification client/fournisseur)</text>
+
+  <!-- Domain boxes -->
+  <rect x="20" y="155" width="900" height="850" class="domain-box" stroke="#8e44ad" fill="#8e44ad"/>
+  <text x="470" y="175" class="domain-label" fill="#8e44ad">SECURITE (sec_) — 13 tables</text>
+
+  <rect x="2000" y="155" width="380" height="1455" class="domain-box" stroke="#27ae60" fill="#27ae60"/>
+  <text x="2190" y="175" class="domain-label" fill="#27ae60">REFERENTIEL (ref_) — 9 tables</text>
+
+  <rect x="20" y="1025" width="900" height="585" class="domain-box" stroke="#e67e22" fill="#e67e22"/>
+  <text x="470" y="1045" class="domain-label" fill="#e67e22">FINANCIER (fin_) — 7 tables</text>
+
+  <rect x="940" y="265" width="1040" height="1345" class="domain-box" stroke="#2980b9" fill="#2980b9"/>
+  <text x="1460" y="285" class="domain-label" fill="#2980b9">TRANSACTIONNEL (trx_) — 9 tables (cœur du systeme)</text>
+
+  <rect x="20" y="1640" width="2360" height="600" class="domain-box" stroke="#c0392b" fill="#c0392b"/>
+  <text x="1200" y="1660" class="domain-label" fill="#c0392b">AUDIT &amp; INTEGRATION (aud_) — 9 tables</text>
+
+  <!-- ============================================ -->
+  <!-- DOMAINE SECURITE                              -->
+  <!-- ============================================ -->
+
+  <!-- sec_direction -->
+  <g transform="translate(40, 195)">
+    <rect x="0" y="0" width="200" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="200" height="4" class="hdr-sec"/>
+    <text x="100" y="15" text-anchor="middle" class="t-title">sec_direction</text>
+    <rect x="0" y="22" width="200" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="col">description</text>
+    <text x="8" y="73" class="col">est_actif BOOL</text>
+  </g>
+
+  <!-- sec_role (MODIFIE - rôles standardisés) -->
+  <g transform="translate(260, 195)">
+    <rect x="0" y="0" width="200" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="200" height="4" class="hdr-sec"/>
+    <text x="100" y="15" text-anchor="middle" class="t-title">sec_role  [MAJ]</text>
+    <rect x="0" y="22" width="200" height="98" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code, libelle UNIQUE</text>
+    <text x="8" y="61" class="col">est_systeme, est_actif BOOL</text>
+    <text x="8" y="73" class="note">VALIDATEUR / DEMANDEUR /</text>
+    <text x="8" y="85" class="note">ADMINISTRATEUR / SUPER_ADMIN /</text>
+    <text x="8" y="97" class="note">CAISSIER</text>
+  </g>
+
+  <!-- sec_permission -->
+  <g transform="translate(480, 195)">
+    <rect x="0" y="0" width="200" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="200" height="4" class="hdr-sec"/>
+    <text x="100" y="15" text-anchor="middle" class="t-title">sec_permission</text>
+    <rect x="0" y="22" width="200" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, module</text>
+    <text x="8" y="61" class="col">libelle, description</text>
+    <text x="8" y="73" class="col">est_actif BOOL</text>
+  </g>
+
+  <!-- sec_profil (NOUVEAU) -->
+  <g transform="translate(700, 195)">
+    <rect x="0" y="0" width="210" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="210" height="4" class="hdr-sec"/>
+    <text x="105" y="15" text-anchor="middle" class="t-title">sec_profil  [NEW]</text>
+    <rect x="0" y="22" width="210" height="122" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="col">description</text>
+    <text x="8" y="73" class="col">categorie ENUM</text>
+    <text x="8" y="85" class="note-new">VALIDATEUR / DEMANDEUR /</text>
+    <text x="8" y="97" class="note-new">CAISSIER / INTERIM</text>
+    <text x="8" y="109" class="col">est_actif BOOL</text>
+    <text x="8" y="121" class="note">[desactivation cascade]</text>
+  </g>
+
+  <!-- sec_user (MODIFIE - +cost_center_id) -->
+  <g transform="translate(40, 320)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-sec"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">sec_user  [MAJ]</text>
+    <rect x="0" y="22" width="240" height="158" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="col">matricule UNIQUE</text>
+    <text x="8" y="73" class="col">nom, prenom, email</text>
+    <text x="8" y="85" class="col">mot_de_passe_hash</text>
+    <text x="8" y="97" class="fk">FK direction_id &#8594; sec_direction</text>
+    <text x="8" y="109" class="new">+ FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="121" class="note-new">[CC principal de l'utilisateur]</text>
+    <text x="8" y="133" class="col">est_actif</text>
+    <text x="8" y="145" class="col">derniere_connexion</text>
+    <text x="8" y="157" class="col">created_at, updated_at, version</text>
+  </g>
+
+  <!-- sec_user_role -->
+  <g transform="translate(300, 320)">
+    <rect x="0" y="0" width="200" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="200" height="4" class="hdr-sec"/>
+    <text x="100" y="15" text-anchor="middle" class="t-title">sec_user_role</text>
+    <rect x="0" y="22" width="200" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (user_id, role_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK role_id &#8594; sec_role</text>
+    <text x="8" y="73" class="col">date_attribution</text>
+  </g>
+
+  <!-- sec_role_permission -->
+  <g transform="translate(300, 420)">
+    <rect x="0" y="0" width="200" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="200" height="4" class="hdr-sec"/>
+    <text x="100" y="15" text-anchor="middle" class="t-title">sec_role_permission</text>
+    <rect x="0" y="22" width="200" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (role_id, permission_id)</text>
+    <text x="8" y="49" class="fk">FK role_id &#8594; sec_role</text>
+    <text x="8" y="61" class="fk">FK permission_id &#8594; sec_permission</text>
+  </g>
+
+  <!-- sec_user_profil (NOUVEAU) -->
+  <g transform="translate(520, 320)">
+    <rect x="0" y="0" width="210" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="210" height="4" class="hdr-sec"/>
+    <text x="105" y="15" text-anchor="middle" class="t-title">sec_user_profil  [NEW]</text>
+    <rect x="0" y="22" width="210" height="86" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK (user_id, profil_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK profil_id &#8594; sec_profil</text>
+    <text x="8" y="73" class="col">date_attribution</text>
+    <text x="8" y="85" class="col">attribue_par_id</text>
+  </g>
+
+  <!-- sec_profil_permission (NOUVEAU) -->
+  <g transform="translate(520, 425)">
+    <rect x="0" y="0" width="210" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="210" height="4" class="hdr-sec"/>
+    <text x="105" y="15" text-anchor="middle" class="t-title">sec_profil_permission  [NEW]</text>
+    <rect x="0" y="22" width="210" height="62" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK (profil_id, permission_id)</text>
+    <text x="8" y="49" class="fk">FK profil_id &#8594; sec_profil</text>
+    <text x="8" y="61" class="fk">FK permission_id &#8594; sec_permission</text>
+  </g>
+
+  <!-- sec_user_caisse_access -->
+  <g transform="translate(40, 510)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-sec"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">sec_user_caisse_access</text>
+    <rect x="0" y="22" width="240" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (user_id, caisse_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="col">niveau_acces (LECTURE/ECRITURE/ADMIN)</text>
+  </g>
+
+  <!-- sec_user_cost_center (NOUVEAU) -->
+  <g transform="translate(40, 620)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-sec"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">sec_user_cost_center  [NEW]</text>
+    <rect x="0" y="22" width="240" height="98" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK (user_id, cost_center_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="73" class="col">est_principal BOOL</text>
+    <text x="8" y="85" class="note-new">[autorisation multi-CC via</text>
+    <text x="8" y="97" class="note-new">permission BON_MULTI_CC]</text>
+  </g>
+
+  <!-- sec_user_permission_extra (NOUVEAU) -->
+  <g transform="translate(40, 745)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-sec"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">sec_user_permission_extra  [NEW]</text>
+    <rect x="0" y="22" width="240" height="146" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK permission_id &#8594; sec_permission</text>
+    <text x="8" y="73" class="col">scope_type</text>
+    <text x="8" y="85" class="note-new">(CAISSE / BON / PORTEFEUILLE)</text>
+    <text x="8" y="97" class="col">scope_id BIGINT (nullable)</text>
+    <text x="8" y="109" class="col">date_debut, date_fin</text>
+    <text x="8" y="121" class="col">accorde_par_id, motif</text>
+    <text x="8" y="133" class="note-new">[ex: choisir caisse principale,</text>
+    <text x="8" y="145" class="note-new">modifier un bon specifique]</text>
+  </g>
+
+  <!-- sec_interim (MODIFIE) -->
+  <g transform="translate(310, 545)">
+    <rect x="0" y="0" width="250" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="250" height="4" class="hdr-sec"/>
+    <text x="125" y="15" text-anchor="middle" class="t-title">sec_interim  [MAJ]</text>
+    <rect x="0" y="22" width="250" height="170" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK initiateur_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK remplacant_id &#8594; sec_user</text>
+    <text x="8" y="73" class="fk">FK permission_id &#8594; sec_permission</text>
+    <text x="8" y="85" class="new">+ FK role_transferre_id &#8594; sec_role</text>
+    <text x="8" y="97" class="new">+ FK profil_transferre_id &#8594; sec_profil</text>
+    <text x="8" y="109" class="col">date_debut, date_fin</text>
+    <text x="8" y="121" class="col">commentaire</text>
+    <text x="8" y="133" class="col">statut (ACTIF/EXPIRE/REVOQUE)</text>
+    <text x="8" y="145" class="note-new">[l'initiateur peut transferer un</text>
+    <text x="8" y="157" class="note-new">role ou un profil au remplacant,</text>
+    <text x="8" y="169" class="note-new">conferant les permissions necessaires]</text>
+  </g>
+
+  <!-- Note d'integration sec -->
+  <g transform="translate(590, 760)">
+    <rect x="0" y="0" width="310" height="100" fill="#fdf2e9" stroke="#d35400" stroke-width="1.2" rx="6"/>
+    <text x="155" y="18" text-anchor="middle" fill="#d35400" font-weight="bold" font-size="11">Architecture des permissions (v2)</text>
+    <text x="10" y="36" class="col">Un user obtient ses permissions par 3 voies :</text>
+    <text x="10" y="50" class="col">1. ROLE  &#8594;  role_permission</text>
+    <text x="10" y="64" class="col">2. PROFIL (categorise)  &#8594;  profil_permission</text>
+    <text x="10" y="78" class="col">3. EXTRA (scope precis)  &#8594;  user_permission_extra</text>
+    <text x="10" y="92" class="note-new">Toute desactivation cascade. Audit dans aud_changement_permission.</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- DOMAINE REFERENTIEL                           -->
+  <!-- ============================================ -->
+
+  <!-- ref_partenaire (NOUVEAU - remplace client + fournisseur) -->
+  <g transform="translate(2020, 195)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_partenaire  [NEW]</text>
+    <rect x="0" y="22" width="340" height="158" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="col">code UNIQUE</text>
+    <text x="8" y="73" class="col">raison_sociale, sigle</text>
+    <text x="8" y="85" class="col">type_partenaire ENUM</text>
+    <text x="8" y="97" class="note-new">(CLIENT / FOURNISSEUR / MIXTE)</text>
+    <text x="8" y="109" class="col">numero_client UNIQUE (nullable)</text>
+    <text x="8" y="121" class="col">adresse, telephone, email</text>
+    <text x="8" y="133" class="col">pays, ville</text>
+    <text x="8" y="145" class="col">est_actif</text>
+    <text x="8" y="157" class="note-new">[unifie ref_client + ref_fournisseur v1]</text>
+  </g>
+
+  <!-- ref_type_bon (NOUVEAU) -->
+  <g transform="translate(2020, 375)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_type_bon  [NEW]</text>
+    <rect x="0" y="22" width="340" height="134" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="col">description</text>
+    <text x="8" y="73" class="col">requiert_numero_client BOOL</text>
+    <text x="8" y="85" class="col">requiert_partenaire BOOL</text>
+    <text x="8" y="97" class="col">requiert_bl BOOL</text>
+    <text x="8" y="109" class="col">est_actif</text>
+    <text x="8" y="121" class="note-new">[ex: RESTITUTION_CLIENT,</text>
+    <text x="8" y="133" class="note-new">ACHAT, AVANCE, REMBOURSEMENT...]</text>
+  </g>
+
+  <!-- ref_plan_comptable -->
+  <g transform="translate(2020, 535)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_plan_comptable</text>
+    <rect x="0" y="22" width="340" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">numero_compte UNIQUE</text>
+    <text x="8" y="61" class="col">libelle, type_compte</text>
+    <text x="8" y="73" class="fk">FK parent_id &#8594; ref_plan_comptable</text>
+    <text x="8" y="85" class="col">est_actif</text>
+  </g>
+
+  <!-- ref_cost_center -->
+  <g transform="translate(2020, 645)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_cost_center</text>
+    <rect x="0" y="22" width="340" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK direction_id &#8594; sec_direction</text>
+    <text x="8" y="73" class="col">budget_annuel DECIMAL(19,4)</text>
+    <text x="8" y="85" class="col">est_actif</text>
+  </g>
+
+  <!-- ref_nature_operation -->
+  <g transform="translate(2020, 755)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_nature_operation</text>
+    <rect x="0" y="22" width="340" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code, libelle</text>
+    <text x="8" y="61" class="fk">FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="73" class="fk">FK plan_comptable_id &#8594; ref_plan_comptable</text>
+    <text x="8" y="85" class="col">est_actif</text>
+    <text x="8" y="97" class="note">[ex: Achat Mat. Informatique]</text>
+  </g>
+
+  <!-- ref_nature_comptable (NOUVEAU) -->
+  <g transform="translate(2020, 880)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_nature_comptable  [NEW]</text>
+    <rect x="0" y="22" width="340" height="134" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">libelle UNIQUE</text>
+    <text x="8" y="61" class="col">description</text>
+    <text x="8" y="73" class="fk">FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="85" class="fk">FK plan_comptable_id &#8594; ref_plan_comptable</text>
+    <text x="8" y="97" class="col">code_comptable_sap</text>
+    <text x="8" y="109" class="col">est_actif</text>
+    <text x="8" y="121" class="note-new">[cache local pour eviter</text>
+    <text x="8" y="133" class="note-new">appels SAP repetes sur manutention]</text>
+  </g>
+
+  <!-- ref_partenaire_nature_comptable (NOUVEAU) -->
+  <g transform="translate(2020, 1040)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_partenaire_nature_comptable  [NEW]</text>
+    <rect x="0" y="22" width="340" height="86" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK (partenaire_id, nature_comptable_id)</text>
+    <text x="8" y="49" class="fk">FK partenaire_id &#8594; ref_partenaire</text>
+    <text x="8" y="61" class="fk">FK nature_comptable_id &#8594; ref_nature_comptable</text>
+    <text x="8" y="73" class="col">est_par_defaut BOOL</text>
+    <text x="8" y="85" class="note-new">[liaison N:N partenaire&#8594;nature]</text>
+  </g>
+
+  <!-- ref_site (NOUVEAU) -->
+  <g transform="translate(2020, 1180)">
+    <rect x="0" y="0" width="340" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="340" height="4" class="hdr-ref"/>
+    <text x="170" y="15" text-anchor="middle" class="t-title">ref_site  [NEW]</text>
+    <rect x="0" y="22" width="340" height="122" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">code UNIQUE</text>
+    <text x="8" y="61" class="col">libelle</text>
+    <text x="8" y="73" class="col">adresse, ville, pays</text>
+    <text x="8" y="85" class="fk">FK direction_id &#8594; sec_direction</text>
+    <text x="8" y="97" class="col">est_actif</text>
+    <text x="8" y="109" class="note-new">[site/emplacement/lieu lie a</text>
+    <text x="8" y="121" class="note-new">un ou plusieurs portefeuilles]</text>
+  </g>
+
+  <!-- Note sur la migration partenaire -->
+  <g transform="translate(2020, 1335)">
+    <rect x="0" y="0" width="340" height="155" fill="#fdf2e9" stroke="#d35400" stroke-width="1.2" rx="6"/>
+    <text x="170" y="18" text-anchor="middle" fill="#d35400" font-weight="bold" font-size="11">Tables retirees (v1 &#8594; v2)</text>
+    <text x="10" y="36" class="col">- ref_client  &#8594;  fusionne dans ref_partenaire</text>
+    <text x="10" y="50" class="col">  (type_partenaire = CLIENT, numero_client conserve)</text>
+    <text x="10" y="68" class="col">- ref_fournisseur  &#8594;  fusionne dans ref_partenaire</text>
+    <text x="10" y="82" class="col">  (type_partenaire = FOURNISSEUR)</text>
+    <text x="10" y="104" class="note-new">Avantages : modele unifie, partenaire mixte possible,</text>
+    <text x="10" y="116" class="note-new">requetes simplifiees, alignement SAP (Business Partner).</text>
+    <text x="10" y="138" class="col">Migration : INSERT INTO ref_partenaire SELECT ... FROM ref_client UNION ref_fournisseur</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- DOMAINE FINANCIER                             -->
+  <!-- ============================================ -->
+
+  <!-- fin_devise -->
+  <g transform="translate(40, 1070)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_devise</text>
+    <rect x="0" y="22" width="230" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE (XOF, EUR, USD)</text>
+    <text x="8" y="61" class="col">libelle, symbole</text>
+    <text x="8" y="73" class="col">nb_decimales INT</text>
+  </g>
+
+  <!-- fin_taux_echange -->
+  <g transform="translate(40, 1210)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_taux_echange</text>
+    <rect x="0" y="22" width="230" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_source_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="fk">FK devise_cible_id &#8594; fin_devise</text>
+    <text x="8" y="73" class="col">taux DECIMAL(19,8)</text>
+    <text x="8" y="85" class="col">date_validite_debut/fin</text>
+    <text x="8" y="97" class="col">source (FIXE_DB / API)</text>
+  </g>
+
+  <!-- fin_caisse -->
+  <g transform="translate(300, 1070)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_caisse</text>
+    <rect x="0" y="22" width="230" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="73" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="85" class="fk">FK site_id &#8594; ref_site (nullable)</text>
+    <text x="8" y="97" class="col">est_principale BOOL</text>
+    <text x="8" y="109" class="col">statut (OUVERTE / FERMEE)</text>
+  </g>
+
+  <!-- fin_session_caisse -->
+  <g transform="translate(300, 1240)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_session_caisse</text>
+    <rect x="0" y="22" width="230" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="61" class="col">date_ouverture, date_cloture</text>
+    <text x="8" y="73" class="col">solde_ouverture, solde_cloture</text>
+    <text x="8" y="85" class="fk">FK cloture_par_id &#8594; sec_user</text>
+    <text x="8" y="97" class="col">type_cloture (AUTO_20H / MANUEL)</text>
+    <text x="8" y="109" class="col">UNIQUE(caisse_id) WHERE OUVERTE</text>
+  </g>
+
+  <!-- fin_portefeuille (MODIFIE - +site_id) -->
+  <g transform="translate(560, 1070)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-fin"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">fin_portefeuille  [MAJ]</text>
+    <rect x="0" y="22" width="240" height="146" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">uuid UUID, code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK caisse_source_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="85" class="new">+ FK site_id &#8594; ref_site (nullable)</text>
+    <text x="8" y="97" class="col">proprietaire_type (USER/DIRECTION)</text>
+    <text x="8" y="109" class="col">proprietaire_id BIGINT</text>
+    <text x="8" y="121" class="col">solde_initial DECIMAL(19,4)</text>
+    <text x="8" y="133" class="col">est_actif</text>
+    <text x="8" y="145" class="note-new">[lie a un site/emplacement]</text>
+  </g>
+
+  <!-- fin_compte_gain_change -->
+  <g transform="translate(560, 1240)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-fin"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">fin_compte_gain_change</text>
+    <rect x="0" y="22" width="240" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="col">description</text>
+  </g>
+
+  <!-- fin_compte_perte_change -->
+  <g transform="translate(560, 1345)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-fin"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">fin_compte_perte_change</text>
+    <rect x="0" y="22" width="240" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="col">description</text>
+  </g>
+
+  <!-- Note Dashboard -->
+  <g transform="translate(40, 1450)">
+    <rect x="0" y="0" width="760" height="140" fill="#fef9e7" stroke="#e67e22" stroke-width="1.2" rx="6"/>
+    <text x="380" y="20" text-anchor="middle" fill="#d35400" font-weight="bold" font-size="12">Dashboard financier (v2)</text>
+    <text x="20" y="42" class="col" font-size="10">Vues calculees a derouler en Partie V (SQL views ou materialized views) :</text>
+    <text x="20" y="60" class="col" font-size="10">- v_solde_caisse(caisse_id, devise_id, solde_calcule, solde_disponible)</text>
+    <text x="20" y="76" class="col" font-size="10">- v_solde_portefeuille(portefeuille_id, devise_id, solde_calcule, site_id, proprietaire)</text>
+    <text x="20" y="92" class="col" font-size="10">- v_wallet_user(user_id, montant_disponible) — accessible au validateur sur SON wallet</text>
+    <text x="20" y="110" class="note-new" font-size="9">Source de verite : SUM(credit) - SUM(debit) sur trx_ecriture_comptable (jamais d'UPDATE direct)</text>
+    <text x="20" y="124" class="note" font-size="9">Affichage dans dashboard : toutes les caisses + tous les portefeuilles avec montants restants.</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- DOMAINE TRANSACTIONNEL                        -->
+  <!-- ============================================ -->
+
+  <!-- trx_bon (MODIFIE - simplifie en enveloppe legere : v3) -->
+  <g transform="translate(960, 300)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-trx"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">trx_bon  [MAJ - enveloppe legere]</text>
+    <rect x="0" y="22" width="310" height="170" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="col">numero UNIQUE</text>
+    <text x="8" y="73" class="fk">FK demandeur_id &#8594; sec_user</text>
+    <text x="8" y="85" class="fk">FK cree_par_interim_id &#8594; sec_user</text>
+    <text x="8" y="97" class="fk">FK type_bon_id &#8594; ref_type_bon</text>
+    <text x="8" y="109" class="col">statut (CREE/VALIDE/DECAISSE...)</text>
+    <text x="8" y="121" class="col">est_recurrent, frequence_recurrence</text>
+    <text x="8" y="133" class="fk">FK bon_parent_id &#8594; trx_bon (recurrence)</text>
+    <text x="8" y="145" class="col">montant_total = SUM(sous_bons) [snapshot]</text>
+    <text x="8" y="157" class="col">version INT (verrou optimiste)</text>
+    <text x="8" y="169" class="col">created_at, updated_at, deleted_at</text>
+    <text x="8" y="181" class="note-new">[enveloppe : pas de donnee metier ici,</text>
+    <text x="8" y="189" class="note-new">tout vit sur les sous_bons]</text>
+  </g>
+
+  <!-- trx_sous_bon (MODIFIE - enrichi : porte toutes les donnees metier) -->
+  <g transform="translate(960, 510)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-trx"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">trx_sous_bon  [MAJ - cœur metier]</text>
+    <rect x="0" y="22" width="310" height="338" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="fk">FK bon_id &#8594; trx_bon (enveloppe)</text>
+    <text x="8" y="73" class="col">numero_sous_bon INT</text>
+    <text x="8" y="85" class="col">libelle, description</text>
+    <text x="8" y="97" class="col">montant DECIMAL(19,4)</text>
+    <text x="8" y="109" class="col">montant_a_payer_client DECIMAL(19,4)</text>
+    <text x="8" y="121" class="new">+ FK partenaire_id &#8594; ref_partenaire</text>
+    <text x="8" y="133" class="new">+ numero_client (NULL sauf type RESTIT_CLIENT)</text>
+    <text x="8" y="145" class="new">+ numero_bl NOT NULL</text>
+    <text x="8" y="157" class="new">+ code_manutention NOT NULL</text>
+    <text x="8" y="169" class="new">+ FK nature_comptable_id &#8594; ref_nature_comptable</text>
+    <text x="8" y="181" class="fk">FK nature_operation_id &#8594; ref_nature_operation</text>
+    <text x="8" y="193" class="fk">FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="205" class="new">+ FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="217" class="new">+ FK portefeuille_id &#8594; fin_portefeuille</text>
+    <text x="8" y="229" class="new">+ FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="241" class="col">statut (independant du bon parent)</text>
+    <text x="8" y="253" class="note">(CREE/VALIDE/DECAISSE/COMPTABILISE/</text>
+    <text x="8" y="265" class="note">ANNULE/REFUSE)</text>
+    <text x="8" y="277" class="col">date_decaissement</text>
+    <text x="8" y="289" class="col">est_imprime BOOL, est_signe BOOL</text>
+    <text x="8" y="301" class="col">version INT (verrou optimiste)</text>
+    <text x="8" y="313" class="col">created_at, updated_at, deleted_at</text>
+    <text x="8" y="325" class="col">UNIQUE(bon_id, numero_sous_bon)</text>
+    <text x="8" y="337" class="note-new">[traitement entier, jamais partiel]</text>
+  </g>
+
+  <!-- trx_validation_bon (MODIFIE - multi-validateur) -->
+  <g transform="translate(960, 895)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-trx"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">trx_validation_bon  [MAJ]</text>
+    <rect x="0" y="22" width="310" height="158" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="fk">FK sous_bon_id &#8594; trx_sous_bon (nullable)</text>
+    <text x="8" y="73" class="fk">FK validateur_id &#8594; sec_user</text>
+    <text x="8" y="85" class="fk">FK validateur_interim_id &#8594; sec_user</text>
+    <text x="8" y="97" class="new">+ niveau_validation INT (1, 2, 3...)</text>
+    <text x="8" y="109" class="new">+ ordre INT (sequentiel ou parallele)</text>
+    <text x="8" y="121" class="col">action (VALIDE / REFUSE / SIGNE)</text>
+    <text x="8" y="133" class="col">date_validation, commentaire</text>
+    <text x="8" y="145" class="col">est_obligatoire BOOL</text>
+    <text x="8" y="157" class="note-new">[multi-validateur, notification par aud_notification]</text>
+  </g>
+
+  <!-- trx_impression_bon -->
+  <g transform="translate(960, 1090)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-trx"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">trx_impression_bon</text>
+    <rect x="0" y="22" width="310" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="fk">FK imprime_par_id &#8594; sec_user</text>
+    <text x="8" y="73" class="col">date_impression</text>
+    <text x="8" y="85" class="col">a_signe BOOL, date_signature</text>
+  </g>
+
+  <!-- trx_bon_caisse -->
+  <g transform="translate(1310, 410)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-trx"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">trx_bon_caisse</text>
+    <rect x="0" y="22" width="290" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="fk">FK bon_source_id &#8594; trx_bon</text>
+    <text x="8" y="73" class="fk">FK sous_bon_source_id &#8594; trx_sous_bon</text>
+    <text x="8" y="85" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="97" class="col">date_duplication</text>
+    <text x="8" y="109" class="col">contenu_modifie JSONB</text>
+    <text x="8" y="121" class="col">beneficiaire, statut</text>
+    <text x="8" y="133" class="note">[duplication au decaissement]</text>
+  </g>
+
+  <!-- trx_decaissement -->
+  <g transform="translate(1310, 605)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-trx"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">trx_decaissement</text>
+    <rect x="0" y="22" width="290" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_caisse_id &#8594; trx_bon_caisse</text>
+    <text x="8" y="61" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="73" class="col">beneficiaire_nom, beneficiaire_piece</text>
+    <text x="8" y="85" class="col">beneficiaire_telephone</text>
+    <text x="8" y="97" class="col">montant DECIMAL(19,4)</text>
+    <text x="8" y="109" class="col">date_decaissement</text>
+    <text x="8" y="121" class="fk">FK portefeuille_id &#8594; fin_portefeuille</text>
+  </g>
+
+  <!-- trx_operation -->
+  <g transform="translate(1310, 790)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-trx"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">trx_operation</text>
+    <rect x="0" y="22" width="290" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">type_operation (RECHARGE/DECAISS/TRANSF/AJUST)</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK portefeuille_id &#8594; fin_portefeuille</text>
+    <text x="8" y="85" class="col">montant, date_operation</text>
+    <text x="8" y="97" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="109" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="121" class="col">reference, transaction_uuid</text>
+  </g>
+
+  <!-- trx_transfert -->
+  <g transform="translate(1310, 970)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-trx"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">trx_transfert</text>
+    <rect x="0" y="22" width="290" height="146" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK caisse_source_id &#8594; fin_caisse</text>
+    <text x="8" y="61" class="fk">FK caisse_cible_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK portefeuille_cible_id &#8594; fin_portefeuille</text>
+    <text x="8" y="85" class="col">montant_source, montant_cible</text>
+    <text x="8" y="97" class="fk">FK devise_source/cible_id</text>
+    <text x="8" y="109" class="col">taux_applique DECIMAL(19,8)</text>
+    <text x="8" y="121" class="col">montant_gain, montant_perte</text>
+    <text x="8" y="133" class="col">date_transfert, initiateur_id</text>
+    <text x="8" y="145" class="col">statut (INITIE/DEBIT_OK/CREDIT_OK/...)</text>
+  </g>
+
+  <!-- trx_ecriture_comptable (MODIFIE - clarification compte_comptable + cost_center) -->
+  <g transform="translate(960, 1230)">
+    <rect x="0" y="0" width="640" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="640" height="4" class="hdr-trx"/>
+    <text x="320" y="15" text-anchor="middle" class="t-title">trx_ecriture_comptable  [MAJ]</text>
+    <rect x="0" y="22" width="640" height="170" class="tbody-mod"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">transaction_uuid UUID (groupe d'ecritures atomique)</text>
+    <text x="8" y="61" class="col">compte_id BIGINT, type_compte (CAISSE / PORTEFEUILLE / GAIN_CHANGE / PERTE_CHANGE)</text>
+    <text x="8" y="73" class="new">+ FK plan_comptable_id &#8594; ref_plan_comptable  [nature de l'activite = compte comptable]</text>
+    <text x="8" y="85" class="new">+ FK cost_center_id &#8594; ref_cost_center  [qui paye = centre de cout]</text>
+    <text x="8" y="97" class="col">debit DECIMAL(19,4), credit DECIMAL(19,4)  — CHECK (debit XOR credit)</text>
+    <text x="8" y="109" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="121" class="fk">FK reference_bon_id &#8594; trx_bon  /  FK reference_sous_bon_id &#8594; trx_sous_bon</text>
+    <text x="8" y="133" class="col">date_ecriture, hash_integrite SHA-256, hash_precedent</text>
+    <text x="8" y="145" class="note">[immuable — partie double — Niveau 1.1 Partie IV]</text>
+    <text x="8" y="157" class="note-new">[Mouvement comptable = Compte Comptable (nature) + Centre de Cout (payeur)]</text>
+    <text x="8" y="169" class="col">UNIQUE(transaction_uuid, compte_id, type_compte, debit_ou_credit)</text>
+  </g>
+
+  <!-- Note design enveloppe/sous_bon + workflow validation -->
+  <g transform="translate(1310, 1150)">
+    <rect x="0" y="0" width="290" height="305" fill="#eaf6ff" stroke="#2980b9" stroke-width="1.2" rx="6"/>
+    <text x="145" y="20" text-anchor="middle" fill="#2980b9" font-weight="bold" font-size="11">Bon = enveloppe, Sous_bon = data</text>
+    <text x="10" y="38" class="col" font-size="9">Le bon ne porte plus que les metadonnees</text>
+    <text x="10" y="50" class="col" font-size="9">(numero, type, statut, demandeur, recurrence).</text>
+    <text x="10" y="62" class="col" font-size="9">Toutes les donnees metier vivent sur le sous_bon :</text>
+    <text x="10" y="74" class="note-new" font-size="9">partenaire, numero_client, numero_BL, code_manutention,</text>
+    <text x="10" y="86" class="note-new" font-size="9">nature_comptable, montant, devise, caisse, portefeuille.</text>
+    <text x="10" y="100" class="col" font-size="9">montant_total du bon = SUM(sous_bons), snapshot.</text>
+    <text x="10" y="112" class="col" font-size="9">Un bon peut avoir plusieurs sous_bons en devises et</text>
+    <text x="10" y="124" class="col" font-size="9">caisses differentes.</text>
+
+    <line x1="10" y1="138" x2="280" y2="138" stroke="#2980b9" stroke-width="0.8" stroke-dasharray="3,2"/>
+    <text x="145" y="155" text-anchor="middle" fill="#2980b9" font-weight="bold" font-size="11">Workflow multi-validateur (v2)</text>
+    <text x="10" y="172" class="col" font-size="9">1. Bon cree par DEMANDEUR (enveloppe + N sous_bons)</text>
+    <text x="10" y="184" class="col" font-size="9">2. N validateurs determines par regle metier</text>
+    <text x="10" y="196" class="col" font-size="9">   (meme direction, profil VALIDATEUR)</text>
+    <text x="10" y="208" class="col" font-size="9">3. Notification (aud_notification) envoyee a chaque</text>
+    <text x="10" y="220" class="col" font-size="9">   validateur du bon (ou d'un sous_bon precis)</text>
+    <text x="10" y="232" class="col" font-size="9">4. Validation sequentielle (ordre) ou parallele</text>
+    <text x="10" y="244" class="col" font-size="9">   selon niveau_validation</text>
+    <text x="10" y="256" class="col" font-size="9">5. Si sous_bon emis AU NOM d'un VALIDATEUR :</text>
+    <text x="10" y="268" class="col" font-size="9">   notification specifique a ce validateur</text>
+    <text x="10" y="280" class="note-new" font-size="9">6. Si demandeur est lui-meme VALIDATEUR :</text>
+    <text x="10" y="292" class="note-new" font-size="9">   auto-validation (action=VALIDE direct)</text>
+    <text x="10" y="302" class="col" font-size="9">7. Bon visible chez initiateur ET interim</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- DOMAINE AUDIT                                 -->
+  <!-- ============================================ -->
+
+  <!-- aud_journal -->
+  <g transform="translate(40, 1690)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_journal</text>
+    <rect x="0" y="22" width="290" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="col">action, entite_concernee</text>
+    <text x="8" y="73" class="col">entite_id BIGINT</text>
+    <text x="8" y="85" class="col">ancienne_valeur JSONB</text>
+    <text x="8" y="97" class="col">nouvelle_valeur JSONB</text>
+    <text x="8" y="109" class="col">date_action, adresse_ip</text>
+    <text x="8" y="121" class="col">user_agent</text>
+    <text x="8" y="133" class="note">[append-only — aucun UPDATE/DELETE]</text>
+  </g>
+
+  <!-- aud_evenement_bon -->
+  <g transform="translate(360, 1690)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_evenement_bon</text>
+    <rect x="0" y="22" width="290" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="col">type_evenement</text>
+    <text x="8" y="73" class="note">(CREE/MODIFIE/VALIDE/SIGNE/</text>
+    <text x="8" y="85" class="note">IMPRIME/DECAISSE/ANNULE/REFUSE)</text>
+    <text x="8" y="97" class="fk">FK acteur_id &#8594; sec_user</text>
+    <text x="8" y="109" class="fk">FK acteur_interim_id &#8594; sec_user</text>
+    <text x="8" y="121" class="col">payload JSONB</text>
+    <text x="8" y="133" class="note">[event sourcing — Niveau 3.1]</text>
+  </g>
+
+  <!-- aud_outbox -->
+  <g transform="translate(680, 1690)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_outbox</text>
+    <rect x="0" y="22" width="290" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">type_message (SAP_CLOTURE/NOTIF...)</text>
+    <text x="8" y="61" class="col">payload JSONB</text>
+    <text x="8" y="73" class="col">statut (EN_ATTENTE/EN_COURS/ENVOYE/ECHEC)</text>
+    <text x="8" y="85" class="col">nb_tentatives, prochaine_tentative</text>
+    <text x="8" y="97" class="col">derniere_erreur</text>
+    <text x="8" y="109" class="col">date_creation, date_traitement</text>
+    <text x="8" y="121" class="col">cle_idempotence_externe</text>
+    <text x="8" y="133" class="note">[pattern Outbox — Niveau 4.2]</text>
+  </g>
+
+  <!-- aud_log_sap -->
+  <g transform="translate(1000, 1690)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_log_sap</text>
+    <rect x="0" y="22" width="290" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK session_caisse_id &#8594; fin_session_caisse</text>
+    <text x="8" y="61" class="fk">FK outbox_id &#8594; aud_outbox</text>
+    <text x="8" y="73" class="col">date_envoi</text>
+    <text x="8" y="85" class="col">payload JSONB</text>
+    <text x="8" y="97" class="col">statut (SUCCES / ECHEC)</text>
+    <text x="8" y="109" class="col">message_retour, nb_tentatives</text>
+  </g>
+
+  <!-- aud_idempotency_key -->
+  <g transform="translate(1320, 1690)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_idempotency_key</text>
+    <rect x="0" y="22" width="290" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK cle (UUID)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="col">endpoint, hash_requete</text>
+    <text x="8" y="73" class="col">reponse_cachee JSONB</text>
+    <text x="8" y="85" class="col">statut, expire_le</text>
+    <text x="8" y="97" class="col">created_at</text>
+    <text x="8" y="109" class="note">[anti-doublon — Niveau 2.1]</text>
+  </g>
+
+  <!-- aud_changement_permission (NOUVEAU) -->
+  <g transform="translate(1640, 1690)">
+    <rect x="0" y="0" width="320" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="320" height="4" class="hdr-aud"/>
+    <text x="160" y="15" text-anchor="middle" class="t-title">aud_changement_permission  [NEW]</text>
+    <rect x="0" y="22" width="320" height="158" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="fk">FK user_concerne_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK permission_id &#8594; sec_permission</text>
+    <text x="8" y="73" class="col">type_action (GAIN / PERTE)</text>
+    <text x="8" y="85" class="col">source (ROLE / PROFIL / EXTRA / INTERIM)</text>
+    <text x="8" y="97" class="col">source_id BIGINT</text>
+    <text x="8" y="109" class="fk">FK acteur_id &#8594; sec_user</text>
+    <text x="8" y="121" class="col">date_action, adresse_ip</text>
+    <text x="8" y="133" class="col">motif</text>
+    <text x="8" y="145" class="note-new">[traque tous les changements de droits]</text>
+    <text x="8" y="157" class="note-new">[append-only, aucun UPDATE/DELETE]</text>
+  </g>
+
+  <!-- aud_notification (NOUVEAU) -->
+  <g transform="translate(1980, 1690)">
+    <rect x="0" y="0" width="320" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="320" height="4" class="hdr-aud"/>
+    <text x="160" y="15" text-anchor="middle" class="t-title">aud_notification  [NEW]</text>
+    <rect x="0" y="22" width="320" height="158" class="tbody-new"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="fk">FK destinataire_id &#8594; sec_user</text>
+    <text x="8" y="61" class="col">type_notification</text>
+    <text x="8" y="73" class="note-new">(BON_A_VALIDER / BON_VALIDE /</text>
+    <text x="8" y="85" class="note-new">BON_REFUSE / BON_DECAISSE / INTERIM)</text>
+    <text x="8" y="97" class="col">entite_concernee, entite_id</text>
+    <text x="8" y="109" class="col">titre, message</text>
+    <text x="8" y="121" class="col">canal (PUSH / EMAIL / IN_APP)</text>
+    <text x="8" y="133" class="col">est_lue BOOL, date_lecture</text>
+    <text x="8" y="145" class="col">date_creation, date_envoi</text>
+    <text x="8" y="157" class="note-new">[notif validateur si bon emis a son nom]</text>
+  </g>
+
+  <!-- aud_snapshot_journalier -->
+  <g transform="translate(40, 1880)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-aud"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">aud_snapshot_journalier</text>
+    <rect x="0" y="22" width="310" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">date_snapshot DATE</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="col">solde_calcule_ecritures DECIMAL(19,4)</text>
+    <text x="8" y="85" class="col">solde_caisse_table DECIMAL(19,4)</text>
+    <text x="8" y="97" class="col">solde_sap DECIMAL(19,4)</text>
+    <text x="8" y="109" class="col">ecart, statut_reconciliation</text>
+    <text x="8" y="121" class="note">[reconciliation — Niveau 5.5]</text>
+  </g>
+
+  <!-- aud_planification_recurrence -->
+  <g transform="translate(380, 1880)">
+    <rect x="0" y="0" width="310" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="310" height="4" class="hdr-aud"/>
+    <text x="155" y="15" text-anchor="middle" class="t-title">aud_planification_recurrence</text>
+    <rect x="0" y="22" width="310" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="col">frequence (MENSUEL / TRIMESTRIEL...)</text>
+    <text x="8" y="73" class="col">derniere_execution</text>
+    <text x="8" y="85" class="col">prochaine_execution</text>
+    <text x="8" y="97" class="col">est_actif BOOL</text>
+    <text x="8" y="109" class="col">nb_renouvellements_effectues</text>
+  </g>
+
+  <!-- Note recap modifications -->
+  <g transform="translate(720, 1880)">
+    <rect x="0" y="0" width="1580" height="148" fill="#fef5e7" stroke="#d35400" stroke-width="1.4" rx="6"/>
+    <text x="790" y="20" text-anchor="middle" fill="#d35400" font-weight="bold" font-size="13">Synthese des modifications v1 → v2 (Partie AJOUT)</text>
+    <text x="20" y="42" class="col" font-size="10">SECURITE  : +5 tables (sec_profil, sec_user_profil, sec_profil_permission, sec_user_cost_center, sec_user_permission_extra)  |  2 tables modifiees (sec_user, sec_interim, sec_role)</text>
+    <text x="20" y="58" class="col" font-size="10">REFERENTIEL : +5 tables (ref_partenaire [unifie], ref_type_bon, ref_nature_comptable, ref_partenaire_nature_comptable, ref_site)  |  -2 tables retirees (ref_client, ref_fournisseur)</text>
+    <text x="20" y="74" class="col" font-size="10">FINANCIER  : 0 ajout  |  1 table modifiee (fin_portefeuille +site_id)</text>
+    <text x="20" y="90" class="col" font-size="10">TRANSACTIONNEL : 0 ajout  |  4 tables modifiees - trx_bon devient une ENVELOPPE LEGERE (statut, type, demandeur, recurrence), trx_sous_bon devient le CŒUR METIER (partenaire, num client, BL, manutention, nature comptable, montant, devise, caisse, portefeuille), trx_validation_bon multi-niveau, trx_ecriture_comptable +plan_comptable_id +cost_center_id</text>
+    <text x="20" y="106" class="col" font-size="10">AUDIT  : +2 tables (aud_changement_permission, aud_notification)</text>
+    <text x="20" y="128" class="note-new" font-size="11">Total v1 : 36 tables  →  Total v2 : 47 tables  (+11 nouvelles, 7 modifiees, 2 fusionnees)</text>
+  </g>
+
+  <!-- ============================================ -->
+  <!-- RELATIONS PRINCIPALES                         -->
+  <!-- ============================================ -->
+
+  <!-- SEC internal relations -->
+  <!-- user -> direction -->
+  <path d="M 160 320 C 160 305, 160 305, 160 291" class="rel"/>
+  <!-- user_role -> user -->
+  <path d="M 300 360 C 280 360, 280 360, 280 360" class="rel"/>
+  <path d="M 300 360 L 280 360" class="rel"/>
+  <!-- user_role -> role -->
+  <path d="M 400 320 C 400 290, 360 290, 360 291" class="rel"/>
+  <!-- role_permission -> role -->
+  <path d="M 400 420 C 400 360, 360 360, 360 291" class="rel"/>
+  <!-- role_permission -> permission -->
+  <path d="M 500 440 C 540 440, 580 440, 580 291" class="rel"/>
+  <!-- user_profil -> user (NEW) -->
+  <path d="M 520 360 C 480 360, 320 360, 280 360" class="rel-new"/>
+  <!-- user_profil -> profil (NEW) -->
+  <path d="M 625 320 C 625 290, 805 290, 805 319" class="rel-new"/>
+  <!-- profil_permission -> profil (NEW) -->
+  <path d="M 625 425 C 625 360, 805 360, 805 319" class="rel-new"/>
+  <!-- profil_permission -> permission (NEW) -->
+  <path d="M 730 445 C 760 445, 580 445, 580 291" class="rel-new"/>
+  <!-- user_caisse_access -> user -->
+  <path d="M 160 510 C 160 490, 160 490, 160 478" class="rel"/>
+  <!-- user_cost_center -> user (NEW) -->
+  <path d="M 160 620 C 160 575, 160 575, 160 478" class="rel-new"/>
+  <!-- user_permission_extra -> user (NEW) -->
+  <path d="M 160 745 C 160 615, 160 615, 160 478" class="rel-new"/>
+  <!-- interim -> user -->
+  <path d="M 310 580 C 280 580, 280 478, 280 478" class="rel"/>
+  <!-- interim -> permission -->
+  <path d="M 560 580 C 600 580, 600 291, 580 291" class="rel"/>
+  <!-- interim -> role (NEW) -->
+  <path d="M 560 620 C 620 620, 460 290, 460 291" class="rel-new"/>
+  <!-- interim -> profil (NEW) -->
+  <path d="M 560 660 C 720 660, 800 290, 805 319" class="rel-new"/>
+
+  <!-- sec_user -> ref_cost_center (NEW) [traverse all the way to right] -->
+  <path d="M 280 405 C 1900 405, 1900 670, 2020 678" class="rel-new"/>
+  <!-- sec_user_cost_center -> ref_cost_center (NEW) -->
+  <path d="M 280 650 C 1900 650, 1900 685, 2020 685" class="rel-new"/>
+
+  <!-- REF internal -->
+  <!-- nature_operation -> cost_center -->
+  <path d="M 2190 755 C 2190 740, 2190 740, 2190 731" class="rel"/>
+  <!-- nature_operation -> plan_comptable -->
+  <path d="M 2190 755 C 2190 740, 2190 740, 2190 621" class="rel"/>
+  <!-- cost_center -> direction (SEC) -->
+  <path d="M 2020 685 C 1500 685, 1500 240, 240 240" class="rel"/>
+  <!-- nature_comptable -> cost_center (NEW) -->
+  <path d="M 2190 880 C 2190 760, 2190 760, 2190 731" class="rel-new"/>
+  <!-- nature_comptable -> plan_comptable (NEW) -->
+  <path d="M 2200 880 C 2300 880, 2300 600, 2300 621" class="rel-new"/>
+  <!-- partenaire_nature_comptable -> partenaire (NEW) -->
+  <path d="M 2190 1040 C 2190 600, 2190 600, 2190 353" class="rel-new"/>
+  <!-- partenaire_nature_comptable -> nature_comptable (NEW) -->
+  <path d="M 2200 1040 C 2350 1040, 2350 1010, 2350 1014" class="rel-new"/>
+  <!-- site -> direction (NEW) -->
+  <path d="M 2020 1240 C 1700 1240, 1700 240, 240 240" class="rel-new"/>
+
+  <!-- FIN internal -->
+  <!-- taux_echange -> devise (source + cible) -->
+  <path d="M 155 1210 C 155 1175, 155 1175, 155 1166" class="rel"/>
+  <!-- caisse -> devise -->
+  <path d="M 300 1130 C 270 1130, 270 1110, 270 1110" class="rel"/>
+  <!-- caisse -> sec_user (caissier) -->
+  <path d="M 300 1145 C 260 1145, 260 405, 280 405" class="rel"/>
+  <!-- session_caisse -> caisse -->
+  <path d="M 415 1240 C 415 1200, 415 1200, 415 1180" class="rel"/>
+  <!-- session_caisse -> sec_user (cloture_par) -->
+  <path d="M 530 1325 C 470 1325, 230 405, 280 405" class="rel"/>
+  <!-- portefeuille -> caisse_source -->
+  <path d="M 560 1140 C 545 1140, 545 1130, 530 1130" class="rel"/>
+  <!-- portefeuille -> devise -->
+  <path d="M 560 1150 C 400 1150, 270 1110, 270 1110" class="rel"/>
+  <!-- portefeuille -> site (NEW) [right cross] -->
+  <path d="M 800 1160 C 1900 1160, 1900 1220, 2020 1220" class="rel-new"/>
+  <!-- caisse -> site (NEW) [right cross] -->
+  <path d="M 530 1150 C 1700 1150, 1700 1235, 2020 1235" class="rel-new"/>
+  <!-- compte_gain_change -> devise -->
+  <path d="M 560 1255 C 400 1255, 270 1110, 270 1110" class="rel"/>
+  <!-- compte_perte_change -> devise -->
+  <path d="M 560 1360 C 400 1360, 270 1110, 270 1110" class="rel"/>
+
+  <!-- TRX -> SEC, REF, FIN relations -->
+  <!-- bon -> demandeur (sec_user) -->
+  <path d="M 960 360 C 700 360, 400 410, 280 405" class="rel"/>
+  <!-- bon -> type_bon : conserve sur l'enveloppe car gouverne les regles metier sur les sous_bons -->
+  <path d="M 1270 395 C 1700 395, 1700 410, 2020 410" class="rel-new"/>
+  <!-- bon -> bon_parent (auto-ref recurrence) -->
+  <path d="M 1270 435 C 1290 435, 1290 380, 1270 380" class="rel"/>
+
+  <!-- sous_bon -> bon enveloppe -->
+  <path d="M 1115 510 C 1115 500, 1115 500, 1115 490" class="rel"/>
+
+  <!-- sous_bon -> partenaire (DEPLACE depuis bon) -->
+  <path d="M 1270 575 C 1700 575, 1700 275, 2020 275" class="rel-new"/>
+  <!-- sous_bon -> nature_comptable (DEPLACE depuis bon) -->
+  <path d="M 1270 620 C 1700 620, 1700 920, 2020 920" class="rel-new"/>
+  <!-- sous_bon -> nature_operation -->
+  <path d="M 1270 660 C 1700 660, 1700 790, 2020 790" class="rel"/>
+  <!-- sous_bon -> cost_center -->
+  <path d="M 1270 680 C 1700 680, 1700 680, 2020 680" class="rel"/>
+  <!-- sous_bon -> caisse (NEW v2, restera ici) -->
+  <path d="M 960 705 C 700 705, 530 1090, 530 1090" class="rel-new"/>
+  <!-- sous_bon -> portefeuille (DEPLACE depuis bon) -->
+  <path d="M 960 720 C 800 720, 800 1140, 800 1140" class="rel-new"/>
+  <!-- sous_bon -> devise (DEPLACE depuis bon) -->
+  <path d="M 960 735 C 600 735, 400 1090, 270 1090" class="rel-new"/>
+
+  <!-- validation_bon -> bon (enveloppe : valide tout le bon) -->
+  <path d="M 1115 895 C 1115 700, 1115 700, 1115 490" class="rel"/>
+  <!-- validation_bon -> sous_bon (validation au niveau sous_bon possible) -->
+  <path d="M 1115 895 C 1115 885, 1115 885, 1115 870" class="rel"/>
+  <!-- validation_bon -> sec_user (validateur) -->
+  <path d="M 960 952 C 600 952, 400 405, 280 405" class="rel"/>
+  <!-- impression_bon -> bon -->
+  <path d="M 1115 1090 C 1115 800, 1115 800, 1115 490" class="rel"/>
+  <!-- impression_bon -> sec_user -->
+  <path d="M 960 1150 C 600 1150, 400 405, 280 405" class="rel"/>
+  <!-- bon_caisse -> bon (duplication) -->
+  <path d="M 1310 432 C 1290 432, 1290 432, 1270 432" class="rel"/>
+  <!-- bon_caisse -> sous_bon -->
+  <path d="M 1310 484 C 1290 484, 1290 670, 1270 670" class="rel"/>
+  <!-- bon_caisse -> sec_user (caissier) -->
+  <path d="M 1310 495 C 700 495, 400 405, 280 405" class="rel"/>
+  <!-- decaissement -> bon_caisse -->
+  <path d="M 1455 605 C 1455 580, 1455 580, 1455 555" class="rel"/>
+  <!-- decaissement -> sec_user (caissier) -->
+  <path d="M 1310 666 C 700 666, 400 405, 280 405" class="rel"/>
+  <!-- decaissement -> portefeuille -->
+  <path d="M 1310 726 C 1000 726, 800 1140, 800 1140" class="rel"/>
+  <!-- operation -> caisse -->
+  <path d="M 1310 815 C 800 815, 530 1090, 530 1090" class="rel"/>
+  <!-- operation -> portefeuille -->
+  <path d="M 1310 825 C 950 825, 800 1140, 800 1140" class="rel"/>
+  <!-- operation -> devise -->
+  <path d="M 1310 875 C 800 875, 270 1090, 270 1090" class="rel"/>
+  <!-- operation -> sec_user -->
+  <path d="M 1310 900 C 700 900, 400 405, 280 405" class="rel"/>
+  <!-- transfert -> caisse_source/cible -->
+  <path d="M 1310 1020 C 800 1020, 530 1130, 530 1130" class="rel"/>
+  <!-- transfert -> portefeuille_cible -->
+  <path d="M 1310 1042 C 900 1042, 800 1140, 800 1140" class="rel"/>
+  <!-- ecriture -> plan_comptable (NEW) -->
+  <path d="M 1600 1252 C 1800 1252, 1800 595, 2020 595" class="rel-new"/>
+  <!-- ecriture -> cost_center (NEW) -->
+  <path d="M 1600 1262 C 1800 1262, 1800 690, 2020 690" class="rel-new"/>
+  <!-- ecriture -> devise -->
+  <path d="M 1280 1300 C 600 1300, 270 1090, 270 1090" class="rel"/>
+  <!-- ecriture -> bon (reference enveloppe) -->
+  <path d="M 1100 1230 C 1100 870, 1100 870, 1100 490" class="rel"/>
+  <!-- ecriture -> sous_bon (reference fine) -->
+  <path d="M 1130 1230 C 1130 1050, 1130 1050, 1130 870" class="rel-new"/>
+
+  <!-- AUD relations -->
+  <!-- journal -> user -->
+  <path d="M 180 1690 C 180 1050, 280 405, 280 405" class="rel-event"/>
+  <!-- evenement_bon -> bon -->
+  <path d="M 480 1690 C 480 1000, 1115 1000, 1115 490" class="rel-event"/>
+  <!-- log_sap -> session_caisse -->
+  <path d="M 1145 1690 C 800 1690, 415 1310, 415 1350" class="rel-event"/>
+  <!-- log_sap -> outbox (NEW) -->
+  <path d="M 1000 1750 C 970 1750, 970 1750, 970 1750" class="rel-event"/>
+  <!-- idempotency -> user -->
+  <path d="M 1465 1690 C 1465 1050, 400 405, 280 405" class="rel-event"/>
+  <!-- changement_permission -> user (NEW) -->
+  <path d="M 1800 1690 C 1800 1050, 400 405, 280 405" class="rel-new"/>
+  <!-- changement_permission -> permission (NEW) -->
+  <path d="M 1810 1690 C 1810 700, 580 290, 580 291" class="rel-new"/>
+  <!-- notification -> user (NEW) -->
+  <path d="M 2140 1690 C 2140 1050, 400 405, 280 405" class="rel-new"/>
+  <!-- snapshot -> caisse -->
+  <path d="M 200 1880 C 200 1500, 415 1180, 415 1180" class="rel-event"/>
+  <!-- planification -> bon -->
+  <path d="M 540 1880 C 540 1700, 1115 700, 1115 490" class="rel-event"/>
+
+</svg>

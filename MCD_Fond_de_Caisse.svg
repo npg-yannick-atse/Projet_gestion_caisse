@@ -1,0 +1,537 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1820" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .hdr-sec { fill: #8e44ad; }
+      .hdr-ref { fill: #27ae60; }
+      .hdr-fin { fill: #e67e22; }
+      .hdr-trx { fill: #2980b9; }
+      .hdr-aud { fill: #c0392b; }
+      .tbody { fill: #f7f9fc; stroke: #d5dbe3; stroke-width: 1; }
+      .t-title { fill: white; font-weight: bold; font-size: 10.5px; }
+      .col { fill: #2c3e50; font-size: 8.5px; }
+      .pk { fill: #e74c3c; font-size: 8.5px; font-weight: bold; }
+      .fk { fill: #3498db; font-size: 8.5px; }
+      .note { fill: #27ae60; font-size: 8px; font-style: italic; }
+      .rel { stroke: #3498db; stroke-width: 1.3; fill: none; marker-end: url(#arr-blue); }
+      .rel-event { stroke: #e67e22; stroke-width: 1.3; fill: none; marker-end: url(#arr-orange); stroke-dasharray: 6,3; }
+      .title-main { font-size: 22px; font-weight: bold; fill: #2c3e50; }
+      .subtitle { font-size: 13px; fill: #7f8c8d; }
+      .domain-label { font-size: 14px; font-weight: bold; }
+      .domain-box { rx: 8; ry: 8; stroke-width: 2; fill-opacity: 0.05; }
+    </style>
+    <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3498db"/>
+    </marker>
+    <marker id="arr-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#e67e22"/>
+    </marker>
+  </defs>
+  <rect width="1920" height="1820" fill="#f8f9fa" rx="10"/>
+  <text x="960" y="35" text-anchor="middle" class="title-main">Application Fond de Caisse — Modele Conceptuel de Donnees</text>
+  <text x="960" y="58" text-anchor="middle" class="subtitle">36 tables | Prefixes par domaine | Partie double | Event Sourcing | Pattern Outbox | Idempotence</text>
+  <rect x="20" y="80" width="1880" height="40" fill="white" stroke="#ddd" rx="5"/>
+  <rect x="40" y="92" width="12" height="12" class="hdr-sec" rx="2"/>
+  <text x="58" y="102" class="col" font-size="10">sec_ Securite (8)</text>
+  <rect x="180.5" y="92" width="12" height="12" class="hdr-ref" rx="2"/>
+  <text x="198.5" y="102" class="col" font-size="10">ref_ Referentiel (5)</text>
+  <rect x="340.5" y="92" width="12" height="12" class="hdr-fin" rx="2"/>
+  <text x="358.5" y="102" class="col" font-size="10">fin_ Financier (7)</text>
+  <rect x="487.5" y="92" width="12" height="12" class="hdr-trx" rx="2"/>
+  <text x="505.5" y="102" class="col" font-size="10">trx_ Transactionnel (9)</text>
+  <rect x="667.0" y="92" width="12" height="12" class="hdr-aud" rx="2"/>
+  <text x="685.0" y="102" class="col" font-size="10">aud_ Audit (7)</text>
+  <line x1="1530" y1="94" x2="1555" y2="94" class="rel" style="marker-end:none"/>
+  <text x="1562" y="98" class="col" font-size="10">FK directe</text>
+  <line x1="1640" y1="94" x2="1665" y2="94" class="rel-event" style="marker-end:none"/>
+  <text x="1672" y="98" class="col" font-size="10">Lien audit/evenement</text>
+  <rect x="40" y="145" width="530" height="575" class="domain-box" stroke="#8e44ad" fill="#8e44ad"/>
+  <text x="300" y="165" class="domain-label" fill="#8e44ad">SECURITE (sec_) — 8 tables</text>
+  <rect x="1620" y="145" width="280" height="685" class="domain-box" stroke="#27ae60" fill="#27ae60"/>
+  <text x="1760" y="165" class="domain-label" fill="#27ae60">REFERENTIEL (ref_) — 5 tables</text>
+  <rect x="40" y="845" width="770" height="435" class="domain-box" stroke="#e67e22" fill="#e67e22"/>
+  <text x="420" y="865" class="domain-label" fill="#e67e22">FINANCIER (fin_) — 7 tables</text>
+  <rect x="850" y="255" width="750" height="1075" class="domain-box" stroke="#2980b9" fill="#2980b9"/>
+  <text x="1225" y="275" class="domain-label" fill="#2980b9">TRANSACTIONNEL (trx_) — 9 tables (cœur)</text>
+  <rect x="40" y="1380" width="1860" height="405" class="domain-box" stroke="#c0392b" fill="#c0392b"/>
+  <text x="970" y="1400" class="domain-label" fill="#c0392b">AUDIT &amp; INTEGRATION (aud_) — 7 tables</text>
+  <g transform="translate(60, 170)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-sec"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">sec_direction</text>
+    <rect x="0" y="22" width="230" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">code, libelle</text>
+    <text x="8" y="61" class="col">description</text>
+    <text x="8" y="73" class="col">est_actif BOOL</text>
+  </g>
+  <g transform="translate(60, 320)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-sec"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">sec_user</text>
+    <rect x="0" y="22" width="230" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="col">matricule UNIQUE</text>
+    <text x="8" y="73" class="col">nom, prenom, email</text>
+    <text x="8" y="85" class="col">mot_de_passe_hash</text>
+    <text x="8" y="97" class="fk">FK direction_id &#8594; sec_direction</text>
+    <text x="8" y="109" class="col">est_actif, derniere_connexion</text>
+  </g>
+  <g transform="translate(320, 170)">
+    <rect x="0" y="0" width="220" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="220" height="4" class="hdr-sec"/>
+    <text x="110" y="15" text-anchor="middle" class="t-title">sec_role</text>
+    <rect x="0" y="22" width="220" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code, libelle UNIQUE</text>
+    <text x="8" y="61" class="col">est_systeme BOOL</text>
+  </g>
+  <g transform="translate(320, 280)">
+    <rect x="0" y="0" width="220" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="220" height="4" class="hdr-sec"/>
+    <text x="110" y="15" text-anchor="middle" class="t-title">sec_permission</text>
+    <rect x="0" y="22" width="220" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, module</text>
+    <text x="8" y="61" class="col">libelle, description</text>
+  </g>
+  <g transform="translate(60, 510)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-sec"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">sec_user_role</text>
+    <rect x="0" y="22" width="230" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (user_id, role_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK role_id &#8594; sec_role</text>
+    <text x="8" y="73" class="col">date_attribution</text>
+  </g>
+  <g transform="translate(320, 400)">
+    <rect x="0" y="0" width="220" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="220" height="4" class="hdr-sec"/>
+    <text x="110" y="15" text-anchor="middle" class="t-title">sec_role_permission</text>
+    <rect x="0" y="22" width="220" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (role_id, permission_id)</text>
+    <text x="8" y="49" class="fk">FK role_id &#8594; sec_role</text>
+    <text x="8" y="61" class="fk">FK permission_id &#8594; sec_permission</text>
+  </g>
+  <g transform="translate(320, 500)">
+    <rect x="0" y="0" width="220" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="220" height="4" class="hdr-sec"/>
+    <text x="110" y="15" text-anchor="middle" class="t-title">sec_interim</text>
+    <rect x="0" y="22" width="220" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK initiateur_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK remplacant_id &#8594; sec_user</text>
+    <text x="8" y="73" class="fk">FK permission_id &#8594; sec_permission</text>
+    <text x="8" y="85" class="col">date_debut, date_fin</text>
+    <text x="8" y="97" class="col">statut, commentaire</text>
+  </g>
+  <g transform="translate(60, 640)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-sec" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-sec"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">sec_user_caisse_access</text>
+    <rect x="0" y="22" width="230" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK (user_id, caisse_id)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="col">niveau_acces</text>
+  </g>
+  <g transform="translate(1640, 200)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-ref"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">ref_client</text>
+    <rect x="0" y="22" width="240" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">numero_client UNIQUE</text>
+    <text x="8" y="61" class="col">raison_sociale</text>
+    <text x="8" y="73" class="col">adresse, telephone, email</text>
+    <text x="8" y="85" class="col">est_actif</text>
+  </g>
+  <g transform="translate(1640, 330)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-ref"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">ref_fournisseur</text>
+    <rect x="0" y="22" width="240" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE</text>
+    <text x="8" y="61" class="col">raison_sociale</text>
+    <text x="8" y="73" class="col">adresse, telephone, email</text>
+    <text x="8" y="85" class="col">est_actif</text>
+  </g>
+  <g transform="translate(1640, 470)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-ref"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">ref_plan_comptable</text>
+    <rect x="0" y="22" width="240" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">numero_compte UNIQUE</text>
+    <text x="8" y="61" class="col">libelle, type_compte</text>
+    <text x="8" y="73" class="fk">FK parent_id &#8594; ref_plan_comptable</text>
+  </g>
+  <g transform="translate(1640, 610)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-ref"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">ref_cost_center</text>
+    <rect x="0" y="22" width="240" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK direction_id &#8594; sec_direction</text>
+    <text x="8" y="73" class="col">est_actif</text>
+  </g>
+  <g transform="translate(1640, 740)">
+    <rect x="0" y="0" width="240" height="22" class="hdr-ref" rx="4" ry="4"/>
+    <rect x="0" y="18" width="240" height="4" class="hdr-ref"/>
+    <text x="120" y="15" text-anchor="middle" class="t-title">ref_nature_operation</text>
+    <rect x="0" y="22" width="240" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code, libelle</text>
+    <text x="8" y="61" class="fk">FK cost_center_id &#8594; ref_cost_center</text>
+    <text x="8" y="73" class="fk">FK plan_comptable_id &#8594; ref_plan_comptable</text>
+    <text x="8" y="85" class="col">est_actif</text>
+  </g>
+  <g transform="translate(60, 870)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_devise</text>
+    <rect x="0" y="22" width="230" height="74" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE (XOF, EUR, USD)</text>
+    <text x="8" y="61" class="col">libelle, symbole</text>
+    <text x="8" y="73" class="col">nb_decimales INT</text>
+  </g>
+  <g transform="translate(60, 1010)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_taux_echange</text>
+    <rect x="0" y="22" width="230" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_source_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="fk">FK devise_cible_id &#8594; fin_devise</text>
+    <text x="8" y="73" class="col">taux DECIMAL(19,8)</text>
+    <text x="8" y="85" class="col">date_validite_debut/fin</text>
+    <text x="8" y="97" class="col">source (FIXE_DB / API)</text>
+  </g>
+  <g transform="translate(320, 870)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_caisse</text>
+    <rect x="0" y="22" width="230" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="73" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="85" class="col">est_principale BOOL</text>
+    <text x="8" y="97" class="col">statut (OUVERTE / FERMEE)</text>
+  </g>
+  <g transform="translate(320, 1050)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_session_caisse</text>
+    <rect x="0" y="22" width="230" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="61" class="col">date_ouverture, date_cloture</text>
+    <text x="8" y="73" class="col">solde_ouverture, solde_cloture</text>
+    <text x="8" y="85" class="fk">FK cloture_par_id &#8594; sec_user</text>
+    <text x="8" y="97" class="col">type_cloture (AUTO_20H / MANUEL)</text>
+  </g>
+  <g transform="translate(580, 870)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_portefeuille</text>
+    <rect x="0" y="22" width="230" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">code UNIQUE, libelle</text>
+    <text x="8" y="61" class="fk">FK caisse_source_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="85" class="col">proprietaire_type (USER/DIRECTION)</text>
+    <text x="8" y="97" class="col">proprietaire_id BIGINT</text>
+    <text x="8" y="109" class="col">est_actif</text>
+  </g>
+  <g transform="translate(580, 1050)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_compte_gain_change</text>
+    <rect x="0" y="22" width="230" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="col">description</text>
+  </g>
+  <g transform="translate(580, 1160)">
+    <rect x="0" y="0" width="230" height="22" class="hdr-fin" rx="4" ry="4"/>
+    <rect x="0" y="18" width="230" height="4" class="hdr-fin"/>
+    <text x="115" y="15" text-anchor="middle" class="t-title">fin_compte_perte_change</text>
+    <rect x="0" y="22" width="230" height="62" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="61" class="col">description</text>
+  </g>
+  <g transform="translate(870, 280)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-trx"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">trx_bon</text>
+    <rect x="0" y="22" width="280" height="218" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">uuid UUID UNIQUE</text>
+    <text x="8" y="61" class="col">numero UNIQUE</text>
+    <text x="8" y="73" class="fk">FK demandeur_id &#8594; sec_user</text>
+    <text x="8" y="85" class="fk">FK cree_par_interim_id &#8594; sec_user</text>
+    <text x="8" y="97" class="fk">FK client_id &#8594; ref_client</text>
+    <text x="8" y="109" class="fk">FK fournisseur_id &#8594; ref_fournisseur</text>
+    <text x="8" y="121" class="col">numero_client, code_manutention</text>
+    <text x="8" y="133" class="col">montant_total DECIMAL(19,4)</text>
+    <text x="8" y="145" class="col">montant_a_payer_client</text>
+    <text x="8" y="157" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="169" class="fk">FK portefeuille_id &#8594; fin_portefeuille</text>
+    <text x="8" y="181" class="col">statut, est_recurrent</text>
+    <text x="8" y="193" class="col">frequence_recurrence</text>
+    <text x="8" y="205" class="fk">FK bon_parent_id &#8594; trx_bon</text>
+    <text x="8" y="217" class="col">version INT (verrou optimiste)</text>
+  </g>
+  <g transform="translate(870, 640)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-trx"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">trx_sous_bon</text>
+    <rect x="0" y="22" width="280" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="col">numero_sous_bon INT</text>
+    <text x="8" y="73" class="col">libelle, montant DECIMAL(19,4)</text>
+    <text x="8" y="85" class="fk">FK nature_operation_id</text>
+    <text x="8" y="97" class="fk">FK cost_center_id</text>
+    <text x="8" y="109" class="col">statut (independant du bon)</text>
+    <text x="8" y="121" class="col">date_decaissement</text>
+    <text x="8" y="133" class="col">UNIQUE(bon_id, numero_sous_bon)</text>
+  </g>
+  <g transform="translate(870, 870)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-trx"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">trx_validation_bon</text>
+    <rect x="0" y="22" width="280" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="fk">FK sous_bon_id &#8594; trx_sous_bon</text>
+    <text x="8" y="73" class="fk">FK validateur_id &#8594; sec_user</text>
+    <text x="8" y="85" class="col">niveau_validation INT</text>
+    <text x="8" y="97" class="col">action (VALIDE/REFUSE/SIGNE)</text>
+    <text x="8" y="109" class="col">date_validation, commentaire</text>
+  </g>
+  <g transform="translate(870, 1050)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-trx"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">trx_impression_bon</text>
+    <rect x="0" y="22" width="280" height="86" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="fk">FK imprime_par_id &#8594; sec_user</text>
+    <text x="8" y="73" class="col">date_impression</text>
+    <text x="8" y="85" class="col">a_signe BOOL, date_signature</text>
+  </g>
+  <g transform="translate(1190, 460)">
+    <rect x="0" y="0" width="270" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="270" height="4" class="hdr-trx"/>
+    <text x="135" y="15" text-anchor="middle" class="t-title">trx_bon_caisse</text>
+    <rect x="0" y="22" width="270" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_source_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="fk">FK sous_bon_source_id</text>
+    <text x="8" y="73" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="85" class="col">date_duplication</text>
+    <text x="8" y="97" class="col">contenu_modifie JSONB</text>
+    <text x="8" y="109" class="col">beneficiaire, statut</text>
+    <text x="8" y="121" class="note">[duplication au decaissement]</text>
+  </g>
+  <g transform="translate(1190, 660)">
+    <rect x="0" y="0" width="270" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="270" height="4" class="hdr-trx"/>
+    <text x="135" y="15" text-anchor="middle" class="t-title">trx_decaissement</text>
+    <rect x="0" y="22" width="270" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_caisse_id &#8594; trx_bon_caisse</text>
+    <text x="8" y="61" class="fk">FK caissier_id &#8594; sec_user</text>
+    <text x="8" y="73" class="col">beneficiaire_nom, beneficiaire_piece</text>
+    <text x="8" y="85" class="col">montant DECIMAL(19,4)</text>
+    <text x="8" y="97" class="col">date_decaissement</text>
+    <text x="8" y="109" class="fk">FK portefeuille_id &#8594; fin_portefeuille</text>
+  </g>
+  <g transform="translate(1190, 850)">
+    <rect x="0" y="0" width="270" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="270" height="4" class="hdr-trx"/>
+    <text x="135" y="15" text-anchor="middle" class="t-title">trx_operation</text>
+    <rect x="0" y="22" width="270" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">type_operation (RECHARGE/DECAISSEMENT...)</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK portefeuille_id &#8594; fin_portefeuille</text>
+    <text x="8" y="85" class="col">montant, date_operation</text>
+    <text x="8" y="97" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="109" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="121" class="col">reference</text>
+  </g>
+  <g transform="translate(1190, 1050)">
+    <rect x="0" y="0" width="270" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="270" height="4" class="hdr-trx"/>
+    <text x="135" y="15" text-anchor="middle" class="t-title">trx_transfert</text>
+    <rect x="0" y="22" width="270" height="134" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK caisse_source_id &#8594; fin_caisse</text>
+    <text x="8" y="61" class="fk">FK caisse_cible_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="fk">FK portefeuille_cible_id</text>
+    <text x="8" y="85" class="col">montant_source, montant_cible</text>
+    <text x="8" y="97" class="fk">FK devise_source/cible_id</text>
+    <text x="8" y="109" class="col">taux_applique DECIMAL(19,8)</text>
+    <text x="8" y="121" class="col">montant_gain, montant_perte</text>
+    <text x="8" y="133" class="col">statut (saga)</text>
+  </g>
+  <g transform="translate(870, 1230)">
+    <rect x="0" y="0" width="590" height="22" class="hdr-trx" rx="4" ry="4"/>
+    <rect x="0" y="18" width="590" height="4" class="hdr-trx"/>
+    <text x="295" y="15" text-anchor="middle" class="t-title">trx_ecriture_comptable</text>
+    <rect x="0" y="22" width="590" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id (BIGSERIAL)</text>
+    <text x="8" y="49" class="col">transaction_uuid UUID (groupe)</text>
+    <text x="8" y="61" class="col">compte_id BIGINT, type_compte (CAISSE/PORTEFEUILLE/GAIN/PERTE)</text>
+    <text x="8" y="73" class="col">debit DECIMAL(19,4), credit DECIMAL(19,4)  — CHECK (debit XOR credit)</text>
+    <text x="8" y="85" class="fk">FK devise_id &#8594; fin_devise</text>
+    <text x="8" y="97" class="fk">FK reference_bon_id &#8594; trx_bon</text>
+    <text x="8" y="109" class="col">date_ecriture, hash_integrite SHA-256, hash_precedent</text>
+    <text x="8" y="121" class="note">[immuable — partie double — Niveau 1.1 Partie IV]</text>
+  </g>
+  <g transform="translate(60, 1410)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-aud"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">aud_journal</text>
+    <rect x="0" y="22" width="280" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="col">action, entite_concernee</text>
+    <text x="8" y="73" class="col">entite_id BIGINT</text>
+    <text x="8" y="85" class="col">ancienne_valeur JSONB</text>
+    <text x="8" y="97" class="col">nouvelle_valeur JSONB</text>
+    <text x="8" y="109" class="col">date_action, adresse_ip</text>
+    <text x="8" y="121" class="note">[append-only — aucun UPDATE/DELETE]</text>
+  </g>
+  <g transform="translate(420, 1410)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-aud"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">aud_evenement_bon</text>
+    <rect x="0" y="22" width="280" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="col">type_evenement (CREE/VALIDE/...)</text>
+    <text x="8" y="73" class="fk">FK acteur_id &#8594; sec_user</text>
+    <text x="8" y="85" class="fk">FK acteur_interim_id &#8594; sec_user</text>
+    <text x="8" y="97" class="col">payload JSONB</text>
+    <text x="8" y="109" class="col">date_evenement, adresse_ip</text>
+    <text x="8" y="121" class="note">[event sourcing — Niveau 3.1]</text>
+  </g>
+  <g transform="translate(780, 1410)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-aud"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">aud_outbox</text>
+    <rect x="0" y="22" width="280" height="122" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">type_message</text>
+    <text x="8" y="61" class="col">payload JSONB</text>
+    <text x="8" y="73" class="col">statut (EN_ATTENTE/...)</text>
+    <text x="8" y="85" class="col">nb_tentatives, prochaine_tentative</text>
+    <text x="8" y="97" class="col">derniere_erreur</text>
+    <text x="8" y="109" class="col">date_creation, date_traitement</text>
+    <text x="8" y="121" class="note">[pattern Outbox — Niveau 4.2]</text>
+  </g>
+  <g transform="translate(1140, 1410)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-aud"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">aud_log_sap</text>
+    <rect x="0" y="22" width="280" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK session_caisse_id &#8594; fin_session_caisse</text>
+    <text x="8" y="61" class="col">date_envoi</text>
+    <text x="8" y="73" class="col">payload JSONB</text>
+    <text x="8" y="85" class="col">statut (SUCCES/ECHEC)</text>
+    <text x="8" y="97" class="col">message_retour, nb_tentatives</text>
+  </g>
+  <g transform="translate(1500, 1410)">
+    <rect x="0" y="0" width="280" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="280" height="4" class="hdr-aud"/>
+    <text x="140" y="15" text-anchor="middle" class="t-title">aud_idempotency_key</text>
+    <rect x="0" y="22" width="280" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK cle (UUID)</text>
+    <text x="8" y="49" class="fk">FK user_id &#8594; sec_user</text>
+    <text x="8" y="61" class="col">endpoint, hash_requete</text>
+    <text x="8" y="73" class="col">reponse_cachee JSONB</text>
+    <text x="8" y="85" class="col">statut, expire_le</text>
+    <text x="8" y="97" class="note">[anti-doublon — Niveau 2.1]</text>
+  </g>
+  <g transform="translate(60, 1660)">
+    <rect x="0" y="0" width="300" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="300" height="4" class="hdr-aud"/>
+    <text x="150" y="15" text-anchor="middle" class="t-title">aud_snapshot_journalier</text>
+    <rect x="0" y="22" width="300" height="110" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="col">date_snapshot DATE</text>
+    <text x="8" y="61" class="fk">FK caisse_id &#8594; fin_caisse</text>
+    <text x="8" y="73" class="col">solde_calcule_ecritures</text>
+    <text x="8" y="85" class="col">solde_caisse_table, solde_sap</text>
+    <text x="8" y="97" class="col">ecart, statut_reconciliation</text>
+    <text x="8" y="109" class="note">[reconciliation — Niveau 5.5]</text>
+  </g>
+  <g transform="translate(420, 1660)">
+    <rect x="0" y="0" width="290" height="22" class="hdr-aud" rx="4" ry="4"/>
+    <rect x="0" y="18" width="290" height="4" class="hdr-aud"/>
+    <text x="145" y="15" text-anchor="middle" class="t-title">aud_planification_recurrence</text>
+    <rect x="0" y="22" width="290" height="98" class="tbody"/>
+    <text x="8" y="37" class="pk">PK id</text>
+    <text x="8" y="49" class="fk">FK bon_id &#8594; trx_bon</text>
+    <text x="8" y="61" class="col">frequence (MENSUEL/...)</text>
+    <text x="8" y="73" class="col">derniere_execution</text>
+    <text x="8" y="85" class="col">prochaine_execution</text>
+    <text x="8" y="97" class="col">est_actif</text>
+  </g>
+  <!-- Relations -->
+  <path d="M 175 320 C 175 293, 175 293, 175 266" class="rel"/>
+  <path d="M 175 510 C 175 481, 175 481, 175 452" class="rel"/>
+  <path d="M 175 510 C 175 382, 430 382, 430 254" class="rel"/>
+  <path d="M 430 400 C 430 327, 430 327, 430 254" class="rel"/>
+  <path d="M 430 400 C 430 382, 430 382, 430 364" class="rel"/>
+  <path d="M 320 560 C 320 473, 290 473, 290 386" class="rel"/>
+  <path d="M 430 500 C 430 432, 430 432, 430 364" class="rel"/>
+  <path d="M 175 640 C 175 546, 175 546, 175 452" class="rel"/>
+  <path d="M 290 688 C 290 809, 320 809, 320 930" class="rel"/>
+  <path d="M 1640 658 C 965 658, 965 218, 290 218" class="rel"/>
+  <path d="M 1760 740 C 1760 723, 1760 723, 1760 706" class="rel"/>
+  <path d="M 1760 740 C 1760 653, 1760 653, 1760 566" class="rel"/>
+  <path d="M 320 930 C 305 930, 305 918, 290 918" class="rel"/>
+  <path d="M 435 870 C 435 661, 175 661, 175 452" class="rel"/>
+  <path d="M 435 1050 C 435 1020, 435 1020, 435 990" class="rel"/>
+  <path d="M 580 936 C 565 936, 565 930, 550 930" class="rel"/>
+  <path d="M 580 936 C 435 936, 435 918, 290 918" class="rel"/>
+  <path d="M 175 1010 C 175 988, 175 988, 175 966" class="rel"/>
+  <path d="M 580 1092 C 435 1092, 435 918, 290 918" class="rel"/>
+  <path d="M 580 1202 C 435 1202, 435 918, 290 918" class="rel"/>
+  <path d="M 870 400 C 580 400, 580 386, 290 386" class="rel"/>
+  <path d="M 1150 400 C 1395 400, 1395 254, 1640 254" class="rel"/>
+  <path d="M 1150 400 C 1395 400, 1395 384, 1640 384" class="rel"/>
+  <path d="M 870 400 C 580 400, 580 918, 290 918" class="rel"/>
+  <path d="M 1010 520 C 1010 695, 695 695, 695 870" class="rel"/>
+  <path d="M 1010 640 C 1010 580, 1010 580, 1010 520" class="rel"/>
+  <path d="M 1150 718 C 1395 718, 1395 794, 1640 794" class="rel"/>
+  <path d="M 1150 718 C 1395 718, 1395 658, 1640 658" class="rel"/>
+  <path d="M 1010 870 C 1010 695, 1010 695, 1010 520" class="rel"/>
+  <path d="M 870 936 C 580 936, 580 386, 290 386" class="rel"/>
+  <path d="M 1010 1050 C 1010 785, 1010 785, 1010 520" class="rel"/>
+  <path d="M 1190 532 C 1190 466, 1150 466, 1150 400" class="rel"/>
+  <path d="M 1325 660 C 1325 632, 1325 632, 1325 604" class="rel"/>
+  <path d="M 1190 726 C 1000 726, 1000 936, 810 936" class="rel"/>
+  <path d="M 1190 922 C 870 922, 870 930, 550 930" class="rel"/>
+  <path d="M 1190 922 C 1000 922, 1000 936, 810 936" class="rel"/>
+  <path d="M 1190 1128 C 870 1128, 870 930, 550 930" class="rel"/>
+  <path d="M 1165 1230 C 1165 875, 1010 875, 1010 520" class="rel"/>
+  <path d="M 870 1302 C 580 1302, 580 918, 290 918" class="rel"/>
+  <path d="M 200 1410 C 200 931, 175 931, 175 452" class="rel-event"/>
+  <path d="M 560 1410 C 560 965, 1010 965, 1010 520" class="rel-event"/>
+  <path d="M 1140 1470 C 845 1470, 845 1110, 550 1110" class="rel-event"/>
+  <path d="M 1500 1470 C 895 1470, 895 386, 290 386" class="rel-event"/>
+  <path d="M 210 1660 C 210 1325, 435 1325, 435 990" class="rel-event"/>
+  <path d="M 565 1660 C 565 1090, 1010 1090, 1010 520" class="rel-event"/>
+</svg>
