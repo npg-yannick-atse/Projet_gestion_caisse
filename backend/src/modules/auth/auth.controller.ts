@@ -20,7 +20,7 @@ export class AuthController {
   @Post('login')
   @ApiOperation({ summary: 'Authentification par matricule/email + mot de passe' })
   login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.identifiant, dto.motDePasse);
+    return this.authService.login(dto.identifiant, dto.motDePasse, dto.plateforme);
   }
 
   @Public()

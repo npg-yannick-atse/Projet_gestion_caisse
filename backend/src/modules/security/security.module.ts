@@ -15,6 +15,17 @@ import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { Interim } from './entities/interim.entity';
 import { UsersService } from './users/users.service';
 import { UsersController } from './users/users.controller';
+import { DirectionsService } from './users/directions.service';
+import { DirectionsController } from './users/directions.controller';
+import { RolesService } from './users/roles.service';
+import { RolesController } from './users/roles.controller';
+import { ProfilsService } from './users/profils.service';
+import { ProfilsController } from './users/profils.controller';
+import { InterimsService } from './users/interims.service';
+import { InterimsController } from './users/interims.controller';
+import { LdapDirectoryService } from './users/ldap-directory.service';
+import { LdapDirectoryController } from './users/ldap-directory.controller';
+import { AuthorizationService } from './authorization.service';
 
 @Module({
   imports: [
@@ -34,8 +45,15 @@ import { UsersController } from './users/users.controller';
       Interim,
     ]),
   ],
-  providers: [UsersService],
-  controllers: [UsersController],
-  exports: [UsersService, TypeOrmModule],
+  providers: [UsersService, DirectionsService, RolesService, ProfilsService, InterimsService, LdapDirectoryService, AuthorizationService],
+  controllers: [
+    UsersController,
+    DirectionsController,
+    RolesController,
+    ProfilsController,
+    InterimsController,
+    LdapDirectoryController,
+  ],
+  exports: [UsersService, DirectionsService, RolesService, ProfilsService, InterimsService, AuthorizationService, TypeOrmModule],
 })
 export class SecurityModule {}

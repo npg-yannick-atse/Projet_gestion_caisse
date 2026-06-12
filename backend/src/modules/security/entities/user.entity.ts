@@ -46,6 +46,14 @@ export class User extends AuditableEntity {
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;
 
+  @ApiProperty({ default: true, description: "Autorise la connexion à l'application web" })
+  @Column({ name: 'acces_web', type: 'bit', default: true })
+  accesWeb!: boolean;
+
+  @ApiProperty({ default: true, description: "Autorise la connexion à l'application mobile" })
+  @Column({ name: 'acces_mobile', type: 'bit', default: true })
+  accesMobile!: boolean;
+
   @ApiProperty({ required: false })
   @Column({ name: 'derniere_connexion', type: 'datetime2', precision: 3, nullable: true })
   derniereConnexion?: Date | null;

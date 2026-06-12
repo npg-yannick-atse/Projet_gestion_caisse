@@ -1,0 +1,49 @@
+Task Name;Parent Task;Description;Status;Priority;Start Date;Due Date
+Authentification & Securite;;Authentification, autorisation, roles, profils, perimetres et acces;Complete;Urgent;05/26/2026;06/11/2026
+Authentification LDAP + JWT;Authentification & Securite;Login via POST 10.10.2.17:8000/users/ldap-authenticate, JWT et garde globale;Complete;Urgent;05/26/2026;05/27/2026
+Autorisation centralisee (AuthorizationService);Authentification & Securite;Service central: roles, profils, extra, admins bypass, assertAnyRole/assertPermission;Complete;Urgent;05/28/2026;05/29/2026
+Perimetres par centre de cout;Authentification & Securite;Scoping creation de bon par centre de cout, puis caisses/portefeuilles (filtrage + consolidation);Complete;High;05/29/2026;05/30/2026
+Profils accordent des permissions;Authentification & Securite;Effet + UI + CRUD;Complete;Normal;05/30/2026;05/31/2026
+Affecter une direction aux utilisateurs;Authentification & Securite;LDAP ne retourne pas la direction: ajout d'un moyen d'affectation cote app;Complete;Normal;06/02/2026;06/02/2026
+Interim (delegation de roles);Authentification & Securite;Delegation temporaire, expiration automatique, cumul (remplacant garde ses droits + delegues);Complete;High;06/02/2026;06/03/2026
+Correction interim non visible / non termine;Authentification & Securite;Roles effectifs (assignes + delegues) + polling pour expiration;Complete;High;06/03/2026;06/03/2026
+Permissions modifier/supprimer caisse et portefeuille;Authentification & Securite;Gating backend (assertPermission) + masquage des boutons UI;Complete;High;06/05/2026;06/05/2026
+Role DAF (combo Administrateur + Caissier);Authentification & Securite;Meta-role expanse au niveau authz (ROLE_EXPANSION), tableau de bord unique combine;Complete;High;06/05/2026;06/06/2026
+Controle d'acces par plateforme (web/mobile);Authentification & Securite;Autoriser chaque utilisateur a se connecter sur le web, le mobile ou les deux; login refuse sinon (flags acces_web/acces_mobile + UI admin);Complete;High;06/10/2026;06/11/2026
+Bons (workflow & circuit);;Creation, validation, decaissement des bons et bons manuels;Complete;Urgent;05/27/2026;06/09/2026
+Champ porteur sur les bons;Bons (workflow & circuit);Ajout champ porteur optionnel a la creation ET a la validation du bon;Complete;Normal;05/27/2026;05/27/2026
+Restriction recharge/transfert par role et perimetre;Bons (workflow & circuit);Approbation: GESTIONNAIRE_PORTEFEUILLE + admins (jamais soi-meme);Complete;High;05/30/2026;05/31/2026
+Workflow Demande de recharge;Bons (workflow & circuit);Le responsable du portefeuille (Validateur ou Gestionnaire de portefeuille) demande la recharge (montant+motif); cible auto si un seul portefeuille, choix si plusieurs; pas le demandeur de bons;Complete;Normal;05/31/2026;05/31/2026
+Demande de transfert;Bons (workflow & circuit);Workflow de transfert entre portefeuilles/caisses;Complete;Normal;05/31/2026;06/01/2026
+Page Bons - bons du jour par defaut;Bons (workflow & circuit);Affiche par defaut uniquement les bons du jour (avec marqueur 'tout afficher');Complete;Normal;06/06/2026;06/07/2026
+Retrait de l'obligation imprimer/signer avant decaissement;Bons (workflow & circuit);Suppression du controle bloquant impression+signature avant de preparer le decaissement;Complete;Normal;06/06/2026;06/06/2026
+Centre de cout dans le detail des sous-bons;Bons (workflow & circuit);Affichage du centre de cout au niveau de chaque sous-bon;Complete;Low;06/06/2026;06/06/2026
+Bouton 'Decaisser tout';Bons (workflow & circuit);Decaissement groupe de tous les sous-bons d'un bon multi-sous-bons;Complete;Normal;06/07/2026;06/07/2026
+Fonctionnalite Bon manuel (carnets);Bons (workflow & circuit);Carnets numerotes (ACTIF/EPUISE/CLOTURE) + decaissements manuels hors circuit, traçables (donneur d'ordre + beneficiaire), memes champs qu'un bon normal;Complete;High;06/07/2026;06/09/2026
+Ecritures comptables en partie double au decaissement;Bons (workflow & circuit);DEBIT portefeuille / CREDIT CHARGE impute au centre de cout, sur les 3 chemins de decaissement (conforme Dossier de conception);Complete;Urgent;06/09/2026;06/09/2026
+Caisses & Portefeuilles;;Gestion et presentation des caisses et portefeuilles;Complete;Normal;06/03/2026;06/07/2026
+Couleur des caisses par devise;Caisses & Portefeuilles;Carte caisse coloree selon la devise (et non selon un seuil);Complete;Low;06/03/2026;06/03/2026
+Portefeuille - solde initial editable;Caisses & Portefeuilles;Fix solde initial affiche a 0 + rendre le champ modifiable;Complete;Normal;06/03/2026;06/04/2026
+Refonte page Caisses;Caisses & Portefeuilles;Chaque caisse (verte) et ses portefeuilles (bleus) regroupes dans un meme bloc, ordre stable, tout affiche;Complete;Normal;06/07/2026;06/07/2026
+Operations & Reporting;;Suivi des operations, exports et indicateurs de tableau de bord;Complete;Normal;05/27/2026;06/06/2026
+Page Operations - filtre date + recherche serveur;Operations & Reporting;Filtrage par date et recherche cote serveur (tout en base);Complete;Normal;05/27/2026;05/28/2026
+Dashboard caissier - Demandes de recharge a traiter;Operations & Reporting;Remplacement du 'Volume decaisse 14 jours' par 'Demandes de recharge a traiter';Complete;Normal;06/02/2026;06/02/2026
+Operations - vue du jour par defaut + reset;Operations & Reporting;Affiche les operations du jour par defaut;Complete;Normal;06/04/2026;06/04/2026
+Export Operations en Excel (xlsx);Operations & Reporting;Export serveur via exceljs (joints caisse/portefeuille/devise/user);Complete;Normal;06/04/2026;06/04/2026
+Jauges d'utilisation du budget;Operations & Reporting;Demandeur/Gestionnaire (leurs portefeuilles) et Validateur (portefeuilles DIRECTION de sa direction) voient leur taux d'utilisation;Complete;Normal;06/06/2026;06/06/2026
+Notifications;;Notifications web et mobile;Complete;High;06/01/2026;06/10/2026
+Notifications (cloche) web;Notifications;Cloche unifiee: bons, demandes de recharge ET de transfert;Complete;Normal;06/01/2026;06/02/2026
+Notifications mobile (cloche + push);Notifications;Cloche en-tete + notification systeme sur nouveaux bons a valider (premier plan Expo Go, push backend via Expo Push pour app fermee);Complete;High;06/10/2026;06/10/2026
+Audit & Tracabilite;;Journalisation des actions sensibles;Complete;High;06/04/2026;06/05/2026
+Audit complet + page SuperAdmin;Audit & Tracabilite;Interceptor global (POST/PATCH/PUT/DELETE), masquage des secrets, page audit reservee SUPER_ADMIN;Complete;High;06/04/2026;06/05/2026
+Application mobile;;Application mobile Expo (login, bons, validation, notifications);Complete;Urgent;06/08/2026;06/11/2026
+Application mobile (Expo);Application mobile;Login LDAP, Mes bons (filtre dates + total decaisse), Creation de bon, Validation, Detail avec accordeon sous-bons, navigation par onglets + gating par role;Complete;Urgent;06/08/2026;06/10/2026
+Maquettes mobile (mockups);Application mobile;mockups.html: 7 ecrans (login, mes bons, detail, creation, a valider, compte, notification);Complete;Low;06/10/2026;06/10/2026
+Correction deconnexion mobile;Application mobile;Suppression de la double navigation (garde d'auth unique) + purge du cache react-query a la deconnexion;Complete;Normal;06/11/2026;06/11/2026
+Infrastructure & Documentation;;Migrations, corrections techniques et documentation;Complete;Normal;05/26/2026;06/09/2026
+Documentation base de donnees;Infrastructure & Documentation;Generer la documentation de la base (Markdown + Word) a partir des docs existantes;Complete;Normal;05/26/2026;05/26/2026
+PersonaTabs limites au dashboard;Infrastructure & Documentation;Les boutons/onglets du tableau de bord n'apparaissent que sur la page dashboard;Complete;Low;05/27/2026;05/27/2026
+Correction erreur SQL ref_direction -> sec_direction;Infrastructure & Documentation;Fix nom de table invalide dans getByDirection;Complete;Normal;06/02/2026;06/02/2026
+Dossier migrations;Infrastructure & Documentation;Creation du dossier de migrations + runner idempotent + script npm run migrate;Complete;Normal;06/02/2026;06/02/2026
+Documentation Design System;Infrastructure & Documentation;DESIGN_SYSTEM.md: palette, polices, tokens Tailwind, composants UI reutilisables;Complete;Low;06/05/2026;06/05/2026
+Guide d'utilisation pour les testeurs;Infrastructure & Documentation;GUIDE_UTILISATION en Markdown + Word, destine aux testeurs;Complete;Normal;06/09/2026;06/09/2026

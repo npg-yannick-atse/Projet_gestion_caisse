@@ -2,7 +2,16 @@ import { Entity, Column } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
-export type RoleCode = 'SUPER_ADMIN' | 'ADMINISTRATEUR' | 'VALIDATEUR' | 'DEMANDEUR' | 'CAISSIER';
+export const ROLE_CODES = [
+  'SUPER_ADMIN',
+  'ADMINISTRATEUR',
+  'VALIDATEUR',
+  'DEMANDEUR',
+  'CAISSIER',
+  'GESTIONNAIRE_PORTEFEUILLE',
+  'DAF',
+] as const;
+export type RoleCode = (typeof ROLE_CODES)[number];
 
 @Entity({ name: 'sec_role' })
 export class Role extends AuditableEntity {

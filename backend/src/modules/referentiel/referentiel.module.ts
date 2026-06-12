@@ -8,6 +8,8 @@ import { Partenaire } from './entities/partenaire.entity';
 import { PartenaireNatureComptable } from './entities/partenaire-nature-comptable.entity';
 import { Site } from './entities/site.entity';
 import { TypeBon } from './entities/type-bon.entity';
+import { ReferentielService } from './referentiel.service';
+import { ReferentielController } from './referentiel.controller';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { TypeBon } from './entities/type-bon.entity';
       TypeBon,
     ]),
   ],
-  exports: [TypeOrmModule],
+  providers: [ReferentielService],
+  controllers: [ReferentielController],
+  exports: [ReferentielService, TypeOrmModule],
 })
 export class ReferentielModule {}

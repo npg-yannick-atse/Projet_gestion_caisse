@@ -1,6 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
 
-export type TypeCompte = 'CAISSE' | 'PORTEFEUILLE' | 'GAIN_CHANGE' | 'PERTE_CHANGE';
+export type TypeCompte = 'CAISSE' | 'PORTEFEUILLE' | 'GAIN_CHANGE' | 'PERTE_CHANGE' | 'CHARGE';
 
 /**
  * Ecriture comptable en partie double (cf. Partie IV Niveau 1.1).

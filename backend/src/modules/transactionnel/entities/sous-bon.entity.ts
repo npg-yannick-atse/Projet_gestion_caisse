@@ -38,8 +38,9 @@ export class SousBon extends AuditableEntity {
   @Column({ name: 'montant_a_payer_client', type: 'decimal', precision: 19, scale: 4, nullable: true })
   montantAPayerClient?: string | null;
 
-  @Column({ name: 'partenaire_id', type: 'bigint' })
-  partenaireId!: string;
+  @ApiProperty({ required: false, description: 'Partenaire facultatif — peut être nul pour les opérations internes' })
+  @Column({ name: 'partenaire_id', type: 'bigint', nullable: true })
+  partenaireId?: string | null;
 
   @ApiProperty({ required: false, description: 'Obligatoire si le type de bon est RESTITUTION_CLIENT' })
   @Column({ name: 'numero_client', type: 'nvarchar', length: 50, nullable: true })

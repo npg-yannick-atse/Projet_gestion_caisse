@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JournalAudit } from './entities/journal.entity';
 import { EvenementBon } from './entities/evenement-bon.entity';
@@ -9,6 +10,10 @@ import { SnapshotJournalier } from './entities/snapshot-journalier.entity';
 import { PlanificationRecurrence } from './entities/planification-recurrence.entity';
 import { ChangementPermission } from './entities/changement-permission.entity';
 import { Notification } from './entities/notification.entity';
+import { AuditService } from './audit.service';
+import { AuditController } from './audit.controller';
+import { AuditInterceptor } from './audit.interceptor';
+import { SecurityModule } from '@modules/security/security.module';
 
 @Module({
   imports: [
@@ -23,7 +28,10 @@ import { Notification } from './entities/notification.entity';
       ChangementPermission,
       Notification,
     ]),
+    SecurityModule,
   ],
-  exports: [TypeOrmModule],
+  controllers: [AuditController],
+  providers: [AuditService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
+  exports: [TypeOrmModule, AuditService],
 })
 export class AuditModule {}

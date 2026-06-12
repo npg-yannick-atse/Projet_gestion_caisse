@@ -34,6 +34,10 @@ export class Portefeuille extends AuditableEntity {
   @Column({ name: 'proprietaire_id', type: 'bigint' })
   proprietaireId!: string;
 
+  @ApiProperty({ required: false, description: 'Utilisateur qui pilote ce portefeuille (gestionnaire)' })
+  @Column({ name: 'gestionnaire_id', type: 'bigint', nullable: true })
+  gestionnaireId?: string | null;
+
   @ApiProperty({ default: 0 })
   @Column({ name: 'solde_initial', type: 'decimal', precision: 19, scale: 4, default: 0 })
   soldeInitial!: string;

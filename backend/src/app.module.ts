@@ -6,6 +6,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import appConfig from '@config/app.config';
 import databaseConfig from '@config/database.config';
 import jwtConfig from '@config/jwt.config';
+import ldapConfig from '@config/ldap.config';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { AuthModule } from '@modules/auth/auth.module';
 import { SecurityModule } from '@modules/security/security.module';
@@ -13,13 +14,14 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
 import { FinancierModule } from '@modules/financier/financier.module';
 import { TransactionnelModule } from '@modules/transactionnel/transactionnel.module';
 import { AuditModule } from '@modules/audit/audit.module';
+import { NotificationsModule } from '@modules/notifications/notifications.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig],
+      load: [appConfig, databaseConfig, jwtConfig, ldapConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     TypeOrmModule.forRootAsync({
@@ -34,6 +36,7 @@ import { HealthModule } from './health/health.module';
     FinancierModule,
     TransactionnelModule,
     AuditModule,
+    NotificationsModule,
     HealthModule,
   ],
   providers: [

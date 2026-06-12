@@ -30,4 +30,8 @@ export class Caisse extends AuditableEntity {
   @ApiProperty({ enum: ['OUVERTE', 'FERMEE'] })
   @Column({ type: 'nvarchar', length: 20, default: 'FERMEE' })
   statut!: CaisseStatut;
+
+  @ApiProperty({ default: true, description: 'La caisse est utilisable. Indépendant du statut OUVERTE/FERMEE (session).' })
+  @Column({ name: 'est_actif', type: 'bit', default: true })
+  estActif!: boolean;
 }

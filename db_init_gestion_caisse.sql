@@ -86,7 +86,7 @@ CREATE TABLE dbo.sec_role (
     CONSTRAINT PK_sec_role PRIMARY KEY CLUSTERED (id),
     CONSTRAINT UQ_sec_role_code UNIQUE (code),
     CONSTRAINT CK_sec_role_code CHECK (code IN
-        (N'SUPER_ADMIN', N'ADMINISTRATEUR', N'VALIDATEUR', N'DEMANDEUR', N'CAISSIER'))
+        (N'SUPER_ADMIN', N'ADMINISTRATEUR', N'VALIDATEUR', N'DEMANDEUR', N'CAISSIER', N'GESTIONNAIRE_PORTEFEUILLE', N'DAF'))
 );
 GO
 
@@ -148,6 +148,8 @@ CREATE TABLE dbo.sec_user (
     direction_id        BIGINT NULL,
     cost_center_id      BIGINT NULL,                -- FK ref_cost_center : CC principal
     est_actif           BIT NOT NULL CONSTRAINT DF_sec_user_actif DEFAULT 1,
+    acces_web           BIT NOT NULL CONSTRAINT DF_sec_user_acces_web DEFAULT 1,
+    acces_mobile        BIT NOT NULL CONSTRAINT DF_sec_user_acces_mobile DEFAULT 1,
     derniere_connexion  DATETIME2(3) NULL,
     created_at          DATETIME2(3) NOT NULL CONSTRAINT DF_sec_user_created DEFAULT SYSUTCDATETIME(),
     created_by_id       BIGINT NULL,
@@ -620,6 +622,14 @@ CREATE TABLE dbo.trx_bon (
     frequence_recurrence    NVARCHAR(20) NULL,
     bon_parent_id           BIGINT NULL,
     montant_total           DECIMAL(19,4) NOT NULL CONSTRAINT DF_trx_bon_total DEFAULT 0,
+    demande_extension       BIT NOT NULL CONSTRAINT DF_trx_bon_demande_ext DEFAULT 0,  -- le demandeur a sollicite une extension de budget
+    description_extension   NVARCHAR(500) NULL,                -- justification optionnelle de la demande d'extension
+    statut_extension        NVARCHAR(20) NOT NULL CONSTRAINT DF_trx_bon_statut_ext DEFAULT 'NON',  -- NON / EN_ATTENTE / APPROUVEE / REFUSEE
+    extension_mode          NVARCHAR(20) NULL,                 -- DECOUVERT | RECHARGE (choisi a l'approbation)
+    extension_decide_par_id BIGINT NULL,                       -- approbateur
+    extension_date_decision DATETIME2(3) NULL,
+    extension_commentaire   NVARCHAR(500) NULL,                -- commentaire de l'approbateur
+    porteur                 NVARCHAR(255) NULL,                -- personne qui se presentera a la caisse (texte libre, optionnel)
     created_at              DATETIME2(3) NOT NULL CONSTRAINT DF_trx_bon_created DEFAULT SYSUTCDATETIME(),
     created_by_id           BIGINT NULL,
     updated_at              DATETIME2(3) NULL,
@@ -713,10 +723,18 @@ CREATE TABLE dbo.trx_impression_bon (
     date_impression DATETIME2(3) NOT NULL CONSTRAINT DF_trx_ib_date DEFAULT SYSUTCDATETIME(),
     a_signe         BIT NOT NULL CONSTRAINT DF_trx_ib_signe DEFAULT 0,
     date_signature  DATETIME2(3) NULL,
+    signature_image NVARCHAR(MAX) NULL,
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_trx_ib_created DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_trx_impression_bon PRIMARY KEY CLUSTERED (id),
     CONSTRAINT CK_trx_ib_target CHECK (bon_id IS NOT NULL OR sous_bon_id IS NOT NULL)
 );
+GO
+
+-- Ajout idempotent de signature_image sur les bases déjà créées (avant cette colonne).
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE Name = N'signature_image' AND Object_ID = OBJECT_ID(N'dbo.trx_impression_bon'))
+BEGIN
+    ALTER TABLE dbo.trx_impression_bon ADD signature_image NVARCHAR(MAX) NULL;
+END
 GO
 
 /* -- trx_bon_caisse (duplication au decaissement) --------------------------- */
@@ -826,7 +844,7 @@ CREATE TABLE dbo.trx_ecriture_comptable (
     created_at              DATETIME2(3) NOT NULL CONSTRAINT DF_trx_ec_created DEFAULT SYSUTCDATETIME(),
     CONSTRAINT PK_trx_ecriture_comptable PRIMARY KEY CLUSTERED (id),
     CONSTRAINT CK_trx_ec_type CHECK (type_compte IN
-        (N'CAISSE', N'PORTEFEUILLE', N'GAIN_CHANGE', N'PERTE_CHANGE')),
+        (N'CAISSE', N'PORTEFEUILLE', N'GAIN_CHANGE', N'PERTE_CHANGE', N'CHARGE')),
     CONSTRAINT CK_trx_ec_dc CHECK (
         (debit IS NOT NULL AND credit IS NULL AND debit > 0)
      OR (debit IS NULL AND credit IS NOT NULL AND credit > 0))
@@ -1431,6 +1449,12 @@ IF NOT EXISTS (SELECT 1 FROM dbo.sec_role WHERE code = N'DEMANDEUR')
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_role WHERE code = N'CAISSIER')
     INSERT INTO dbo.sec_role(code, libelle, description, est_systeme)
     VALUES (N'CAISSIER', N'Caissier', N'Procede aux decaissements', 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_role WHERE code = N'GESTIONNAIRE_PORTEFEUILLE')
+    INSERT INTO dbo.sec_role(code, libelle, description, est_systeme)
+    VALUES (N'GESTIONNAIRE_PORTEFEUILLE', N'Gestionnaire de portefeuille', N'Pilote un ou plusieurs portefeuilles et arbitre les demandes d''extension', 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_role WHERE code = N'DAF')
+    INSERT INTO dbo.sec_role(code, libelle, description, est_systeme)
+    VALUES (N'DAF', N'Directeur Administratif et Financier', N'Role combine : cumule les droits d''Administrateur et de Caissier', 1);
 GO
 
 /* -- Profils standardises --------------------------------------------------- */
@@ -1474,10 +1498,20 @@ IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'BON_DECAISSER')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'BON_DECAISSER', N'Decaisser un bon', N'CAISSE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'BON_MULTI_CC')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'BON_MULTI_CC', N'Bon sur plusieurs centres de cout', N'BON');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'EXTENSION_APPROUVER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'EXTENSION_APPROUVER', N'Approuver ou refuser une demande d''extension de budget', N'BON');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_OUVRIR')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_OUVRIR', N'Ouvrir une caisse', N'CAISSE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_CLOTURER')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_CLOTURER', N'Cloturer une caisse', N'CAISSE');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_MODIFIER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_MODIFIER', N'Creer / modifier / (des)activer une caisse', N'CAISSE');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_SUPPRIMER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_SUPPRIMER', N'Supprimer une caisse', N'CAISSE');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'PORTEFEUILLE_MODIFIER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'PORTEFEUILLE_MODIFIER', N'Creer / modifier / (des)activer un portefeuille', N'PORTEFEUILLE');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'PORTEFEUILLE_SUPPRIMER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'PORTEFEUILLE_SUPPRIMER', N'Supprimer un portefeuille', N'PORTEFEUILLE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_PRINCIPAL_CHOISIR')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_PRINCIPAL_CHOISIR', N'Choisir la caisse principale lors d''un bon', N'BON');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'BON_MODIFIER_SPEC')

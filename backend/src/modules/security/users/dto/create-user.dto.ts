@@ -31,10 +31,15 @@ export class CreateUserDto {
   @MaxLength(30)
   telephone?: string;
 
-  @ApiProperty({ minLength: 8 })
+  @ApiProperty({
+    required: false,
+    minLength: 8,
+    description: 'Optionnel — non utilisé pour le login (authentification LDAP).',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  motDePasse!: string;
+  motDePasse?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -50,4 +55,14 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   estActif?: boolean;
+
+  @ApiProperty({ required: false, default: true, description: 'Autorise la connexion web' })
+  @IsOptional()
+  @IsBoolean()
+  accesWeb?: boolean;
+
+  @ApiProperty({ required: false, default: true, description: 'Autorise la connexion mobile' })
+  @IsOptional()
+  @IsBoolean()
+  accesMobile?: boolean;
 }

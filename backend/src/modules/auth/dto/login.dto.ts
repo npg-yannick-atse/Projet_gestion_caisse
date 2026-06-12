@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+
+export type Plateforme = 'WEB' | 'MOBILE';
 
 export class LoginDto {
   @ApiProperty({ example: 'EMP-001', description: 'Matricule ou email' })
@@ -11,6 +13,15 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty()
   motDePasse!: string;
+
+  @ApiProperty({
+    required: false,
+    enum: ['WEB', 'MOBILE'],
+    description: "Plateforme du client (web ou mobile). Si fournie, l'accès est vérifié.",
+  })
+  @IsOptional()
+  @IsIn(['WEB', 'MOBILE'])
+  plateforme?: Plateforme;
 }
 
 export class RefreshDto {

@@ -23,6 +23,9 @@ export class ImpressionBon {
   @Column({ name: 'date_signature', type: 'datetime2', precision: 3, nullable: true })
   dateSignature?: Date | null;
 
+  @Column({ name: 'signature_image', type: 'nvarchar', length: 'MAX', nullable: true })
+  signatureImage?: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'datetime2', precision: 3 })
   createdAt!: Date;
 }

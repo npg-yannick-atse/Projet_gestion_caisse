@@ -1,3 +1,4 @@
+import { networkInterfaces } from 'node:os';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -5,6 +6,17 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from '@common/filters/all-exceptions.filter';
+
+function getLanIPv4(): string[] {
+  const ips: string[] = [];
+  for (const ifaces of Object.values(networkInterfaces())) {
+    if (!ifaces) continue;
+    for (const info of ifaces) {
+      if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
+    }
+  }
+  return ips;
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -53,8 +65,12 @@ async function bootstrap() {
   });
 
   await app.listen(port);
-  Logger.log(`fdc-backend ecoute sur http://localhost:${port}/${apiPrefix}`, 'Bootstrap');
-  Logger.log(`Swagger UI : http://localhost:${port}/${apiPrefix}/docs`, 'Bootstrap');
+  const hosts = ['localhost', ...getLanIPv4()];
+  Logger.log(`fdc-backend ecoute sur le port ${port} (prefixe /${apiPrefix})`, 'Bootstrap');
+  for (const host of hosts) {
+    Logger.log(`  → http://${host}:${port}/${apiPrefix}`, 'Bootstrap');
+  }
+  Logger.log(`Swagger UI : http://${hosts[hosts.length - 1] ?? 'localhost'}:${port}/${apiPrefix}/docs`, 'Bootstrap');
 }
 
 bootstrap().catch((err) => {

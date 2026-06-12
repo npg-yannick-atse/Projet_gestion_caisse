@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fond de Caisse — Maquettes mobile</title>
+<style>
+  :root{
+    --blue:#0F4C81; --blue2:#1A6DB5; --green:#00C896; --green2:#047857;
+    --ink:#0F172A; --muted:#64748B; --muted2:#94A3B8; --line:rgba(15,76,129,.10);
+    --bg:#F1F5F9; --amber-bg:#FFFBEB; --amber:#B45309; --blue-bg:#EFF6FF;
+    --green-bg:#ECFDF5; --red-bg:#FEF2F2; --red:#B42318;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:#E2E8F0;font-family:'DM Sans','Segoe UI',system-ui,Arial,sans-serif;color:var(--ink);padding:32px}
+  h1.page{font-size:22px;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 28px;font-size:13px}
+  .grid{display:flex;flex-wrap:wrap;gap:40px}
+  .item{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .cap{font-size:13px;font-weight:600;color:#334155}
+
+  /* Téléphone */
+  .phone{width:300px;height:620px;background:#fff;border-radius:36px;border:10px solid #0A1628;
+    box-shadow:0 18px 50px rgba(10,22,40,.28);overflow:hidden;position:relative;display:flex;flex-direction:column}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:22px;background:#0A1628;border-radius:0 0 16px 16px;z-index:5}
+  .screen{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+
+  /* Barre de nav haute */
+  .navbar{background:var(--blue);color:#fff;padding:30px 16px 12px;display:flex;align-items:center;justify-content:space-between}
+  .navbar .t{font-weight:700;font-size:15px}
+  .navbar .a{font-size:12px;color:#fff;opacity:.9}
+  .navbar .back{font-size:18px}
+  .navbell{position:relative;font-size:18px;line-height:1}
+  .navbell .b{position:absolute;top:-5px;right:-7px;background:#EF4444;color:#fff;font-size:8px;font-weight:800;border-radius:8px;min-width:15px;height:15px;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--blue)}
+
+  .body{flex:1;overflow:hidden;padding:14px;display:flex;flex-direction:column;gap:10px}
+
+  /* Onglets bas */
+  .tabs{display:flex;border-top:1px solid #E2E8F0;background:#fff}
+  .tab{flex:1;text-align:center;padding:8px 0 10px;font-size:10px;color:var(--muted2)}
+  .tab .ic{font-size:18px;display:block;margin-bottom:2px}
+  .tab.on{color:var(--blue);font-weight:700}
+
+  /* Cartes / lignes */
+  .card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px}
+  .row{background:#fff;border:1px solid rgba(15,76,129,.08);border-radius:13px;padding:11px 12px;display:flex;justify-content:space-between;align-items:center}
+  .num{font-weight:700;font-size:14px}
+  .date{font-size:10px;color:var(--muted2);margin-top:2px}
+  .montant{font-weight:800;font-size:14px}
+  .badge{border-radius:999px;padding:2px 8px;font-size:9px;font-weight:700;display:inline-block}
+  .b-amber{background:var(--amber-bg);color:var(--amber)}
+  .b-blue{background:var(--blue-bg);color:var(--blue2)}
+  .b-green{background:var(--green-bg);color:var(--green2)}
+  .b-red{background:var(--red-bg);color:var(--red)}
+
+  .filter{display:flex;gap:8px;align-items:flex-end}
+  .fld{flex:1}
+  .fld .lbl{font-size:10px;font-weight:600;color:#475569;margin-bottom:4px}
+  .fld .inp{height:38px;border:1px solid #E2E8F0;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-size:13px}
+  .summary{background:var(--green-bg);border:1px solid rgba(16,185,129,.25);border-radius:12px;padding:9px 13px;display:flex;justify-content:space-between;align-items:center}
+  .summary .l{font-size:11px;font-weight:600;color:var(--green2)}
+  .summary .v{font-size:17px;font-weight:800;color:var(--green2)}
+
+  .lbl2{font-size:11px;font-weight:600;color:#475569;margin:6px 0 4px}
+  .inp2{height:40px;border:1px solid #E2E8F0;border-radius:9px;background:#fff;display:flex;align-items:center;padding:0 11px;font-size:13px;color:#0F172A}
+  .inp2.ph{color:var(--muted2)}
+  .btn{height:46px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff}
+  .btn.green{background:var(--green)}
+  .btn.blue{background:var(--blue)}
+  .seg{display:flex;gap:6px}
+  .seg .s{font-size:10px;font-weight:600;padding:4px 9px;border-radius:7px;border:1px solid var(--line);color:#475569;background:#fff}
+  .seg .s.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+  /* Login */
+  .login{background:#0A1628;flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px}
+  .logo{height:56px;width:56px;border-radius:16px;background:var(--green);display:flex;align-items:center;justify-content:center;color:#0A1628;font-weight:800;font-size:22px}
+  .lt{color:#fff;font-weight:700;font-size:19px;margin-top:12px}
+  .ls{color:rgba(255,255,255,.6);font-size:12px;margin-bottom:18px}
+  .lcard{background:#fff;border-radius:16px;padding:18px;width:100%}
+
+  .avatar{height:60px;width:60px;border-radius:30px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;margin:0 auto 10px}
+  .center{text-align:center}
+  .mut{color:var(--muted);font-size:12px}
+  .sec{font-size:12px;font-weight:700;margin:6px 0 2px}
+  @media print{body{background:#fff}}
+</style>
+</head>
+<body>
+  <h1 class="page">Fond de Caisse — Application mobile</h1>
+  <p class="sub">Maquettes des écrans (Expo / React Native). Couleurs et mise en page réelles de l'application.</p>
+
+  <div class="grid">
+
+    <!-- 1. LOGIN -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="login">
+          <div class="logo">FC</div>
+          <div class="lt">Fond de Caisse</div>
+          <div class="ls">NPG Gandour</div>
+          <div class="lcard">
+            <div class="lbl2">Identifiant LDAP</div>
+            <div class="inp2 ph">username</div>
+            <div class="lbl2">Mot de passe</div>
+            <div class="inp2 ph">••••••••</div>
+            <div style="height:14px"></div>
+            <div class="btn blue">Se connecter</div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">1 · Connexion (LDAP)</div>
+    </div>
+
+    <!-- 2. MES BONS -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="navbar"><span class="t">Mes bons</span><span class="navbell">🔔<span class="b">2</span></span></div>
+        <div class="body">
+          <div class="filter">
+            <div class="fld"><div class="lbl">Du</div><div class="inp">05/06/2026 <span>📅</span></div></div>
+            <div class="fld"><div class="lbl">Au</div><div class="inp">05/06/2026 <span>📅</span></div></div>
+          </div>
+          <div class="summary"><span class="l">Total décaissé</span><span class="v">25 000</span></div>
+          <div class="row"><div><div class="num">BON-0008</div><div class="date">05/06/2026</div></div>
+            <div style="text-align:right"><div class="montant">75 000</div><span class="badge b-amber">En attente</span></div></div>
+          <div class="row"><div><div class="num">BON-0007</div><div class="date">05/06/2026 • récurrent</div></div>
+            <div style="text-align:right"><div class="montant">25 000</div><span class="badge b-green">Décaissé</span></div></div>
+          <div class="row"><div><div class="num">BON-0006</div><div class="date">05/06/2026</div></div>
+            <div style="text-align:right"><div class="montant">300 000</div><span class="badge b-blue">Validé</span></div></div>
+        </div>
+        <div class="tabs">
+          <div class="tab on"><span class="ic">🧾</span>Mes bons</div>
+          <div class="tab"><span class="ic">✅</span>À valider</div>
+          <div class="tab"><span class="ic">➕</span>Nouveau</div>
+          <div class="tab"><span class="ic">👤</span>Compte</div>
+        </div>
+      </div></div>
+      <div class="cap">2 · Mes bons (filtre + total décaissé)</div>
+    </div>
+
+    <!-- 3. DÉTAIL + VALIDATION -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="navbar"><span class="back">‹</span><span class="t">BON-0008</span><span style="width:10px"></span></div>
+        <div class="body">
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="num" style="font-size:17px">BON-0008</div><span class="badge b-amber">En attente</span>
+            </div>
+            <div style="font-size:23px;font-weight:800;margin-top:6px">100 000</div>
+            <div class="mut" style="margin-top:3px">Créé le 05/06/2026</div>
+            <div class="mut">Porteur : Jean Koffi</div>
+          </div>
+          <div class="sec">Sous-bons <span style="font-size:10px;color:#94A3B8;font-weight:400">(tap pour le détail)</span></div>
+          <div style="background:#fff;border:1px solid rgba(15,76,129,.08);border-radius:12px;overflow:hidden">
+            <div style="display:flex;align-items:center;padding:11px 12px">
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px">#1 · Fournitures</div>
+                <div style="font-size:10px;color:#1A6DB5;margin-top:2px">Masquer le détail</div>
+              </div>
+              <div style="text-align:right"><div class="montant">75 000</div><span class="badge b-amber">En attente</span></div>
+              <span style="margin-left:8px;color:#94A3B8">▴</span>
+            </div>
+            <div style="border-top:1px solid rgba(15,76,129,.06);background:#F8FAFC;padding:8px 12px">
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:11px;color:#64748B">Montant</span><span style="font-size:11px;font-weight:600">75 000</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:11px;color:#64748B">N° BL</span><span style="font-size:11px;font-weight:600">4521</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:11px;color:#64748B">Code manutention</span><span style="font-size:11px;font-weight:600">MAN-22</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:11px;color:#64748B">Centre de coût</span><span style="font-size:11px;font-weight:600">CC-100 — Achats</span></div>
+              <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:11px;color:#64748B">Partenaire</span><span style="font-size:11px;font-weight:600">SOTRACO SA</span></div>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid rgba(15,76,129,.08);border-radius:12px;margin-top:8px">
+            <div style="display:flex;align-items:center;padding:11px 12px">
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px">#2 · Transport</div>
+                <div style="font-size:10px;color:#1A6DB5;margin-top:2px">Voir le détail</div>
+              </div>
+              <div style="text-align:right"><div class="montant">25 000</div><span class="badge b-amber">En attente</span></div>
+              <span style="margin-left:8px;color:#94A3B8">▾</span>
+            </div>
+          </div>
+          <div class="sec">Validation</div>
+          <div class="inp2 ph">Commentaire (optionnel)…</div>
+          <div style="display:flex;gap:10px;margin-top:8px">
+            <div class="btn" style="flex:1;background:#fff;border:1px solid #FECACA;color:var(--red)">Refuser</div>
+            <div class="btn green" style="flex:1">Valider</div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">3 · Détail d'un bon + validation</div>
+    </div>
+
+    <!-- 4. CRÉER UN BON -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="navbar"><span class="t">Nouveau bon</span><span class="navbell">🔔<span class="b">2</span></span></div>
+        <div class="body" style="gap:1px;overflow:hidden">
+          <div class="lbl2" style="margin-top:0">Type de bon</div><div class="inp2">Bon de décaissement</div>
+          <div class="lbl2">Libellé</div><div class="inp2 ph">Objet du bon…</div>
+          <div class="lbl2">Montant</div><div class="inp2">50 000</div>
+          <div class="lbl2">Centre de coût</div><div class="inp2">CC-100 — Achats</div>
+          <div class="lbl2">Portefeuille</div><div class="inp2">PF-DSI — Informatique</div>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1"><div class="lbl2">N° BL</div><div class="inp2 ph">BL…</div></div>
+            <div style="flex:1"><div class="lbl2">Code manut.</div><div class="inp2 ph">Code…</div></div>
+          </div>
+          <div class="lbl2">Partenaire (opt.)</div><div class="inp2 ph">— Aucun —</div>
+          <div style="height:6px"></div>
+          <div class="btn green">Créer le bon</div>
+        </div>
+        <div class="tabs">
+          <div class="tab"><span class="ic">🧾</span>Mes bons</div>
+          <div class="tab"><span class="ic">✅</span>À valider</div>
+          <div class="tab on"><span class="ic">➕</span>Nouveau</div>
+          <div class="tab"><span class="ic">👤</span>Compte</div>
+        </div>
+      </div></div>
+      <div class="cap">4 · Créer un bon</div>
+    </div>
+
+    <!-- 5. À VALIDER -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="navbar"><span class="t">À valider</span><span class="navbell">🔔<span class="b">2</span></span></div>
+        <div class="body">
+          <div class="row"><div><div class="num">BON-0008</div><div class="date">05/06/2026</div></div>
+            <div style="text-align:right"><div class="montant">75 000</div><span class="badge b-amber">En attente</span></div></div>
+          <div class="row"><div><div class="num">BON-0011</div><div class="date">05/06/2026</div></div>
+            <div style="text-align:right"><div class="montant">120 000</div><span class="badge b-amber">En attente</span></div></div>
+          <div class="row"><div><div class="num">BON-0012</div><div class="date">05/06/2026</div></div>
+            <div style="text-align:right"><div class="montant">42 000</div><span class="badge b-amber">En attente</span></div></div>
+        </div>
+        <div class="tabs">
+          <div class="tab"><span class="ic">🧾</span>Mes bons</div>
+          <div class="tab on"><span class="ic">✅</span>À valider</div>
+          <div class="tab"><span class="ic">➕</span>Nouveau</div>
+          <div class="tab"><span class="ic">👤</span>Compte</div>
+        </div>
+      </div></div>
+      <div class="cap">5 · File « À valider » (validateurs)</div>
+    </div>
+
+    <!-- 6. COMPTE -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div class="navbar"><span class="t">Compte</span><span class="navbell">🔔<span class="b">2</span></span></div>
+        <div class="body">
+          <div class="card center">
+            <div class="avatar">YA</div>
+            <div style="font-weight:800;font-size:18px">Yannick Atse</div>
+            <div class="mut">dev.test@npgandour.com</div>
+            <div class="mut">Matricule 4076</div>
+          </div>
+          <div style="flex:1"></div>
+          <div class="btn" style="background:#fff;border:1px solid #FECACA;color:var(--red)">Se déconnecter</div>
+        </div>
+        <div class="tabs">
+          <div class="tab"><span class="ic">🧾</span>Mes bons</div>
+          <div class="tab"><span class="ic">✅</span>À valider</div>
+          <div class="tab"><span class="ic">➕</span>Nouveau</div>
+          <div class="tab on"><span class="ic">👤</span>Compte</div>
+        </div>
+      </div></div>
+      <div class="cap">6 · Compte + déconnexion</div>
+    </div>
+
+    <!-- 7. NOTIFICATION PUSH (système) -->
+    <div class="item">
+      <div class="phone"><div class="notch"></div><div class="screen">
+        <div style="flex:1;background:linear-gradient(160deg,#0A1628,#0F4C81 70%,#1A6DB5);display:flex;flex-direction:column;align-items:center;padding-top:46px">
+          <div style="color:#fff;font-size:54px;font-weight:300;letter-spacing:1px">09:24</div>
+          <div style="color:rgba(255,255,255,.7);font-size:13px;margin-bottom:26px">mercredi 10 juin</div>
+          <!-- bannière de notification -->
+          <div style="width:88%;background:rgba(255,255,255,.92);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.3)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <div style="height:22px;width:22px;border-radius:6px;background:#00C896;display:flex;align-items:center;justify-content:center;color:#0A1628;font-weight:800;font-size:11px">FC</div>
+              <span style="font-size:11px;font-weight:700;color:#334155">FOND DE CAISSE</span>
+              <span style="margin-left:auto;font-size:10px;color:#94A3B8">maintenant</span>
+            </div>
+            <div style="font-size:14px;font-weight:800;color:#0F172A">Nouveau bon à valider</div>
+            <div style="font-size:13px;color:#475569;margin-top:2px">BON-0012 · 42 000</div>
+          </div>
+          <!-- 2e notification empilée -->
+          <div style="width:82%;background:rgba(255,255,255,.55);border-radius:14px;padding:10px 14px;margin-top:-6px">
+            <div style="font-size:11px;font-weight:700;color:#475569">FOND DE CAISSE</div>
+            <div style="font-size:12px;color:#475569;margin-top:1px">2 nouveaux bons à valider</div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap">7 · Notification push (téléphone verrouillé)</div>
+    </div>
+
+  </div>
+</body>
+</html>

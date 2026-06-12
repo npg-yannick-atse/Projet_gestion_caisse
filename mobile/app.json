@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Fond de Caisse",
+    "slug": "fdc-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "fdcmobile",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0F4C81"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.npgandour.fdc",
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch", "remote-notification"]
+      }
+    },
+    "android": {
+      "package": "com.npgandour.fdc",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F4C81"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#0F4C81"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://10.10.32.2:8080/api/v1",
+      "router": {
+        "origin": false
+      }
+    }
+  }
+}
