@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 
 export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT';
 
@@ -19,7 +20,7 @@ export class Operation {
   @Column({ name: 'portefeuille_id', type: 'bigint', nullable: true })
   portefeuilleId?: string | null;
 
-  @Column({ type: 'decimal', precision: 19, scale: 4 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montant!: string;
 
   @Column({ name: 'devise_id', type: 'bigint' })

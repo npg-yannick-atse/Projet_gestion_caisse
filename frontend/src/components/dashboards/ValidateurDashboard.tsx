@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   TrendingUp,
   Users,
+  XCircle,
 } from 'lucide-react';
 import { useBons, useBonsSummary, useBonsTimeline } from '@/api/bons';
 import { useUsers } from '@/api/users';
@@ -142,7 +143,7 @@ export function ValidateurDashboard({ user }: Props) {
       </div>
 
       {/* KPIs avec sparklines */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi
           icon={Clock}
           label="À valider"
@@ -180,6 +181,14 @@ export function ValidateurDashboard({ user }: Props) {
           sub="Sur vos validations"
           tone="blue"
           sparkValues={timeline?.map((p) => p.count)}
+        />
+        <Kpi
+          icon={XCircle}
+          label="Bons rejetés"
+          value={summary?.byStatut?.REFUSE?.count ?? 0}
+          sub="Période complète"
+          tone="red"
+          to="/bons?statut=REFUSE"
         />
       </div>
 

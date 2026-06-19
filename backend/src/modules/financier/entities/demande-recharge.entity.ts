@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -27,7 +28,7 @@ export class DemandeRecharge extends AuditableEntity {
   portefeuilleId!: string;
 
   @ApiProperty({ description: 'Montant DECIMAL(19,4)' })
-  @Column({ type: 'decimal', precision: 19, scale: 4 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montant!: string;
 
   @ApiProperty({ required: false })

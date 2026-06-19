@@ -16,6 +16,8 @@ import { BonsService } from './bons.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
 
 /**
  * Rôles qui ont accès à TOUS les bons (pas de restriction au demandeur).
@@ -39,7 +41,7 @@ interface CreateBonRequest {
     numeroBl: string;
     codeManutention: string;
     costCenterId: string;
-    natureOperationId: string;
+    natureOperationId?: string | null;
     caisseId: string;
     portefeuilleId: string;
     deviseId: string;
@@ -186,6 +188,33 @@ export class BonsController {
     return this.bonsService.getLatestImpression(id);
   }
 
+  @Patch(':id')
+  @ApiOperation({
+    summary:
+      'Modifier un bon (porteur) — VALIDATEUR ou permission BON_MODIFIER_SPEC, statut CREE uniquement',
+  })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateBonDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.bonsService.updateBon(id, user.sub, dto);
+  }
+
+  @Patch(':bonId/soubons/:sousBonId')
+  @ApiOperation({
+    summary:
+      'Modifier un sous-bon — VALIDATEUR ou permission BON_MODIFIER_SPEC, statut CREE uniquement',
+  })
+  async updateSousBon(
+    @Param('bonId') bonId: string,
+    @Param('sousBonId') sousBonId: string,
+    @Body() dto: UpdateSousBonDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.bonsService.updateSousBon(bonId, sousBonId, user.sub, dto);
+  }
+
   @Post(':id/validate')
   @ApiOperation({ summary: 'Valider (approuver ou refuser) un bon' })
   async validate(
@@ -233,6 +262,7 @@ export class BonsController {
   }
 
   @Post(':id/decaisser')
+  @Roles('CAISSIER')
   @ApiOperation({ summary: 'Décaisser un bon (caissier uniquement)' })
   async decaisser(
     @Param('id') id: string,

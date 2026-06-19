@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -43,7 +44,7 @@ export class DemandeTransfert extends AuditableEntity {
   destinationId!: string;
 
   @ApiProperty({ description: 'Montant DECIMAL(19,4)' })
-  @Column({ type: 'decimal', precision: 19, scale: 4 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montant!: string;
 
   @Column({ name: 'devise_id', type: 'bigint' })

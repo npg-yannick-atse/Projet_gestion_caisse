@@ -155,7 +155,8 @@ function EditCaisseModal({ caisse, onClose }: { caisse: Caisse; onClose: () => v
     defaultValues: {
       code: caisse.code,
       libelle: caisse.libelle,
-      deviseId: caisse.deviseId,
+      // Coercition défensive : un id renvoyé en nombre casserait la validation z.string().
+      deviseId: caisse.deviseId != null ? String(caisse.deviseId) : '',
       estPrincipale: caisse.estPrincipale,
     },
   });
@@ -261,8 +262,9 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
     defaultValues: {
       code: portefeuille.code,
       libelle: portefeuille.libelle,
-      gestionnaireId: portefeuille.gestionnaireId ?? '',
-      soldeInitial: portefeuille.soldeInitial ?? '',
+      gestionnaireId: portefeuille.gestionnaireId != null ? String(portefeuille.gestionnaireId) : '',
+      // soldeInitial est un DECIMAL : selon le driver il peut arriver en nombre → on force la string.
+      soldeInitial: portefeuille.soldeInitial != null ? String(portefeuille.soldeInitial) : '',
     },
   });
 

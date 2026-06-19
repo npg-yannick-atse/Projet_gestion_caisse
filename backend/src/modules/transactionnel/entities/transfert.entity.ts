@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 
 export type TransfertStatut =
   | 'INITIE'
@@ -23,10 +24,10 @@ export class Transfert {
   @Column({ name: 'portefeuille_cible_id', type: 'bigint', nullable: true })
   portefeuilleCibleId?: string | null;
 
-  @Column({ name: 'montant_source', type: 'decimal', precision: 19, scale: 4 })
+  @Column({ name: 'montant_source', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montantSource!: string;
 
-  @Column({ name: 'montant_cible', type: 'decimal', precision: 19, scale: 4 })
+  @Column({ name: 'montant_cible', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montantCible!: string;
 
   @Column({ name: 'devise_source_id', type: 'bigint' })
@@ -35,13 +36,13 @@ export class Transfert {
   @Column({ name: 'devise_cible_id', type: 'bigint' })
   deviseCibleId!: string;
 
-  @Column({ name: 'taux_applique', type: 'decimal', precision: 19, scale: 8 })
+  @Column({ name: 'taux_applique', type: 'decimal', precision: 19, scale: 8, transformer: decimalToString })
   tauxApplique!: string;
 
-  @Column({ name: 'montant_gain', type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ name: 'montant_gain', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   montantGain!: string;
 
-  @Column({ name: 'montant_perte', type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ name: 'montant_perte', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   montantPerte!: string;
 
   @Column({ name: 'date_transfert', type: 'datetime2', precision: 3 })

@@ -15,6 +15,7 @@ import { RolesService } from './roles.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto, AssignPermissionToRoleDto, RemovePermissionFromRoleDto } from './dto/permission.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Security / Roles & Permissions')
 @ApiBearerAuth()
@@ -25,6 +26,7 @@ export class RolesController {
 
   // Rôles
   @Post()
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un rôle' })
   createRole(@Body() dto: CreateRoleDto) {
     return this.rolesService.createRole(dto);
@@ -43,12 +45,14 @@ export class RolesController {
   }
 
   @Patch(':id')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un rôle' })
   updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.rolesService.updateRole(id, dto);
   }
 
   @Delete(':id')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer un rôle' })
   async removeRole(@Param('id') id: string) {
@@ -57,6 +61,7 @@ export class RolesController {
 
   // Permissions
   @Post('permissions')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer une permission' })
   createPermission(@Body() dto: CreatePermissionDto) {
     return this.rolesService.createPermission(dto);
@@ -75,12 +80,14 @@ export class RolesController {
   }
 
   @Patch('permissions/:id')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour une permission' })
   updatePermission(@Param('id') id: string, @Body() dto: UpdatePermissionDto) {
     return this.rolesService.updatePermission(id, dto);
   }
 
   @Delete('permissions/:id')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer une permission' })
   async removePermission(@Param('id') id: string) {
@@ -89,12 +96,14 @@ export class RolesController {
 
   // Role-Permission associations
   @Post(':roleId/permissions/:permissionId')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Assigner une permission à un rôle' })
   assignPermission(@Param('roleId') roleId: string, @Param('permissionId') permissionId: string) {
     return this.rolesService.assignPermissionToRole(roleId, permissionId);
   }
 
   @Delete(':roleId/permissions/:permissionId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Retirer une permission d\'un rôle' })
   async removePermissionFromRole(@Param('roleId') roleId: string, @Param('permissionId') permissionId: string) {

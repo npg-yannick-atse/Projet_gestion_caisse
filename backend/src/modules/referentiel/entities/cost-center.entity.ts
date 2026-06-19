@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -17,7 +18,7 @@ export class CostCenter extends AuditableEntity {
   directionId?: string | null;
 
   @ApiProperty({ required: false })
-  @Column({ name: 'budget_annuel', type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ name: 'budget_annuel', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   budgetAnnuel?: string | null;
 
   @ApiProperty({ default: true })

@@ -25,9 +25,9 @@ export class InterimsController {
   constructor(private readonly interimsService: InterimsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Créer un intérim' })
-  create(@Body() dto: CreateInterimDto) {
-    return this.interimsService.create(dto);
+  @ApiOperation({ summary: 'Créer un intérim (initiateur = utilisateur courant ; délégation limitée à ses propres droits)' })
+  create(@Body() dto: CreateInterimDto, @CurrentUser() user: JwtPayload) {
+    return this.interimsService.create(dto, user.sub);
   }
 
   @Get()

@@ -25,6 +25,7 @@ import { AuthorizationService } from '@modules/security/authorization.service';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
 import { Caisse } from '@modules/financier/entities/caisse.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
+import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
 
 interface CreateBonInput {
   demandeurId: string;
@@ -36,7 +37,7 @@ interface CreateBonInput {
     numeroBl: string;
     codeManutention: string;
     costCenterId: string;
-    natureOperationId: string;
+    natureOperationId?: string | null;
     caisseId: string;
     portefeuilleId: string;
     deviseId: string;
@@ -84,11 +85,6 @@ export class BonsService {
   async createBon(input: CreateBonInput, currentUserId: string): Promise<Bon> {
     if (!input.soubons || input.soubons.length === 0) {
       throw new BadRequestException('Un bon doit contenir au moins un sous-bon');
-    }
-
-    // Conforme au Dossier de conception : chaque sous-bon porte une nature d'opération.
-    if (input.soubons.some((sb) => !sb.natureOperationId)) {
-      throw new BadRequestException("Chaque sous-bon doit préciser une nature d'opération.");
     }
 
     // Cloisonnement : périmètre direction/CC + caisses + portefeuilles, et règle multi-CC.
@@ -147,7 +143,7 @@ export class BonsService {
             numeroBl: sbData.numeroBl,
             codeManutention: sbData.codeManutention,
             costCenterId: sbData.costCenterId as any,
-            natureOperationId: sbData.natureOperationId as any,
+            natureOperationId: sbData.natureOperationId ? (sbData.natureOperationId as any) : null,
             caisseId: sbData.caisseId as any,
             portefeuilleId: sbData.portefeuilleId as any,
             deviseId: sbData.deviseId as any,
@@ -774,6 +770,106 @@ export class BonsService {
     return this.sousBonRepo.find({
       where: { bonId: bonId as any },
       order: { numeroSousBon: 'ASC' },
+    });
+  }
+
+  /**
+   * Autorisation de modification d'un bon/sous-bon :
+   * rôle VALIDATEUR **ou** permission BON_MODIFIER_SPEC (les admins / DAF passent toujours).
+   */
+  private async assertPeutModifierBon(userId: string): Promise<void> {
+    const codes = await this.authz.getUserRoleCodes(userId);
+    if (this.authz.isAdminCodes(codes) || codes.has('VALIDATEUR')) return;
+    if (await this.authz.hasPermission(userId, 'BON_MODIFIER_SPEC')) return;
+    throw new ForbiddenException(
+      'Action non autorisée (modifier un bon). Rôle VALIDATEUR ou permission BON_MODIFIER_SPEC requis.',
+    );
+  }
+
+  /**
+   * Modifie l'enveloppe d'un bon (statut CREE uniquement).
+   * Réservé aux validateurs / titulaires de BON_MODIFIER_SPEC (admins inclus).
+   */
+  async updateBon(bonId: string, userId: string, dto: UpdateBonDto): Promise<Bon> {
+    await this.assertPeutModifierBon(userId);
+    const bon = await this.findOne(bonId);
+    if (bon.statut !== 'CREE') {
+      throw new BadRequestException(
+        `Seul un bon au statut CREE peut être modifié (statut actuel : ${bon.statut}).`,
+      );
+    }
+
+    if (dto.porteur !== undefined) {
+      bon.porteur = dto.porteur.trim() ? dto.porteur.trim() : null;
+    }
+    bon.updatedById = userId as any;
+    return this.bonRepo.save(bon);
+  }
+
+  /**
+   * Modifie un sous-bon (cœur métier), bon et sous-bon au statut CREE uniquement.
+   * Recalcule le snapshot `bon.montantTotal` si le montant change.
+   * Les axes d'imputation (caisse/portefeuille/cost-center/nature/devise) sont immuables.
+   */
+  async updateSousBon(
+    bonId: string,
+    sousBonId: string,
+    userId: string,
+    dto: UpdateSousBonDto,
+  ): Promise<SousBon> {
+    await this.assertPeutModifierBon(userId);
+
+    const bon = await this.findOne(bonId);
+    if (bon.statut !== 'CREE') {
+      throw new BadRequestException(
+        `Seul un bon au statut CREE peut être modifié (statut actuel : ${bon.statut}).`,
+      );
+    }
+
+    const sb = await this.sousBonRepo.findOne({
+      where: { id: sousBonId as any, bonId: bonId as any },
+    });
+    if (!sb) throw new NotFoundException(`Sous-bon ${sousBonId} introuvable pour le bon ${bonId}`);
+    if (sb.statut !== 'CREE') {
+      throw new BadRequestException(
+        `Seul un sous-bon au statut CREE peut être modifié (statut actuel : ${sb.statut}).`,
+      );
+    }
+
+    if (dto.montant !== undefined && !(parseFloat(dto.montant) > 0)) {
+      throw new BadRequestException('Le montant du sous-bon doit être strictement positif.');
+    }
+
+    if (dto.libelle !== undefined) sb.libelle = dto.libelle;
+    if (dto.montant !== undefined) sb.montant = dto.montant;
+    if (dto.description !== undefined) sb.description = dto.description.trim() ? dto.description : null;
+    if (dto.partenaireId !== undefined) sb.partenaireId = dto.partenaireId ? (dto.partenaireId as any) : null;
+    if (dto.numeroBl !== undefined) sb.numeroBl = dto.numeroBl;
+    if (dto.codeManutention !== undefined) sb.codeManutention = dto.codeManutention;
+    if (dto.numeroClient !== undefined) sb.numeroClient = dto.numeroClient ? dto.numeroClient : null;
+    sb.updatedById = userId as any;
+
+    const montantChange = dto.montant !== undefined;
+
+    return this.dataSource.transaction(async (manager) => {
+      const sousBonRepo = manager.getRepository(SousBon);
+      const bonRepo = manager.getRepository(Bon);
+
+      const saved = await sousBonRepo.save(sb);
+
+      // Le montant d'un sous-bon a changé → re-synchroniser le snapshot du bon.
+      if (montantChange) {
+        const tous = await sousBonRepo.find({ where: { bonId: bonId as any } });
+        const total = tous
+          .reduce((sum, x) => sum + parseFloat(x.montant), 0)
+          .toString();
+        await bonRepo.update({ id: bonId as any }, {
+          montantTotal: total,
+          updatedById: userId as any,
+        });
+      }
+
+      return saved;
     });
   }
 

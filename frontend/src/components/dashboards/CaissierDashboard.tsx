@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
-  ArrowDown,
   ArrowDownCircle,
   ArrowLeftRight,
   ArrowRight,
-  ArrowUp,
   ArrowUpCircle,
   Banknote,
   Check,
@@ -14,11 +12,11 @@ import {
   Flame,
   Search,
   Star,
-  Wallet,
   X,
+  XCircle,
   type LucideIcon,
 } from 'lucide-react';
-import { useBons, useBonsTimeline } from '@/api/bons';
+import { useBons, useBonsSummary, useBonsTimeline } from '@/api/bons';
 import { useCaisses, useCaisseSolde } from '@/api/caisses';
 import { useDevises } from '@/api/financierRef';
 import { useOperations } from '@/api/ledger';
@@ -163,31 +161,6 @@ function CaisseDetailCard({
 }
 
 /* ============================================================
- * DELTA BADGE
- * ============================================================ */
-function DeltaBadge({ delta }: { delta: number }) {
-  if (delta === 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 rounded-full bg-[#F1F5F9] px-1.5 py-0.5 text-[9px] font-semibold text-[#64748B]">
-        →
-      </span>
-    );
-  }
-  const positive = delta > 0;
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
-        positive ? 'bg-[#ECFDF5] text-[#047857]' : 'bg-[#FEF3F2] text-[#B42318]',
-      )}
-    >
-      {positive ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />}
-      {Math.abs(delta)}%
-    </span>
-  );
-}
-
-/* ============================================================
  * DASHBOARD CAISSIER orienté "mouvements de caisse"
  * ============================================================ */
 
@@ -201,6 +174,7 @@ const URGENCE_OPTS: { key: UrgenceFilter; label: string; icon: LucideIcon }[] = 
 
 export function CaissierDashboard({ user, showHero = true }: Props) {
   const { data: bons } = useBons();
+  const { data: bonsSummary } = useBonsSummary({});
   const { data: caisses } = useCaisses();
   const { data: devises } = useDevises();
   const { data: users } = useUsers();
@@ -307,15 +281,6 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
     0,
   );
 
-  // Volume hebdo + delta
-  const weekVolume = decaissedTimeline?.slice(-7).reduce((a, p) => a + Number(p.montant || 0), 0) ?? 0;
-  const prevWeekVolume =
-    decaissedTimeline && decaissedTimeline.length >= 14
-      ? decaissedTimeline.slice(0, 7).reduce((a, p) => a + Number(p.montant || 0), 0)
-      : 0;
-  const weekDelta =
-    prevWeekVolume > 0 ? Math.round(((weekVolume - prevWeekVolume) / prevWeekVolume) * 100) : 0;
-
   // Trésorerie totale
   const myCaisses = useMemo(
     () =>
@@ -384,55 +349,176 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           sparkValues={decaissedTimeline?.map((p) => Number(p.montant || 0))}
         />
         <Kpi
-          icon={Wallet}
-          label="Volume 7 jours"
-          value={
-            <div className="flex items-baseline gap-2">
-              <span>{formatMontant(weekVolume)}</span>
-              {decaissedTimeline && decaissedTimeline.length >= 14 && (
-                <DeltaBadge delta={weekDelta} />
-              )}
-            </div>
-          }
-          sub="vs semaine précédente"
-          tone="blue"
-          sparkValues={decaissedTimeline?.slice(-7).map((p) => Number(p.montant || 0))}
+          icon={XCircle}
+          label="Bons rejetés"
+          value={bonsSummary?.byStatut?.REFUSE?.count ?? 0}
+          sub="Période complète"
+          tone="red"
+          to="/bons"
+          searchObj={{ statut: 'REFUSE' }}
         />
       </div>
 
-      {/* MES CAISSES — détail solde + entrées/sorties du mois */}
-      <div>
-        <div className="mb-3 flex items-baseline gap-2">
-          <h2 className="font-display text-sm font-semibold text-[#0F172A]">Mes caisses</h2>
-          <span className="text-[11px] text-[#64748B]">
-            Solde courant • Entrées et sorties du mois
+      {/* Zone de travail : file de décaissement (principal) + colonne contexte (recharges, caisses) */}
+      <div className="grid gap-3.5 xl:grid-cols-[1.7fr_1fr] xl:items-start">
+      {/* Colonne principale : file de décaissement + journal des mouvements */}
+      <div className="flex min-w-0 flex-col gap-3.5">
+      {/* QUEUE À DÉCAISSER (action) */}
+      <div className="min-w-0 overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[rgba(15,76,129,0.08)] px-5 py-3">
+          <Banknote className="h-4 w-4 text-[#F59E0B]" />
+          <div className="font-display text-[13px] font-semibold">
+            Bons en attente de décaissement
+          </div>
+          <span className="rounded-full bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
+            {queue.length}
           </span>
-          {selectedCaisseId && (
-            <button
-              type="button"
-              onClick={() => setSelectedCaisseId(null)}
-              className="ml-auto text-[11px] font-medium text-[#1A6DB5] hover:underline"
-            >
-              Voir toutes les caisses
-            </button>
-          )}
+          <Link
+            to="/bons"
+            search={{ statut: 'VALIDE' } as any}
+            className="ml-auto flex items-center gap-1 text-xs font-medium text-[#1A6DB5] hover:underline"
+          >
+            Voir tout <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {myCaisses.length === 0 && (
-            <div className="col-span-full rounded-[14px] border border-dashed border-[rgba(15,76,129,0.2)] bg-white py-10 text-center text-sm text-[#64748B]">
-              Aucune caisse rattachée à votre profil.
-            </div>
-          )}
-          {myCaisses.map((c) => (
-            <CaisseDetailCard
-              key={c.id}
-              caisse={c}
-              monthOps={monthOps}
-              deviseCode={deviseCodeById.get(c.deviseId) ?? ''}
-              isSelected={selectedCaisseId === c.id}
-              onSelect={() => setSelectedCaisseId(selectedCaisseId === c.id ? null : c.id)}
+
+        {/* Filtres */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-5 py-2.5">
+          <div className="flex items-center gap-1.5">
+            {URGENCE_OPTS.map((opt) => {
+              const Icon = opt.icon;
+              const active = urgenceFilter === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setUrgenceFilter(opt.key)}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-[7px] px-2 py-1 text-[10px] font-medium transition-colors',
+                    active
+                      ? 'bg-[#0F4C81] text-white'
+                      : 'bg-white text-[#475569] hover:bg-[#E2E8F0]',
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="h-4 w-px bg-[rgba(15,76,129,0.1)]" />
+          <select
+            value={typeFilter ?? ''}
+            onChange={(e) => setTypeFilter(e.target.value || null)}
+            aria-label="Filtrer par type"
+            title="Filtrer par type"
+            className="rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white px-2 py-1 text-[10px] text-[#475569]"
+          >
+            <option value="">Tous types</option>
+            {(typeBons ?? []).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.libelle}
+              </option>
+            ))}
+          </select>
+          <div className="relative ml-auto">
+            <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[#94A3B8]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="N° bon…"
+              className="w-40 rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white py-1 pl-7 pr-2 text-[10px] outline-none focus:border-[#1A6DB5]"
             />
-          ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-[#FAFBFC]">
+              <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
+                <th className="px-5 py-2.5 font-semibold">Bon</th>
+                <th className="px-5 py-2.5 font-semibold">Type</th>
+                <th className="px-5 py-2.5 font-semibold">Demandeur</th>
+                <th className="px-5 py-2.5 text-right font-semibold">Montant</th>
+                <th className="px-5 py-2.5 font-semibold">Durée</th>
+                <th className="px-5 py-2.5 text-right font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-10 text-center text-[#64748B]">
+                    <div className="mb-2 text-2xl opacity-30">✅</div>
+                    {search || typeFilter || urgenceFilter !== 'ALL'
+                      ? 'Aucun bon ne correspond aux filtres'
+                      : 'File vide — rien à décaisser'}
+                  </td>
+                </tr>
+              )}
+              {queue.slice(0, 10).map((bon) => {
+                const u = userById.get(bon.demandeurId);
+                const ageMs = Date.now() - new Date(bon.createdAt).getTime();
+                const isUrgent = ageMs > 24 * 60 * 60 * 1000;
+                const typeLib = typesById.get(bon.typeBonId)?.libelle ?? '—';
+                return (
+                  <tr
+                    key={bon.id}
+                    className={cn(
+                      'border-t border-[rgba(15,76,129,0.05)] hover:bg-[#FAFBFF]',
+                      isUrgent && 'bg-[#FEF3F2]/30',
+                    )}
+                  >
+                    <td className="px-5 py-3">
+                      <div className="font-medium text-[#1A6DB5]">{bon.numero}</div>
+                      {bon.demandeExtension && (
+                        <div className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-[#FEF3F2] px-1.5 py-0.5 text-[9px] font-medium text-[#B42318]">
+                          Ext.
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-[#475569]">{typeLib}</td>
+                    <td className="px-5 py-3 text-[#475569]">
+                      {u ? (
+                        <div>
+                          <div className="text-[#0F172A]">
+                            {u.prenom} {u.nom}
+                          </div>
+                          <div className="text-[10px] text-[#94A3B8]">#{u.matricule}</div>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right tabular-nums font-semibold">
+                      {formatMontant(bon.montantTotal)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums',
+                          isUrgent
+                            ? 'bg-[#FEF3F2] text-[#B42318]'
+                            : 'bg-[#F1F5F9] text-[#475569]',
+                        )}
+                      >
+                        {isUrgent && <Flame className="h-3 w-3" />}
+                        {ageLabel(bon.createdAt)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Link
+                        to="/bons/$bonId"
+                        params={{ bonId: bon.id }}
+                        className="inline-flex items-center gap-1 rounded-[7px] bg-[#00C896] px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-[#047857]"
+                      >
+                        Décaisser
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -591,165 +677,10 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
         </div>
       </div>
 
-      {/* QUEUE À DÉCAISSER (action) */}
-      <div className="overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white">
-        <div className="flex flex-wrap items-center gap-3 border-b border-[rgba(15,76,129,0.08)] px-5 py-3">
-          <Banknote className="h-4 w-4 text-[#F59E0B]" />
-          <div className="font-display text-[13px] font-semibold">
-            Bons en attente de décaissement
-          </div>
-          <span className="rounded-full bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-semibold text-[#92400E]">
-            {queue.length}
-          </span>
-          <Link
-            to="/bons"
-            search={{ statut: 'VALIDE' } as any}
-            className="ml-auto flex items-center gap-1 text-xs font-medium text-[#1A6DB5] hover:underline"
-          >
-            Voir tout <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
+      </div>{/* fin colonne principale */}
 
-        {/* Filtres */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-5 py-2.5">
-          <div className="flex items-center gap-1.5">
-            {URGENCE_OPTS.map((opt) => {
-              const Icon = opt.icon;
-              const active = urgenceFilter === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => setUrgenceFilter(opt.key)}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-[7px] px-2 py-1 text-[10px] font-medium transition-colors',
-                    active
-                      ? 'bg-[#0F4C81] text-white'
-                      : 'bg-white text-[#475569] hover:bg-[#E2E8F0]',
-                  )}
-                >
-                  <Icon className="h-3 w-3" />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="h-4 w-px bg-[rgba(15,76,129,0.1)]" />
-          <select
-            value={typeFilter ?? ''}
-            onChange={(e) => setTypeFilter(e.target.value || null)}
-            aria-label="Filtrer par type"
-            title="Filtrer par type"
-            className="rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white px-2 py-1 text-[10px] text-[#475569]"
-          >
-            <option value="">Tous types</option>
-            {(typeBons ?? []).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.libelle}
-              </option>
-            ))}
-          </select>
-          <div className="relative ml-auto">
-            <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-[#94A3B8]" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="N° bon…"
-              className="w-40 rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white py-1 pl-7 pr-2 text-[10px] outline-none focus:border-[#1A6DB5]"
-            />
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-[#FAFBFC]">
-              <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-5 py-2.5 font-semibold">Bon</th>
-                <th className="px-5 py-2.5 font-semibold">Type</th>
-                <th className="px-5 py-2.5 font-semibold">Demandeur</th>
-                <th className="px-5 py-2.5 text-right font-semibold">Montant</th>
-                <th className="px-5 py-2.5 font-semibold">Durée</th>
-                <th className="px-5 py-2.5 text-right font-semibold">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queue.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-[#64748B]">
-                    <div className="mb-2 text-2xl opacity-30">✅</div>
-                    {search || typeFilter || urgenceFilter !== 'ALL'
-                      ? 'Aucun bon ne correspond aux filtres'
-                      : 'File vide — rien à décaisser'}
-                  </td>
-                </tr>
-              )}
-              {queue.slice(0, 10).map((bon) => {
-                const u = userById.get(bon.demandeurId);
-                const ageMs = Date.now() - new Date(bon.createdAt).getTime();
-                const isUrgent = ageMs > 24 * 60 * 60 * 1000;
-                const typeLib = typesById.get(bon.typeBonId)?.libelle ?? '—';
-                return (
-                  <tr
-                    key={bon.id}
-                    className={cn(
-                      'border-t border-[rgba(15,76,129,0.05)] hover:bg-[#FAFBFF]',
-                      isUrgent && 'bg-[#FEF3F2]/30',
-                    )}
-                  >
-                    <td className="px-5 py-3">
-                      <div className="font-medium text-[#1A6DB5]">{bon.numero}</div>
-                      {bon.demandeExtension && (
-                        <div className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-[#FEF3F2] px-1.5 py-0.5 text-[9px] font-medium text-[#B42318]">
-                          Ext.
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-[#475569]">{typeLib}</td>
-                    <td className="px-5 py-3 text-[#475569]">
-                      {u ? (
-                        <div>
-                          <div className="text-[#0F172A]">
-                            {u.prenom} {u.nom}
-                          </div>
-                          <div className="text-[10px] text-[#94A3B8]">#{u.matricule}</div>
-                        </div>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right tabular-nums font-semibold">
-                      {formatMontant(bon.montantTotal)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums',
-                          isUrgent
-                            ? 'bg-[#FEF3F2] text-[#B42318]'
-                            : 'bg-[#F1F5F9] text-[#475569]',
-                        )}
-                      >
-                        {isUrgent && <Flame className="h-3 w-3" />}
-                        {ageLabel(bon.createdAt)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        to="/bons/$bonId"
-                        params={{ bonId: bon.id }}
-                        className="inline-flex items-center gap-1 rounded-[7px] bg-[#00C896] px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-[#047857]"
-                      >
-                        Décaisser
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      {/* Colonne contexte : recharges à traiter + soldes des caisses */}
+      <div className="flex min-w-0 flex-col gap-3.5">
       {/* Demandes de recharge à traiter */}
       <div className="overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white">
         <div className="flex flex-wrap items-center gap-3 border-b border-[rgba(15,76,129,0.08)] px-5 py-3">
@@ -832,6 +763,45 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           </table>
         </div>
       </div>
+
+      {/* MES CAISSES — détail solde + entrées/sorties du mois */}
+      <div>
+        <div className="mb-3 flex items-baseline gap-2">
+          <h2 className="font-display text-sm font-semibold text-[#0F172A]">Mes caisses</h2>
+          <span className="text-[11px] text-[#64748B]">
+            Solde courant • Entrées et sorties du mois
+          </span>
+          {selectedCaisseId && (
+            <button
+              type="button"
+              onClick={() => setSelectedCaisseId(null)}
+              className="ml-auto text-[11px] font-medium text-[#1A6DB5] hover:underline"
+            >
+              Voir toutes les caisses
+            </button>
+          )}
+        </div>
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-1">
+          {myCaisses.length === 0 && (
+            <div className="col-span-full rounded-[14px] border border-dashed border-[rgba(15,76,129,0.2)] bg-white py-10 text-center text-sm text-[#64748B]">
+              Aucune caisse rattachée à votre profil.
+            </div>
+          )}
+          {myCaisses.map((c) => (
+            <CaisseDetailCard
+              key={c.id}
+              caisse={c}
+              monthOps={monthOps}
+              deviseCode={deviseCodeById.get(c.deviseId) ?? ''}
+              isSelected={selectedCaisseId === c.id}
+              onSelect={() => setSelectedCaisseId(selectedCaisseId === c.id ? null : c.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      </div>{/* fin colonne contexte */}
+      </div>{/* fin zone de travail (grille 2 colonnes) */}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DirectionsService } from './directions.service';
 import { CreateDirectionDto, UpdateDirectionDto } from './dto/direction.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Security / Directions')
 @ApiBearerAuth()
@@ -23,6 +24,7 @@ export class DirectionsController {
   constructor(private readonly directionsService: DirectionsService) {}
 
   @Post()
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer une direction' })
   create(@Body() dto: CreateDirectionDto) {
     return this.directionsService.create(dto);
@@ -41,12 +43,14 @@ export class DirectionsController {
   }
 
   @Patch(':id')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour une direction' })
   update(@Param('id') id: string, @Body() dto: UpdateDirectionDto) {
     return this.directionsService.update(id, dto);
   }
 
   @Delete(':id')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer une direction' })
   async remove(@Param('id') id: string) {

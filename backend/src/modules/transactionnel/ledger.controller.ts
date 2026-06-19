@@ -17,6 +17,7 @@ import { LedgerService } from './ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 interface CreateOperationRequest {
   typeOperation: 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT';
@@ -51,7 +52,8 @@ export class LedgerController {
 
   // Opérations
   @Post('operations')
-  @ApiOperation({ summary: 'Créer une opération (mouvement caisse/portefeuille)' })
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Créer une opération (mouvement caisse/portefeuille) — réservé admin' })
   async createOperation(@Body() dto: CreateOperationRequest, @CurrentUser() user: JwtPayload) {
     return this.ledgerService.createOperation({
       ...dto,
@@ -132,14 +134,16 @@ export class LedgerController {
 
   // Écritures Comptables (Partie Double)
   @Post('ecritures')
-  @ApiOperation({ summary: 'Créer une écriture comptable (immuable)' })
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Créer une écriture comptable (immuable) — réservé admin' })
   @HttpCode(HttpStatus.CREATED)
   async createEcriture(@Body() dto: CreateEcritureRequest & { transactionUuid: string }) {
     return this.ledgerService.createEcriture(dto, dto.transactionUuid);
   }
 
   @Post('ecritures/paired')
-  @ApiOperation({ summary: 'Créer une paire d\'écritures (débit + crédit) équilibrée' })
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Créer une paire d\'écritures (débit + crédit) équilibrée — réservé admin' })
   async createPaired(
     @Body()
     dto: {

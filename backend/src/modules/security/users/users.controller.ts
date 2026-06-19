@@ -20,6 +20,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 import { AuthorizationService } from '../authorization.service';
 
 @ApiTags('Security / Users')
@@ -34,6 +35,7 @@ export class UsersController {
   ) {}
 
   @Post()
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Creer un utilisateur' })
   create(@Body() dto: CreateUserDto) {
     return this.usersService.create(dto);
@@ -55,12 +57,14 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre a jour un utilisateur' })
   update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
   }
 
   @Delete(':id')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer (soft-delete) un utilisateur' })
   async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
@@ -88,6 +92,7 @@ export class UsersController {
   }
 
   @Post(':id/roles/:roleId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Attribuer un rôle à un utilisateur' })
   async assignRole(
@@ -104,6 +109,7 @@ export class UsersController {
   }
 
   @Delete(':id/roles/:roleId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer un rôle d'un utilisateur" })
   async removeRole(
@@ -128,6 +134,7 @@ export class UsersController {
   }
 
   @Post(':id/profils/:profilId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Attribuer un profil à un utilisateur' })
   async assignProfil(
@@ -144,6 +151,7 @@ export class UsersController {
   }
 
   @Delete(':id/profils/:profilId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer un profil d'un utilisateur" })
   async removeProfil(

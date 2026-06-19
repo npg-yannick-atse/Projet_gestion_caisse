@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 
 @Entity({ name: 'trx_decaissement' })
 export class Decaissement {
@@ -20,7 +21,7 @@ export class Decaissement {
   @Column({ name: 'beneficiaire_telephone', type: 'nvarchar', length: 30, nullable: true })
   beneficiaireTelephone?: string | null;
 
-  @Column({ type: 'decimal', precision: 19, scale: 4 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montant!: string;
 
   @Column({ name: 'date_decaissement', type: 'datetime2', precision: 3 })

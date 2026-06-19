@@ -227,6 +227,22 @@ export interface SousBon {
   dateDecaissement?: string | null;
 }
 
+/** Modification d'un bon (enveloppe) — statut CREE uniquement. */
+export interface EditBonPayload {
+  porteur?: string;
+}
+
+/** Modification d'un sous-bon — statut CREE uniquement. Axes d'imputation immuables. */
+export interface EditSousBonPayload {
+  libelle?: string;
+  montant?: string;
+  description?: string;
+  partenaireId?: string | null;
+  numeroBl?: string;
+  codeManutention?: string;
+  numeroClient?: string | null;
+}
+
 export interface Devise {
   id: string;
   code: string;
@@ -300,7 +316,7 @@ export interface SousBonInput {
   numeroBl: string;
   codeManutention: string;
   costCenterId: string;
-  natureOperationId: string;
+  natureOperationId?: string | null;
   caisseId: string;
   portefeuilleId: string;
   deviseId: string;

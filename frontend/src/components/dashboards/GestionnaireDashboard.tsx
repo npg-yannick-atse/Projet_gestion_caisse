@@ -8,8 +8,9 @@ import {
   Flame,
   TrendingDown,
   Wallet,
+  XCircle,
 } from 'lucide-react';
-import { useBons, useBonsTimeline } from '@/api/bons';
+import { useBons, useBonsSummary, useBonsTimeline } from '@/api/bons';
 import { usePortefeuilles, usePortefeuilleSolde } from '@/api/financierRef';
 import { useUsers } from '@/api/users';
 import { ageLabel, cn, formatMontant } from '@/lib/utils';
@@ -81,6 +82,7 @@ function PortefeuilleBurnCard({ portefeuille }: { portefeuille: Portefeuille }) 
 
 export function GestionnaireDashboard({ user }: Props) {
   const { data: bons } = useBons();
+  const { data: summary } = useBonsSummary({});
   const { data: portefeuilles } = usePortefeuilles();
   const { data: users } = useUsers();
   const { data: timeline } = useBonsTimeline({ days: 14, statut: 'DECAISSE' });
@@ -144,7 +146,7 @@ export function GestionnaireDashboard({ user }: Props) {
         }
       />
 
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi
           icon={Wallet}
           label="Portefeuilles pilotés"
@@ -182,6 +184,15 @@ export function GestionnaireDashboard({ user }: Props) {
           sub="Total période"
           tone="green"
           sparkValues={timeline?.slice(-7).map((p) => Number(p.montant || 0))}
+        />
+        <Kpi
+          icon={XCircle}
+          label="Bons rejetés"
+          value={summary?.byStatut?.REFUSE?.count ?? 0}
+          sub="Période complète"
+          tone="red"
+          to="/bons"
+          searchObj={{ statut: 'REFUSE' }}
         />
       </div>
 

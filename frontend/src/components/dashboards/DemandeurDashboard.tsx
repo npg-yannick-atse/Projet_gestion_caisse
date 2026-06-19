@@ -10,6 +10,7 @@ import {
   Plus,
   User as UserIcon,
   Wallet,
+  XCircle,
 } from 'lucide-react';
 import { useBons, useBonsTimeline } from '@/api/bons';
 import { usePortefeuilles, usePortefeuilleSolde } from '@/api/financierRef';
@@ -208,7 +209,7 @@ export function DemandeurDashboard({ user }: Props) {
       />
 
       {/* KPIs */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi
           icon={Files}
           label="Mes bons"
@@ -244,6 +245,15 @@ export function DemandeurDashboard({ user }: Props) {
           tone="gray"
           to="/bons"
           searchObj={{ statut: 'DECAISSE' }}
+        />
+        <Kpi
+          icon={XCircle}
+          label="Bons rejetés"
+          value={countBy('REFUSE')}
+          sub="Refusés au total"
+          tone="red"
+          to="/bons"
+          searchObj={{ statut: 'REFUSE' }}
         />
       </div>
 

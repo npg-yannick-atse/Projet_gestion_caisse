@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -46,7 +47,7 @@ export class Bon extends AuditableEntity {
   bonParentId?: string | null;
 
   @ApiProperty({ description: 'SUM des sous-bons (snapshot, jamais source de verite)' })
-  @Column({ name: 'montant_total', type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ name: 'montant_total', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   montantTotal!: string;
 
   @ApiProperty({ default: false, description: 'Le demandeur a sollicité une extension de budget' })

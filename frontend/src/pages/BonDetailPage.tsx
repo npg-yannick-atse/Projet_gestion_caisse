@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from '@tanstack/react-router';
 import { AxiosError } from 'axios';
-import { ArrowLeft, CheckCircle2, Printer, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Pencil, Printer, X } from 'lucide-react';
 import {
   useBon,
   useSousBons,
@@ -14,7 +14,7 @@ import {
 } from '@/api/bons';
 import { useBonCaisseByBon } from '@/api/bonsCaisse';
 import { useCostCenters, useNaturesOperation } from '@/api/referentiel';
-import { useUsers, useUserRoles } from '@/api/users';
+import { useUsers, useUserRoles, useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { cn, formatMontant } from '@/lib/utils';
 import type { Bon, BonCaisse, SousBon } from '@/types/api';
@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatutBadge } from '@/components/StatutBadge';
 import { SignaturePad } from '@/components/SignaturePad';
 import { PreparationDecaissementModal } from '@/components/PreparationDecaissementModal';
+import { EditBonModal } from '@/components/EditBonModal';
 
 function errMessage(error: unknown): string | null {
   if (error instanceof AxiosError) {
@@ -182,8 +183,13 @@ export function BonDetailPage() {
   const isCaissier = isAdminRole || (roles ?? []).some((r) => r.code === 'CAISSIER');
   const isValidateur = isAdminRole || (roles ?? []).some((r) => r.code === 'VALIDATEUR');
 
+  // Droit de modifier un bon/sous-bon : VALIDATEUR (admins inclus) ou permission BON_MODIFIER_SPEC.
+  const { data: myPermissions } = useMyPermissions(currentUser?.id ?? null);
+  const hasModifSpec = (myPermissions ?? []).includes('BON_MODIFIER_SPEC');
+
   const [commentaire, setCommentaire] = useState('');
   const [showSignModal, setShowSignModal] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   // Sous-bon dont on prépare le décaissement (modal). null = modal fermé.
   const [preparingSousBon, setPreparingSousBon] = useState<SousBon | null>(null);
   // null = pas encore édité → on affiche la valeur du bon ; sinon la saisie en cours.
@@ -199,6 +205,8 @@ export function BonDetailPage() {
   const sousBonsDecaissables = soubons.filter((sb) => sb.statut === 'VALIDE');
   const impression = impressionQuery.data ?? null;
   const porteurValue = porteurDraft ?? bon?.porteur ?? '';
+  // Modification autorisée uniquement au statut CREE, pour un validateur ou BON_MODIFIER_SPEC.
+  const canEditBon = bon?.statut === 'CREE' && (isValidateur || hasModifSpec);
 
   const userById = useMemo(() => new Map((usersList ?? []).map((u) => [u.id, u])), [usersList]);
   const imprimeParLabel = impression
@@ -248,7 +256,14 @@ export function BonDetailPage() {
                   {bon.estRecurrent ? ' · récurrent' : ''}
                 </p>
               </div>
-              <StatutBadge statut={bon.statut} />
+              <div className="flex items-center gap-2">
+                {canEditBon && (
+                  <Button variant="outline" size="sm" onClick={() => setShowEdit(true)}>
+                    <Pencil className="h-4 w-4" /> Modifier
+                  </Button>
+                )}
+                <StatutBadge statut={bon.statut} />
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex items-baseline justify-between">
@@ -637,6 +652,11 @@ export function BonDetailPage() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Modal d'édition du bon et de ses sous-bons (statut CREE) */}
+      {showEdit && bon && (
+        <EditBonModal bon={bon} soubons={soubons} onClose={() => setShowEdit(false)} />
       )}
 
       {/* Modal de signature */}

@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -39,7 +40,7 @@ export class Portefeuille extends AuditableEntity {
   gestionnaireId?: string | null;
 
   @ApiProperty({ default: 0 })
-  @Column({ name: 'solde_initial', type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ name: 'solde_initial', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   soldeInitial!: string;
 
   @ApiProperty({ default: true })

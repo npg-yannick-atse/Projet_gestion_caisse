@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 import { BonStatut } from './bon.entity';
@@ -31,11 +32,11 @@ export class SousBon extends AuditableEntity {
   description?: string | null;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 19, scale: 4 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   montant!: string;
 
   @ApiProperty({ required: false })
-  @Column({ name: 'montant_a_payer_client', type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ name: 'montant_a_payer_client', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   montantAPayerClient?: string | null;
 
   @ApiProperty({ required: false, description: 'Partenaire facultatif — peut être nul pour les opérations internes' })

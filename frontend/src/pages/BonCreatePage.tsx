@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
-import { useTypeBons, usePartenaires, useNaturesOperation } from '@/api/referentiel';
+import { useTypeBons, usePartenaires } from '@/api/referentiel';
 import { useDevises, usePortefeuilleSolde } from '@/api/financierRef';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
@@ -28,8 +28,6 @@ const sousBonSchema = z.object({
   numeroBl: z.string().min(1, 'Requis'),
   codeManutention: z.string().min(1, 'Requis'),
   costCenterId: z.string().min(1, 'Requis'),
-  // Nature d'opération : champ du sous-bon prévu par le Dossier de conception.
-  natureOperationId: z.string().min(1, 'Requis'),
   // Caisse et devise sont dérivées automatiquement du portefeuille choisi (cf. useEffect).
   caisseId: z.string().min(1, 'Requis'),
   portefeuilleId: z.string().min(1, 'Requis'),
@@ -55,7 +53,6 @@ const emptySousBon = {
   numeroBl: '',
   codeManutention: '',
   costCenterId: '',
-  natureOperationId: '',
   caisseId: '',
   portefeuilleId: '',
   deviseId: '',
@@ -70,7 +67,6 @@ export function BonCreatePage() {
 
   const { data: typeBons } = useTypeBons();
   const { data: partenaires } = usePartenaires();
-  const { data: naturesOperation } = useNaturesOperation();
   // Tout le périmètre de création (CC, caisses, portefeuilles autorisés) vient du serveur.
   const { data: perimeter } = useMyBonPerimeter();
   const costCenters = perimeter?.costCenters;
@@ -366,20 +362,6 @@ export function BonCreatePage() {
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Nature d'opération</Label>
-                <select className={selectClass} {...register(`soubons.${index}.natureOperationId`)}>
-                  <option value="">— Choisir —</option>
-                  {naturesOperation?.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.code} — {n.libelle}
-                    </option>
-                  ))}
-                </select>
-                {errors.soubons?.[index]?.natureOperationId && (
-                  <p className="text-xs text-[#EF4444]">{errors.soubons[index]?.natureOperationId?.message}</p>
-                )}
               </div>
               <div className="space-y-2">
                 <Label>N° Document</Label>

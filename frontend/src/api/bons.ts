@@ -9,6 +9,8 @@ import type {
   Caisse,
   CostCenter,
   CreateBonPayload,
+  EditBonPayload,
+  EditSousBonPayload,
   ExtensionMode,
   ImpressionBon,
   Portefeuille,
@@ -194,6 +196,30 @@ export function useValidateBon(id: string) {
     (bonId, payload) => api.post(`/bons/${bonId}/validate`, payload),
     id,
   );
+}
+
+/** PATCH /bons/:id — modifie l'enveloppe (porteur). Statut CREE uniquement côté serveur. */
+export function useEditBon(id: string) {
+  return useBonAction<EditBonPayload>(
+    (bonId, payload) => api.patch(`/bons/${bonId}`, payload),
+    id,
+  );
+}
+
+/**
+ * PATCH /bons/:bonId/soubons/:sousBonId — modifie un sous-bon.
+ * L'invalidation de ['bon', bonId] couvre aussi ['bon', bonId, 'soubons'] (match préfixe).
+ */
+export function useEditSousBon(bonId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sousBonId, payload }: { sousBonId: string; payload: EditSousBonPayload }) =>
+      api.patch(`/bons/${bonId}/soubons/${sousBonId}`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bon', bonId] });
+      qc.invalidateQueries({ queryKey: ['bons'] });
+    },
+  });
 }
 
 export function usePrintBon(id: string) {

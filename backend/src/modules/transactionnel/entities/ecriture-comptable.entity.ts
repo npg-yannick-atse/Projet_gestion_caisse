@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 
 export type TypeCompte = 'CAISSE' | 'PORTEFEUILLE' | 'GAIN_CHANGE' | 'PERTE_CHANGE' | 'CHARGE';
 
@@ -30,10 +31,10 @@ export class EcritureComptable {
   @Column({ name: 'cost_center_id', type: 'bigint', nullable: true })
   costCenterId?: string | null;
 
-  @Column({ type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   debit?: string | null;
 
-  @Column({ type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   credit?: string | null;
 
   @Column({ name: 'devise_id', type: 'bigint' })

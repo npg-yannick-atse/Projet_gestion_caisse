@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export type TypeCloture = 'AUTO_20H' | 'MANUEL';
@@ -19,10 +20,10 @@ export class SessionCaisse {
   @Column({ name: 'date_cloture', type: 'datetime2', precision: 3, nullable: true })
   dateCloture?: Date | null;
 
-  @Column({ name: 'solde_ouverture', type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ name: 'solde_ouverture', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   soldeOuverture!: string;
 
-  @Column({ name: 'solde_cloture', type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ name: 'solde_cloture', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   soldeCloture?: string | null;
 
   @Column({ name: 'cloture_par_id', type: 'bigint', nullable: true })

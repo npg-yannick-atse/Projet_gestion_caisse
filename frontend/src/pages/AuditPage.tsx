@@ -20,11 +20,28 @@ function actionClass(a: string): string {
   return ACTION_CLS[a] ?? 'bg-[#F1F5F9] text-[#475569]';
 }
 
+/** Date du jour au format YYYY-MM-DD (heure locale). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function AuditPageInner() {
+  const today = todayLocal();
   const [entite, setEntite] = useState('');
   const [action, setAction] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // Par défaut, on n'affiche que le journal du JOUR (même logique que la page Opérations).
+  const [dateFrom, setDateFrom] = useState(() => todayLocal());
+  const [dateTo, setDateTo] = useState(() => todayLocal());
+
+  // Vue par défaut = aujourd'hui, sans autre filtre.
+  const isDefaultView = !entite && !action && dateFrom === today && dateTo === today;
+  const resetToToday = () => {
+    setEntite('');
+    setAction('');
+    setDateFrom(today);
+    setDateTo(today);
+  };
 
   const { data: entries, isLoading } = useAudit({
     entite: entite || undefined,
@@ -68,6 +85,20 @@ function AuditPageInner() {
           <input type="date" aria-label="Du" title="Du" className={inputClass} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <input type="date" aria-label="Au" title="Au" className={inputClass} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
+
+        {!isDefaultView && (
+          <div className="flex items-center justify-between gap-2 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-[18px] py-2">
+            <span className="text-[11px] text-[#64748B]">Filtre personnalisé actif — la vue par défaut affiche le journal du jour.</span>
+            <button
+              type="button"
+              onClick={resetToToday}
+              title="Revenir au journal du jour"
+              className="shrink-0 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
+            >
+              Aujourd'hui
+            </button>
+          </div>
+        )}
 
         {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
 

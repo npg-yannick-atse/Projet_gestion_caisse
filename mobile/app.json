@@ -7,8 +7,11 @@
     "scheme": "fdcmobile",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#0F4C81"
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,7 +23,8 @@
     "android": {
       "package": "com.npgandour.fdc",
       "adaptiveIcon": {
-        "backgroundColor": "#0F4C81"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       }
     },
     "plugins": [

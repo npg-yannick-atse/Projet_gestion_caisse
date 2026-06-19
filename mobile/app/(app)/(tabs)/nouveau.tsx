@@ -13,11 +13,11 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useCreateBon } from '@/api/bons';
-import { useMyBonPerimeter, useNaturesOperation, usePartenaires, useTypeBons } from '@/api/referentiel';
+import { useMyBonPerimeter, usePartenaires, useTypeBons } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
 import { useAuthStore } from '@/store/auth';
-import type { CostCenter, NatureOperation, Partenaire, Portefeuille, TypeBon } from '@/types';
+import type { CostCenter, Partenaire, Portefeuille, TypeBon } from '@/types';
 
 const montantRegex = /^\d+(\.\d{1,4})?$/;
 
@@ -28,13 +28,11 @@ export default function NouvelleDemandeScreen() {
   const { data: perimeter, isLoading: loadingPerim } = useMyBonPerimeter();
   const { data: typeBons } = useTypeBons();
   const { data: partenaires } = usePartenaires();
-  const { data: naturesOperation } = useNaturesOperation();
   const create = useCreateBon();
 
   const [typeBonId, setTypeBonId] = useState('');
   const [portefeuilleId, setPortefeuilleId] = useState('');
   const [costCenterId, setCostCenterId] = useState('');
-  const [natureOperationId, setNatureOperationId] = useState('');
   const [partenaireId, setPartenaireId] = useState('');
   const [libelle, setLibelle] = useState('');
   const [montant, setMontant] = useState('');
@@ -48,7 +46,6 @@ export default function NouvelleDemandeScreen() {
   const costCenters: CostCenter[] = perimeter?.costCenters ?? [];
   const typeBonsList: TypeBon[] = typeBons ?? [];
   const partenairesList: Partenaire[] = partenaires ?? [];
-  const naturesList: NatureOperation[] = naturesOperation ?? [];
 
   useEffect(() => {
     if (!portefeuilleId && portefeuilles.length > 0) {
@@ -66,10 +63,6 @@ export default function NouvelleDemandeScreen() {
   }, [costCenters, costCenterId]);
 
   useEffect(() => {
-    if (!natureOperationId && naturesList.length > 0) setNatureOperationId(naturesList[0].id);
-  }, [naturesList, natureOperationId]);
-
-  useEffect(() => {
     if (!typeBonId && typeBonsList.length > 0) setTypeBonId(typeBonsList[0].id);
   }, [typeBonsList, typeBonId]);
 
@@ -82,7 +75,6 @@ export default function NouvelleDemandeScreen() {
     sublabel: p.proprietaireType === 'USER' ? 'Mon portefeuille' : 'Direction',
   }));
   const ccOptions: SelectOption[] = costCenters.map((c) => ({ value: c.id, label: `${c.code} — ${c.libelle}` }));
-  const natureOptions: SelectOption[] = naturesList.map((n) => ({ value: n.id, label: `${n.code} — ${n.libelle}` }));
   const partenaireOptions: SelectOption[] = [
     { value: '', label: '— Aucun —' },
     ...partenairesList.map((p) => ({ value: p.id, label: p.raisonSociale, sublabel: p.code })),
@@ -93,7 +85,6 @@ export default function NouvelleDemandeScreen() {
     !!typeBonId &&
     !!selectedPf &&
     !!costCenterId &&
-    !!natureOperationId &&
     libelle.trim().length > 0 &&
     montantValid &&
     !create.isPending;
@@ -126,7 +117,6 @@ export default function NouvelleDemandeScreen() {
             numeroBl: numeroBl.trim(),
             codeManutention: codeManutention.trim(),
             costCenterId,
-            natureOperationId,
             caisseId: selectedPf.caisseSourceId,
             portefeuilleId: selectedPf.id,
             deviseId: selectedPf.deviseId,
@@ -152,13 +142,6 @@ export default function NouvelleDemandeScreen() {
             <Select label="Type de bon" required value={typeBonId} options={typeBonOptions} onChange={setTypeBonId} />
             <Select label="Portefeuille" required value={portefeuilleId} options={pfOptions} onChange={setPortefeuilleId} />
             <Select label="Centre de coût" required value={costCenterId} options={ccOptions} onChange={setCostCenterId} />
-            <Select
-              label="Nature d'opération"
-              required
-              value={natureOperationId}
-              options={natureOptions}
-              onChange={setNatureOperationId}
-            />
 
             <Field label="Libellé" required>
               <TextInput

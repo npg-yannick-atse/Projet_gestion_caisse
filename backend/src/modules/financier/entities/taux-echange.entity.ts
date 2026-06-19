@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export type SourceTaux = 'FIXE_DB' | 'API';
@@ -16,7 +17,7 @@ export class TauxEchange {
   deviseCibleId!: string;
 
   @ApiProperty()
-  @Column({ type: 'decimal', precision: 19, scale: 8 })
+  @Column({ type: 'decimal', precision: 19, scale: 8, transformer: decimalToString })
   taux!: string;
 
   @Column({ name: 'date_validite_debut', type: 'datetime2', precision: 3 })

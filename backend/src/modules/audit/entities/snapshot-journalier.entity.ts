@@ -1,4 +1,5 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 
 @Entity({ name: 'aud_snapshot_journalier' })
 export class SnapshotJournalier {
@@ -11,16 +12,16 @@ export class SnapshotJournalier {
   @Column({ name: 'caisse_id', type: 'bigint' })
   caisseId!: string;
 
-  @Column({ name: 'solde_calcule_ecritures', type: 'decimal', precision: 19, scale: 4 })
+  @Column({ name: 'solde_calcule_ecritures', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   soldeCalculeEcritures!: string;
 
-  @Column({ name: 'solde_caisse_table', type: 'decimal', precision: 19, scale: 4 })
+  @Column({ name: 'solde_caisse_table', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString })
   soldeCaisseTable!: string;
 
-  @Column({ name: 'solde_sap', type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ name: 'solde_sap', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   soldeSap?: string | null;
 
-  @Column({ type: 'decimal', precision: 19, scale: 4, default: 0 })
+  @Column({ type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, default: 0 })
   ecart!: string;
 
   @Column({ name: 'statut_reconciliation', type: 'nvarchar', length: 20 })

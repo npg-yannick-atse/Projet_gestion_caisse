@@ -135,7 +135,7 @@ export interface SousBonInput {
   numeroBl: string;
   codeManutention: string;
   costCenterId: string;
-  natureOperationId: string;
+  natureOperationId?: string | null;
   caisseId: string;
   portefeuilleId: string;
   deviseId: string;

@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProfilsService } from './profils.service';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Security / Profils')
 @ApiBearerAuth()
@@ -23,6 +24,7 @@ export class ProfilsController {
   constructor(private readonly profilsService: ProfilsService) {}
 
   @Post()
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un profil' })
   createProfil(@Body() dto: CreateProfilDto) {
     return this.profilsService.createProfil(dto);
@@ -41,12 +43,14 @@ export class ProfilsController {
   }
 
   @Patch(':id')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un profil' })
   updateProfil(@Param('id') id: string, @Body() dto: UpdateProfilDto) {
     return this.profilsService.updateProfil(id, dto);
   }
 
   @Delete(':id')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer (désactiver) un profil' })
   async removeProfil(@Param('id') id: string) {
@@ -61,6 +65,7 @@ export class ProfilsController {
   }
 
   @Post(':profilId/permissions/:permissionId')
+  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Assigner une permission à un profil' })
   assignPermission(
     @Param('profilId') profilId: string,
@@ -70,6 +75,7 @@ export class ProfilsController {
   }
 
   @Delete(':profilId/permissions/:permissionId')
+  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer une permission d'un profil" })
   async removePermission(

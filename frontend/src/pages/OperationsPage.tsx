@@ -46,11 +46,11 @@ const ALL_TABS: TabDef[] = [
   { key: 'AJUSTEMENT', label: 'Ajustements', icon: SlidersHorizontal, type: 'AJUSTEMENT' },
 ];
 
-const TYPE_BADGE: Record<TypeOperation, { label: string; bg: string; text: string; dot: string; icon: LucideIcon }> = {
-  RECHARGE: { label: 'Recharge', bg: '#ECFDF5', text: '#047857', dot: '#10B981', icon: ArrowUpCircle },
-  DECAISSEMENT: { label: 'Décaissement', bg: '#FEF3F2', text: '#B42318', dot: '#F04438', icon: ArrowDownCircle },
-  TRANSFERT: { label: 'Transfert', bg: '#EFF6FF', text: '#1A6DB5', dot: '#1A6DB5', icon: ArrowLeftRight },
-  AJUSTEMENT: { label: 'Ajustement', bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B', icon: SlidersHorizontal },
+const TYPE_BADGE: Record<TypeOperation, { label: string; cls: string; dot: string; icon: LucideIcon }> = {
+  RECHARGE: { label: 'Recharge', cls: 'bg-[#ECFDF5] text-[#047857]', dot: '#10B981', icon: ArrowUpCircle },
+  DECAISSEMENT: { label: 'Décaissement', cls: 'bg-[#FEF3F2] text-[#B42318]', dot: '#F04438', icon: ArrowDownCircle },
+  TRANSFERT: { label: 'Transfert', cls: 'bg-[#EFF6FF] text-[#1A6DB5]', dot: '#1A6DB5', icon: ArrowLeftRight },
+  AJUSTEMENT: { label: 'Ajustement', cls: 'bg-[#FFFBEB] text-[#92400E]', dot: '#F59E0B', icon: SlidersHorizontal },
 };
 
 /** Date du jour au format YYYY-MM-DD (heure locale). */
@@ -78,8 +78,10 @@ function OpTypeBadge({ type }: { type: TypeOperation }) {
   const Icon = meta.icon;
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
-      style={{ backgroundColor: meta.bg, color: meta.text }}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
+        meta.cls,
+      )}
     >
       <Icon className="h-3 w-3" />
       {meta.label}
@@ -150,14 +152,19 @@ export function OperationsPage() {
   const isDemandeur = roleCodes.has('DEMANDEUR') && !isAdmin && !isCaissier && !isValidateur;
 
   const activeType = ALL_TABS.find((t) => t.key === tab)?.type;
+  // Recherche active => on interroge TOUT l'historique : le filtre de dates est ignoré
+  // (sinon on ne trouverait que dans la fenêtre du jour affichée par défaut).
+  const searching = !!debouncedSearch;
+  const effectiveDateFrom = searching ? undefined : dateFrom || undefined;
+  const effectiveDateTo = searching ? undefined : dateTo || undefined;
   // Tri serveur (URL-synced) — whitelist alignée avec LedgerService.OPERATION_SORT_MAP
   const sort = useTableSort<OpSortCol>('/operations', OPS_SORT_COLUMNS);
   // Type + recherche + dates + tri : tout est exécuté côté serveur (en BD).
   const { data: ops, isLoading } = useOperations({
     type: activeType,
     search: debouncedSearch || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    dateFrom: effectiveDateFrom,
+    dateTo: effectiveDateTo,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
@@ -239,13 +246,13 @@ export function OperationsPage() {
       const blob = await exportOperationsXlsx({
         type: activeType,
         search: debouncedSearch || undefined,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
+        dateFrom: effectiveDateFrom,
+        dateTo: effectiveDateTo,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `operations_${dateFrom || 'tout'}_au_${dateTo || 'tout'}.xlsx`;
+      a.download = `operations_${effectiveDateFrom || 'tout'}_au_${effectiveDateTo || 'tout'}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -361,26 +368,38 @@ export function OperationsPage() {
               className="w-full rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-[#1A6DB5] focus:ring-2 focus:ring-[#1A6DB5]/15"
             />
           </div>
-          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-2.5 py-2 text-xs">
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-2.5 py-2 text-xs',
+              searching && 'opacity-50',
+            )}
+          >
             <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
             <input
               type="date"
               aria-label="Date de début"
-              title="Date de début"
+              title={searching ? 'Dates ignorées pendant une recherche' : 'Date de début'}
               value={dateFrom}
+              disabled={searching}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="border-0 bg-transparent text-xs outline-none"
+              className="border-0 bg-transparent text-xs outline-none disabled:cursor-not-allowed"
             />
           </div>
-          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-2.5 py-2 text-xs">
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-2.5 py-2 text-xs',
+              searching && 'opacity-50',
+            )}
+          >
             <span className="text-[#64748B]">au</span>
             <input
               type="date"
               aria-label="Date de fin"
-              title="Date de fin"
+              title={searching ? 'Dates ignorées pendant une recherche' : 'Date de fin'}
               value={dateTo}
+              disabled={searching}
               onChange={(e) => setDateTo(e.target.value)}
-              className="border-0 bg-transparent text-xs outline-none"
+              className="border-0 bg-transparent text-xs outline-none disabled:cursor-not-allowed"
             />
           </div>
           {!isDefaultView && (
@@ -394,6 +413,11 @@ export function OperationsPage() {
             </button>
           )}
         </div>
+        {searching && (
+          <p className="mt-2 text-[11px] text-[#64748B]">
+            Recherche active : tout l'historique est interrogé, le filtre de dates est ignoré.
+          </p>
+        )}
       </div>
 
       {/* Tableau */}

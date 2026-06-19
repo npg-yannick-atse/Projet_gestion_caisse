@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
@@ -9,6 +10,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Interim } from '../entities/interim.entity';
 import { User } from '../entities/user.entity';
+import { Permission } from '../entities/permission.entity';
+import { UserProfil } from '../entities/user-profil.entity';
+import { AuthorizationService } from '../authorization.service';
 import { CreateInterimDto, UpdateInterimDto } from './dto/interim.dto';
 
 // Fréquence du passage automatique des intérims échus en EXPIRE (1 h).
@@ -23,7 +27,44 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
     private readonly interimRepo: Repository<Interim>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(Permission)
+    private readonly permissionRepo: Repository<Permission>,
+    @InjectRepository(UserProfil)
+    private readonly userProfilRepo: Repository<UserProfil>,
+    private readonly authz: AuthorizationService,
   ) {}
+
+  /**
+   * Sécurité anti-escalade : on ne peut déléguer (via un intérim) qu'un rôle / profil /
+   * permission que l'INITIATEUR possède réellement. Sans cela, un utilisateur pourrait
+   * se créer un intérim lui déléguant ADMINISTRATEUR (les droits délégués sont cumulés
+   * par AuthorizationService pour le remplaçant). Les admins peuvent tout déléguer.
+   */
+  private async assertCanDelegate(initiateurId: string, dto: CreateInterimDto): Promise<void> {
+    if (await this.authz.isAdmin(initiateurId)) return;
+
+    if (dto.roleTransfereId) {
+      const roles = await this.authz.getEffectiveRoles(initiateurId);
+      if (!roles.some((r) => String(r.id) === String(dto.roleTransfereId))) {
+        throw new ForbiddenException("Vous ne pouvez déléguer qu'un rôle que vous possédez.");
+      }
+    }
+
+    if (dto.permissionId) {
+      const perm = await this.permissionRepo.findOne({ where: { id: dto.permissionId as any } });
+      const codes = await this.authz.getEffectivePermissions(initiateurId);
+      if (!perm || !codes.has(perm.code)) {
+        throw new ForbiddenException("Vous ne pouvez déléguer qu'une permission que vous possédez.");
+      }
+    }
+
+    if (dto.profilTransfereId) {
+      const profils = await this.userProfilRepo.find({ where: { userId: initiateurId as any } });
+      if (!profils.some((p) => String(p.profilId) === String(dto.profilTransfereId))) {
+        throw new ForbiddenException("Vous ne pouvez déléguer qu'un profil que vous détenez.");
+      }
+    }
+  }
 
   /** Planificateur léger (sans dépendance) : expire les intérims échus au démarrage puis chaque heure. */
   onModuleInit(): void {
@@ -39,11 +80,17 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
     if (this.expireTimer) clearInterval(this.expireTimer);
   }
 
-  async create(dto: CreateInterimDto): Promise<Interim> {
-    const initiateur = await this.userRepo.findOne({ where: { id: dto.initiateurId } });
+  async create(dto: CreateInterimDto, currentUserId: string): Promise<Interim> {
+    // L'initiateur est TOUJOURS l'utilisateur authentifié : on ignore toute valeur
+    // d'initiateurId fournie dans le body (anti-usurpation).
+    const initiateurId = currentUserId;
+    const initiateur = await this.userRepo.findOne({ where: { id: initiateurId } });
     if (!initiateur || !initiateur.estActif) {
       throw new NotFoundException('Initiateur introuvable ou inactif');
     }
+
+    // Anti-escalade : on ne délègue que ce qu'on possède.
+    await this.assertCanDelegate(initiateurId, dto);
 
     const remplacant = await this.userRepo.findOne({ where: { id: dto.remplacantId } });
     if (!remplacant || !remplacant.estActif) {
@@ -68,7 +115,7 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const interim = this.interimRepo.create({
-      initiateurId: dto.initiateurId as any,
+      initiateurId: initiateurId as any,
       remplacantId: dto.remplacantId as any,
       permissionId: dto.permissionId ? (dto.permissionId as any) : null,
       roleTransfereId: dto.roleTransfereId ? (dto.roleTransfereId as any) : null,

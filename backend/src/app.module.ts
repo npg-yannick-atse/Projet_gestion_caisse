@@ -8,6 +8,7 @@ import databaseConfig from '@config/database.config';
 import jwtConfig from '@config/jwt.config';
 import ldapConfig from '@config/ldap.config';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/guards/roles.guard';
 import { AuthModule } from '@modules/auth/auth.module';
 import { SecurityModule } from '@modules/security/security.module';
 import { ReferentielModule } from '@modules/referentiel/referentiel.module';
@@ -42,6 +43,8 @@ import { HealthModule } from './health/health.module';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // S'exécute après JwtAuthGuard : n'enferme que les routes annotées @Roles(...).
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

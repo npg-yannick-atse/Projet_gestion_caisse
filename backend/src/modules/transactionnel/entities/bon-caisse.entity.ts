@@ -1,4 +1,5 @@
 import { Entity, Column } from 'typeorm';
+import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -57,7 +58,7 @@ export class BonCaisse extends AuditableEntity {
   libelleAjuste?: string | null;
 
   @ApiProperty({ required: false, description: 'Surcharge du montant du sous-bon par le caissier' })
-  @Column({ name: 'montant_ajuste', type: 'decimal', precision: 19, scale: 4, nullable: true })
+  @Column({ name: 'montant_ajuste', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
   montantAjuste?: string | null;
 
   @ApiProperty({ required: false })
