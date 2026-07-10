@@ -16,15 +16,15 @@ const montantRegex = /^\d+(\.\d{1,4})?$/;
 const sousBonSchema = z.object({
   id: z.string(),
   numeroSousBon: z.number(),
-  libelle: z.string().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   montant: z
     .string()
     .regex(montantRegex, 'Montant invalide')
     .refine((v) => parseFloat(v) > 0, 'Doit être > 0'),
   description: z.string().optional(),
   partenaireId: z.string().optional(),
-  numeroBl: z.string().min(1, 'Requis'),
-  codeManutention: z.string().min(1, 'Requis'),
+  numeroBl: z.string().trim().min(1, 'Requis'),
+  codeManutention: z.string().trim().min(1, 'Requis'),
   numeroClient: z.string().optional(),
 });
 

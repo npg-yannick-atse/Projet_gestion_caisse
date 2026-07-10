@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import type { ProprietaireType } from '../entities/portefeuille.entity';
 
@@ -44,6 +44,14 @@ export class UpdatePortefeuilleDto {
   @IsOptional()
   @IsNumberString()
   soldeInitial?: string;
+
+  @ApiProperty({ required: false, description: 'Plafond budgétaire mensuel (réajusté chaque mois, sans report). Vide = pas de plafond mensuel.' })
+  @IsOptional()
+  // Chaîne vide = effacer le plafond : on saute la validation numérique dans ce cas
+  // (le service interprète '' comme null). @IsNumberString rejette '' sinon.
+  @ValidateIf((o) => o.budgetMensuel !== '')
+  @IsNumberString()
+  budgetMensuel?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

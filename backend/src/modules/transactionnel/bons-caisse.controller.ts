@@ -9,9 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BonsCaisseService } from './bons-caisse.service';
+import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
 import { PrepareBonCaisseDto, UpdateBonCaisseDto } from './dto/bon-caisse.dto';
 
 @ApiTags('Transactionnel / BonsCaisse')
@@ -19,15 +19,18 @@ import { PrepareBonCaisseDto, UpdateBonCaisseDto } from './dto/bon-caisse.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('bons-caisse')
 export class BonsCaisseController {
-  constructor(private readonly bonsCaisseService: BonsCaisseService) {}
+  constructor(
+    private readonly bonsCaisseService: BonsCaisseService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   @Post('prepare')
-  @Roles('CAISSIER')
-  @ApiOperation({ summary: 'Caissier : preparer le decaissement d\'un sous-bon VALIDE' })
+  @ApiOperation({ summary: 'Préparer le décaissement d\'un sous-bon VALIDE (permission BON_DECAISSER)' })
   async prepare(
     @Body() dto: PrepareBonCaisseDto,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'préparer un décaissement');
     return this.bonsCaisseService.prepareDecaissement(dto.bonId, dto.sousBonId, user.sub);
   }
 
@@ -50,33 +53,33 @@ export class BonsCaisseController {
   }
 
   @Patch(':id')
-  @Roles('CAISSIER')
-  @ApiOperation({ summary: 'Caissier : ajuster les champs editables (statut PREPARE uniquement)' })
+  @ApiOperation({ summary: 'Ajuster les champs éditables (statut PREPARE, permission BON_DECAISSER)' })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateBonCaisseDto,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'ajuster un décaissement');
     return this.bonsCaisseService.updateBonCaisse(id, dto, user.sub);
   }
 
   @Post(':id/finalize')
-  @Roles('CAISSIER')
-  @ApiOperation({ summary: 'Caissier : finaliser le decaissement (passe sous-bon en DECAISSE)' })
+  @ApiOperation({ summary: 'Finaliser le décaissement (sous-bon → DECAISSE, permission BON_DECAISSER)' })
   async finalize(
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'finaliser un décaissement');
     return this.bonsCaisseService.finalizeDecaissement(id, user.sub);
   }
 
   @Post(':id/cancel')
-  @Roles('CAISSIER')
-  @ApiOperation({ summary: 'Caissier : annuler une preparation (statut != FINALISE)' })
+  @ApiOperation({ summary: 'Annuler une préparation (statut != FINALISE, permission BON_DECAISSER)' })
   async cancel(
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'annuler une préparation de décaissement');
     return this.bonsCaisseService.cancelPrepare(id, user.sub);
   }
 }

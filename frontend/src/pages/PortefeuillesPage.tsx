@@ -27,13 +27,17 @@ const selectClass =
 const WALLET_BG = ['bg-[#0F4C81]', 'bg-[#047857]', 'bg-[#5B21B6]'];
 
 const schema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
-  caisseSourceId: z.string().min(1, 'Caisse requise'),
-  deviseId: z.string().min(1, 'Devise requise'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
+  caisseSourceId: z.string().trim().min(1, 'Caisse requise'),
+  deviseId: z.string().trim().min(1, 'Devise requise'),
   proprietaireType: z.enum(['USER', 'DIRECTION']),
-  proprietaireId: z.string().min(1, 'Propriétaire requis'),
+  proprietaireId: z.string().trim().min(1, 'Propriétaire requis'),
   soldeInitial: z.string().optional(),
+  budgetMensuel: z
+    .string()
+    .optional()
+    .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -85,7 +89,7 @@ function CreatePortefeuilleForm({ onDone }: { onDone: () => void }) {
 
   const onSubmit = handleSubmit((values) => {
     createPortefeuille.mutate(
-      { ...values, soldeInitial: values.soldeInitial || undefined },
+      { ...values, soldeInitial: values.soldeInitial || undefined, budgetMensuel: values.budgetMensuel || undefined },
       {
         onSuccess: () => {
           reset({ proprietaireType: 'USER' });
@@ -155,6 +159,22 @@ function CreatePortefeuilleForm({ onDone }: { onDone: () => void }) {
         <div className="space-y-1.5">
           <Label htmlFor="soldeInitial">Solde initial (optionnel)</Label>
           <Input id="soldeInitial" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="budgetMensuel">Budget mensuel {proprietaireType === 'USER' && '(optionnel)'}</Label>
+          {proprietaireType === 'DIRECTION' ? (
+            <>
+              <Input id="budgetMensuel" disabled placeholder="Hérité du centre de coût" />
+              <p className="text-[11px] text-muted-foreground">
+                Hérité automatiquement du budget mensuel du centre de coût de la direction (non modifiable).
+              </p>
+            </>
+          ) : (
+            <>
+              <Input id="budgetMensuel" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
+              {errors.budgetMensuel && <p className="text-sm text-destructive">{errors.budgetMensuel.message}</p>}
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={createPortefeuille.isPending}>

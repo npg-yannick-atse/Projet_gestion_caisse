@@ -24,6 +24,7 @@ const OPS_SORT_COLUMNS = ['dateOperation', 'typeOperation', 'montant', 'referenc
 type OpSortCol = (typeof OPS_SORT_COLUMNS)[number];
 import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
+import { useCostCenters } from '@/api/referentiel';
 import { useUsers, useUserRoles } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { cn, formatMontant } from '@/lib/utils';
@@ -52,6 +53,9 @@ const TYPE_BADGE: Record<TypeOperation, { label: string; cls: string; dot: strin
   TRANSFERT: { label: 'Transfert', cls: 'bg-[#EFF6FF] text-[#1A6DB5]', dot: '#1A6DB5', icon: ArrowLeftRight },
   AJUSTEMENT: { label: 'Ajustement', cls: 'bg-[#FFFBEB] text-[#92400E]', dot: '#F59E0B', icon: SlidersHorizontal },
 };
+
+const ADV_SELECT_CLASS =
+  'h-9 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-2.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]';
 
 /** Date du jour au format YYYY-MM-DD (heure locale). */
 function todayLocal(): string {
@@ -128,12 +132,21 @@ export function OperationsPage() {
   const today = todayLocal();
   const [dateFrom, setDateFrom] = useState(() => todayLocal());
   const [dateTo, setDateTo] = useState(() => todayLocal());
-  // Vue par défaut = aujourd'hui, sans recherche.
-  const isDefaultView = !search && dateFrom === today && dateTo === today;
+  // Filtres avancés (recherche avancée).
+  const [portefeuilleId, setPortefeuilleId] = useState('');
+  const [costCenterId, setCostCenterId] = useState('');
+  const [filterUserId, setFilterUserId] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const hasAdvanced = !!portefeuilleId || !!costCenterId || !!filterUserId;
+  // Vue par défaut = aujourd'hui, sans recherche ni filtre avancé.
+  const isDefaultView = !search && dateFrom === today && dateTo === today && !hasAdvanced;
   const resetToToday = () => {
     setSearch('');
     setDateFrom(today);
     setDateTo(today);
+    setPortefeuilleId('');
+    setCostCenterId('');
+    setFilterUserId('');
   };
 
   // La recherche texte est débouncée pour ne pas requêter la BD à chaque frappe.
@@ -167,11 +180,15 @@ export function OperationsPage() {
     dateTo: effectiveDateTo,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
+    portefeuilleId: portefeuilleId || undefined,
+    costCenterId: costCenterId || undefined,
+    userId: filterUserId || undefined,
   });
   const { data: caisses } = useCaisses();
   const { data: portefeuilles } = usePortefeuilles();
   const { data: devises } = useDevises();
   const { data: users } = useUsers();
+  const { data: costCenters } = useCostCenters();
 
   // Restriction d'accès : le DEMANDEUR pur n'a pas accès au journal d'opérations.
   if (isDemandeur) {
@@ -248,6 +265,9 @@ export function OperationsPage() {
         search: debouncedSearch || undefined,
         dateFrom: effectiveDateFrom,
         dateTo: effectiveDateTo,
+        portefeuilleId: portefeuilleId || undefined,
+        costCenterId: costCenterId || undefined,
+        userId: filterUserId || undefined,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -413,6 +433,78 @@ export function OperationsPage() {
             </button>
           )}
         </div>
+
+        {/* Recherche avancée : portefeuille / centre de coût / agent (résultats bornés au périmètre). */}
+        <div className="mt-2.5">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#1A6DB5] hover:underline"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Recherche avancée
+            {hasAdvanced && (
+              <span className="rounded-full bg-[#E8F2FF] px-1.5 py-0.5 text-[9px] font-semibold text-[#1A6DB5]">
+                actifs
+              </span>
+            )}
+          </button>
+          {showAdvanced && (
+            <div className="mt-2.5 grid gap-2.5 sm:grid-cols-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[#64748B]">
+                  Portefeuille
+                </label>
+                <select
+                  value={portefeuilleId}
+                  onChange={(e) => setPortefeuilleId(e.target.value)}
+                  className={ADV_SELECT_CLASS}
+                >
+                  <option value="">— Tous —</option>
+                  {(portefeuilles ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} — {p.libelle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[#64748B]">
+                  Centre de coût
+                </label>
+                <select
+                  value={costCenterId}
+                  onChange={(e) => setCostCenterId(e.target.value)}
+                  className={ADV_SELECT_CLASS}
+                >
+                  <option value="">— Tous —</option>
+                  {(costCenters ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code} — {c.libelle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[#64748B]">
+                  Effectuée par
+                </label>
+                <select
+                  value={filterUserId}
+                  onChange={(e) => setFilterUserId(e.target.value)}
+                  className={ADV_SELECT_CLASS}
+                >
+                  <option value="">— Tous —</option>
+                  {(users ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.prenom} {u.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
         {searching && (
           <p className="mt-2 text-[11px] text-[#64748B]">
             Recherche active : tout l'historique est interrogé, le filtre de dates est ignoré.
@@ -542,7 +634,7 @@ export function OperationsPage() {
                         {op.transactionUuid.slice(0, 8)}…
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="whitespace-nowrap px-5 py-3 text-right">
                       <span
                         className={cn(
                           'font-display text-[13px] font-semibold tabular-nums',

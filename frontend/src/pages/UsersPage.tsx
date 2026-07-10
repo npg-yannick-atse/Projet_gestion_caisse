@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Plus, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Globe, Plus, Search, Settings2, ShieldCheck, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
   useCreateUser,
@@ -9,9 +9,12 @@ import {
   useToggleUserRole,
   useUserProfils,
   useToggleUserProfil,
+  useUserDivisions,
+  useToggleUserDivision,
 } from '@/api/users';
 import { useProfils } from '@/api/profils';
 import { useDirections } from '@/api/directions';
+import { usePays, useDivisions } from '@/api/referentiel';
 import { useTableSort } from '@/hooks/useTableSort';
 import type { SortDir } from '@/components/SortableHeader';
 
@@ -29,6 +32,7 @@ import { useRoles } from '@/api/roles';
 import { useLdapUsers } from '@/api/ldap';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { LdapUser, User } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Pill } from '@/components/ui/pill';
@@ -139,6 +143,46 @@ function LdapPicker({ existingMatricules }: { existingMatricules: Set<string> })
   );
 }
 
+type EditorTab = 'general' | 'roles' | 'profils' | 'divisions';
+
+function TabBtn({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2.5 text-xs font-medium transition-colors ${
+        active
+          ? 'border-[#0F4C81] text-[#0F4C81]'
+          : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+      {count !== undefined && (
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+            active ? 'bg-[#EFF6FF] text-[#0F4C81]' : 'bg-[#F1F5F9] text-[#64748B]'
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void }) {
   const { data: roles } = useRoles();
   const { data: userRoles, isLoading } = useUserAssignedRoles(user.id);
@@ -148,6 +192,12 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userProfils } = useUserProfils(user.id);
   const toggleProfil = useToggleUserProfil(user.id);
   const assignedProfils = useMemo(() => new Set((userProfils ?? []).map((p) => p.id)), [userProfils]);
+  // Accès division (restitutions)
+  const { data: pays } = usePays();
+  const { data: allDivisions } = useDivisions();
+  const { data: userDivisions } = useUserDivisions(user.id);
+  const toggleDivision = useToggleUserDivision(user.id);
+  const divisionAccess = useMemo(() => new Set(userDivisions ?? []), [userDivisions]);
   const { data: directions } = useDirections();
   const updateUser = useUpdateUser();
   const currentUser = useAuthStore((s) => s.user);
@@ -155,183 +205,272 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   // S'il a besoin de changer ses propres droits, un autre admin/super-admin doit le faire.
   const isSelf = currentUser?.id === user.id;
 
+  // Onglet actif — on ouvre par défaut sur « Rôles » (le bouton = attribuer un rôle).
+  const [tab, setTab] = useState<EditorTab>('roles');
+  const initials = `${user.prenom?.[0] ?? ''}${user.nom?.[0] ?? ''}`.toUpperCase() || '?';
+
+  // Fermeture au clavier (Échap).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
-    <Panel>
-      <PanelHeader
-        title={
-          <>
-            Rôles —{' '}
-            <span className="font-normal text-[#475569]">
-              {user.prenom} {user.nom}
-            </span>
-          </>
-        }
-        badge={`${assigned.size}`}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
+        onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          aria-label="Fermer"
-          onClick={onClose}
-          className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#F8FAFC] hover:text-[#0F172A]"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </PanelHeader>
-      <div className="p-[18px]">
-        {/* Rattachement : la direction n'est pas fournie par le LDAP, on l'attribue ici.
-            Elle conditionne le périmètre des centres de coût visibles à la création de bon. */}
-        <div className="mb-4 space-y-1.5">
-          <label htmlFor={`dir-${user.id}`} className="text-[11px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">
-            Direction
-          </label>
-          <select
-            id={`dir-${user.id}`}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={user.directionId ?? ''}
-            disabled={updateUser.isPending}
-            onChange={(e) =>
-              updateUser.mutate({ id: user.id, payload: { directionId: e.target.value || null } })
-            }
-          >
-            <option value="">— Aucune —</option>
-            {directions?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.code} — {d.libelle}
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-[#94A3B8]">
-            Détermine les centres de coût que l'utilisateur peut choisir sur un bon.
-          </p>
-        </div>
-
-        {/* Accès par plateforme : autorise la connexion au web et/ou au mobile.
-            Verrouillé sur soi-même pour ne pas se bloquer hors de l'application. */}
-        <div className="mb-4 border-t border-[rgba(15,76,129,0.07)] pt-3">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">
-            Accès aux plateformes
-          </span>
-          <div className="mt-2 space-y-1">
-            {([
-              { key: 'accesWeb' as const, label: 'Application web', value: user.accesWeb ?? true },
-              { key: 'accesMobile' as const, label: 'Application mobile', value: user.accesMobile ?? true },
-            ]).map((p) => (
-              <label
-                key={p.key}
-                className={`flex items-center gap-3 rounded-[7px] px-2 py-1.5 ${
-                  isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={p.value}
-                  disabled={updateUser.isPending || isSelf}
-                  onChange={(e) =>
-                    updateUser.mutate({ id: user.id, payload: { [p.key]: e.target.checked } })
-                  }
-                  className="h-4 w-4"
-                />
-                <span className="flex-1 text-sm font-medium text-[#0F172A]">{p.label}</span>
-                {p.value ? <Pill tone="green">autorisé</Pill> : <Pill tone="gray">refusé</Pill>}
-              </label>
-            ))}
+        {/* En-tête : identité de l'utilisateur */}
+        <div className="flex items-center gap-3 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-5 py-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-br from-[#0F4C81] to-[#1A6DB5] text-sm font-semibold text-white">
+            {initials}
           </div>
-          <p className="mt-1.5 text-[11px] text-[#94A3B8]">
-            La connexion est refusée si la plateforme utilisée n'est pas autorisée.
-          </p>
+          <div className="min-w-0">
+            <div className="truncate font-display text-sm font-semibold text-[#0F172A]">
+              {user.prenom} {user.nom}
+            </div>
+            <div className="truncate text-[11px] text-[#64748B]">
+              {user.email} · #{user.matricule}
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Fermer"
+            onClick={onClose}
+            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#94A3B8] transition-colors hover:bg-white hover:text-[#0F172A]"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {isLoading && <p className="text-sm text-[#64748B]">Chargement…</p>}
+        {/* Onglets (volets) */}
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-[rgba(15,76,129,0.08)] px-3">
+          <TabBtn active={tab === 'general'} onClick={() => setTab('general')} icon={Settings2} label="Général" />
+          <TabBtn active={tab === 'roles'} onClick={() => setTab('roles')} icon={ShieldCheck} label="Rôles" count={assigned.size} />
+          <TabBtn active={tab === 'profils'} onClick={() => setTab('profils')} icon={BadgeCheck} label="Profils" count={assignedProfils.size} />
+          <TabBtn active={tab === 'divisions'} onClick={() => setTab('divisions')} icon={Globe} label="Divisions" count={divisionAccess.size} />
+        </div>
 
+        {/* Verrou anti-lockout (toujours visible s'il s'agit de soi) */}
         {isSelf && (
-          <div className="mb-3 flex items-start gap-2 rounded-[8px] border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2 text-[12px] text-[#7F1D1D]">
+          <div className="flex items-start gap-2 border-b border-[#FECDCA] bg-[#FEF3F2] px-5 py-2.5 text-[12px] text-[#7F1D1D]">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
               <strong className="font-semibold">Modification verrouillée.</strong> Vous ne pouvez pas
-              modifier vos propres rôles. Demandez à un autre administrateur de le faire pour vous —
-              cela évite de vous bloquer hors de l'application par erreur.
+              modifier vos propres rôles/profils — demandez à un autre administrateur.
             </div>
           </div>
         )}
 
-        <div className="space-y-1">
-          {roles?.map((role) => {
-            const has = assigned.has(role.id);
-            return (
-              <label
-                key={role.id}
-                className={`flex items-center gap-3 rounded-[7px] px-2 py-1.5 ${
-                  isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={has}
-                  disabled={toggle.isPending || isSelf}
-                  onChange={() => toggle.mutate({ roleId: role.id, assigned: has })}
-                  className="h-4 w-4"
-                />
-                <span className="flex-1 text-sm">
-                  <span className="font-medium text-[#0F172A]">{role.libelle}</span>{' '}
-                  <span className="text-[10px] text-[#94A3B8]">({role.code})</span>
+        {/* Corps — contenu de l'onglet actif */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {/* -------- Général : direction + plateformes -------- */}
+          {tab === 'general' && (
+            <div className="space-y-5">
+              <div className="space-y-1.5">
+                <label htmlFor={`dir-${user.id}`} className="text-[11px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">
+                  Direction
+                </label>
+                <select
+                  id={`dir-${user.id}`}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={user.directionId ?? ''}
+                  disabled={updateUser.isPending}
+                  onChange={(e) =>
+                    updateUser.mutate({ id: user.id, payload: { directionId: e.target.value || null } })
+                  }
+                >
+                  <option value="">— Aucune —</option>
+                  {directions?.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.code} — {d.libelle}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-[#94A3B8]">
+                  Détermine les centres de coût que l'utilisateur peut choisir sur un bon.
+                </p>
+              </div>
+
+              <div className="border-t border-[rgba(15,76,129,0.07)] pt-4">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">
+                  Accès aux plateformes
                 </span>
-                {role.estSysteme && <Pill tone="blue">système</Pill>}
-              </label>
-            );
-          })}
-          {roles && roles.length === 0 && (
-            <p className="text-sm text-[#64748B]">
-              Aucun rôle disponible. Créez-en depuis l'écran « Rôles » d'abord.
-            </p>
+                <div className="mt-2 space-y-1">
+                  {([
+                    { key: 'accesWeb' as const, label: 'Application web', value: user.accesWeb ?? true },
+                    { key: 'accesMobile' as const, label: 'Application mobile', value: user.accesMobile ?? true },
+                  ]).map((p) => (
+                    <label
+                      key={p.key}
+                      className={`flex items-center gap-3 rounded-[7px] px-2 py-1.5 ${
+                        isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={p.value}
+                        disabled={updateUser.isPending || isSelf}
+                        onChange={(e) =>
+                          updateUser.mutate({ id: user.id, payload: { [p.key]: e.target.checked } })
+                        }
+                        className="h-4 w-4"
+                      />
+                      <span className="flex-1 text-sm font-medium text-[#0F172A]">{p.label}</span>
+                      {p.value ? <Pill tone="green">autorisé</Pill> : <Pill tone="gray">refusé</Pill>}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] text-[#94A3B8]">
+                  La connexion est refusée si la plateforme utilisée n'est pas autorisée.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* -------- Rôles -------- */}
+          {tab === 'roles' && (
+            <div className="space-y-1">
+              {isLoading && <p className="text-sm text-[#64748B]">Chargement…</p>}
+              {roles?.map((role) => {
+                const has = assigned.has(role.id);
+                return (
+                  <label
+                    key={role.id}
+                    className={`flex items-center gap-3 rounded-[7px] px-2 py-2 ${
+                      isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={has}
+                      disabled={toggle.isPending || isSelf}
+                      onChange={() => toggle.mutate({ roleId: role.id, assigned: has })}
+                      className="h-4 w-4"
+                    />
+                    <span className="flex-1 text-sm">
+                      <span className="font-medium text-[#0F172A]">{role.libelle}</span>{' '}
+                      <span className="text-[10px] text-[#94A3B8]">({role.code})</span>
+                    </span>
+                    {role.estSysteme && <Pill tone="blue">système</Pill>}
+                  </label>
+                );
+              })}
+              {roles && roles.length === 0 && (
+                <p className="text-sm text-[#64748B]">
+                  Aucun rôle disponible. Créez-en depuis l'écran « Rôles » d'abord.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* -------- Profils -------- */}
+          {tab === 'profils' && (
+            <div className="space-y-1">
+              <p className="mb-2 text-[11px] text-[#94A3B8]">
+                Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
+              </p>
+              {profils?.map((profil) => {
+                const has = assignedProfils.has(profil.id);
+                return (
+                  <label
+                    key={profil.id}
+                    className={`flex items-center gap-3 rounded-[7px] px-2 py-2 ${
+                      isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={has}
+                      disabled={toggleProfil.isPending || isSelf}
+                      onChange={() => toggleProfil.mutate({ profilId: profil.id, assigned: has })}
+                      className="h-4 w-4"
+                    />
+                    <span className="flex-1 text-sm">
+                      <span className="font-medium text-[#0F172A]">{profil.libelle}</span>{' '}
+                      <span className="text-[10px] text-[#94A3B8]">({profil.categorie})</span>
+                    </span>
+                  </label>
+                );
+              })}
+              {profils && profils.length === 0 && (
+                <p className="text-sm text-[#64748B]">
+                  Aucun profil. Créez-en depuis l'écran « Profils ».
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* -------- Divisions (restitutions) -------- */}
+          {tab === 'divisions' && (
+            <div className="space-y-2">
+              <p className="mb-1 text-[11px] text-[#94A3B8]">
+                Autorise l'utilisateur à créer des restitutions client sur les divisions cochées.
+              </p>
+              {(pays ?? []).map((p) => {
+                const divs = (allDivisions ?? []).filter((d) => d.paysId === p.id);
+                if (divs.length === 0) return null;
+                return (
+                  <div key={p.id}>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.6px] text-[#94A3B8]">
+                      {p.libelle}
+                    </div>
+                    <div className="mt-0.5 grid grid-cols-2 gap-1">
+                      {divs.map((d) => {
+                        const has = divisionAccess.has(d.id);
+                        return (
+                          <label
+                            key={d.id}
+                            className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={has}
+                              disabled={toggleDivision.isPending}
+                              onChange={() => toggleDivision.mutate({ divisionId: d.id, has })}
+                              className="h-4 w-4"
+                            />
+                            <span className="text-xs text-[#0F172A]">
+                              {d.code} — {d.libelle}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {(allDivisions ?? []).length === 0 && (
+                <p className="text-sm text-[#64748B]">Aucune division. Créez-en depuis « Pays &amp; Divisions ».</p>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Profils : paquets de permissions additionnels (s'ajoutent aux rôles). */}
-        <div className="mt-4 border-t border-[rgba(15,76,129,0.07)] pt-3">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">
-              Profils
-            </span>
-            <Pill tone="blue">{`${assignedProfils.size}`}</Pill>
-          </div>
-          <div className="space-y-1">
-            {profils?.map((profil) => {
-              const has = assignedProfils.has(profil.id);
-              return (
-                <label
-                  key={profil.id}
-                  className={`flex items-center gap-3 rounded-[7px] px-2 py-1.5 ${
-                    isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={has}
-                    disabled={toggleProfil.isPending || isSelf}
-                    onChange={() => toggleProfil.mutate({ profilId: profil.id, assigned: has })}
-                    className="h-4 w-4"
-                  />
-                  <span className="flex-1 text-sm">
-                    <span className="font-medium text-[#0F172A]">{profil.libelle}</span>{' '}
-                    <span className="text-[10px] text-[#94A3B8]">({profil.categorie})</span>
-                  </span>
-                </label>
-              );
-            })}
-            {profils && profils.length === 0 && (
-              <p className="text-sm text-[#64748B]">
-                Aucun profil. Créez-en depuis l'écran « Profils ».
-              </p>
-            )}
-          </div>
+        {/* Pied : note + fermeture */}
+        <div className="flex items-center gap-3 border-t border-[rgba(15,76,129,0.08)] bg-[#FAFBFC] px-5 py-3">
+          <p className="flex-1 text-[11px] text-[#94A3B8]">
+            L'utilisateur cumule les permissions de ses <strong>rôles</strong> ET de ses <strong>profils</strong>.
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-[9px] bg-[#0F4C81] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5]"
+          >
+            Fermer
+          </button>
         </div>
-
-        <p className="mt-3 text-[11px] text-[#94A3B8]">
-          Les permissions sont gérées depuis les écrans « Rôles » et « Profils ». Un utilisateur cumule
-          les permissions de ses rôles ET de ses profils.
-        </p>
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -345,9 +484,15 @@ function UsersPageInner() {
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
   const deleteUser = useDeleteUser();
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [search, setSearch] = useState('');
   const [manageUser, setManageUser] = useState<User | null>(null);
+  // On ré-aligne le panneau de gestion sur la donnée LIVE (refetch après mutation),
+  // sinon le <select> Direction garde la valeur figée capturée à l'ouverture.
+  const liveManageUser = manageUser
+    ? ((users ?? []).find((u) => u.id === manageUser.id) ?? manageUser)
+    : null;
 
   const toggleDir = () => {
     if (!sort.state.by) return;
@@ -374,7 +519,7 @@ function UsersPageInner() {
   return (
     <div className="flex flex-col gap-4">
       {showPicker && <LdapPicker existingMatricules={existingMatricules} />}
-      {manageUser && <UserRolesEditor user={manageUser} onClose={() => setManageUser(null)} />}
+      {liveManageUser && <UserRolesEditor user={liveManageUser} onClose={() => setManageUser(null)} />}
 
       <Panel>
         <PanelHeader title="Membres de l'équipe" badge={`${users?.length ?? 0}`}>
@@ -476,9 +621,7 @@ function UsersPageInner() {
                       type="button"
                       aria-label="Désactiver"
                       disabled={deleteUser.isPending}
-                      onClick={() => {
-                        if (confirm(`Désactiver l'utilisateur ${u.matricule} ?`)) deleteUser.mutate(u.id);
-                      }}
+                      onClick={() => setPendingDelete(u)}
                       className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -490,6 +633,17 @@ function UsersPageInner() {
           </div>
         )}
       </Panel>
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="warning"
+        title={pendingDelete ? `Désactiver l'utilisateur ${pendingDelete.matricule} ?` : ''}
+        description={pendingDelete ? `${pendingDelete.prenom ?? ''} ${pendingDelete.nom ?? ''} ne pourra plus se connecter. Rien n'est supprimé définitivement.` : undefined}
+        confirmLabel="Désactiver"
+        busy={deleteUser.isPending}
+        error={deleteUser.isError ? apiErrorMessage(deleteUser.error, 'Désactivation impossible') : undefined}
+        onCancel={() => { setPendingDelete(null); deleteUser.reset(); }}
+        onConfirm={() => { if (pendingDelete) deleteUser.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) }); }}
+      />
     </div>
   );
 }

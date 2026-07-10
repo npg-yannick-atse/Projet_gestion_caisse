@@ -1,11 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import { Workbook } from 'exceljs';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { Operation, TypeOperation } from './entities/operation.entity';
 import { EcritureComptable, TypeCompte } from './entities/ecriture-comptable.entity';
+import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
 
 const TYPE_LABELS: Record<string, string> = {
   RECHARGE: 'Recharge',
@@ -34,6 +35,40 @@ interface CreateEcritureInput {
   costCenterId?: string;
   referenceBonId?: string;
   referenceSousBonId?: string;
+}
+
+/**
+ * Contexte de sécurité résolu par le contrôleur : ce que l'utilisateur a le droit
+ * de voir. Appliqué en base sur la liste et l'export des opérations.
+ */
+export interface OperationScope {
+  isAdmin: boolean;
+  /** Types d'opérations autorisés par le rôle (undefined = tous). */
+  allowedTypes?: string[];
+  /** Caisses du périmètre (non-admin). */
+  allowedCaisseIds?: string[];
+  /** Portefeuilles du périmètre (non-admin). */
+  allowedPortefeuilleIds?: string[];
+  /** Utilisateur courant (voit toujours ses propres opérations). */
+  currentUserId: string;
+}
+
+/** Filtres de recherche des opérations (dont filtres avancés + contexte sécurité). */
+export interface OperationQueryOptions {
+  type?: TypeOperation;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  /** Filtre avancé : un portefeuille précis. */
+  portefeuilleId?: string;
+  /** Filtre avancé : l'agent qui a effectué l'opération. */
+  userId?: string;
+  /** Filtre avancé : centre de coût imputé (via les écritures de charge). */
+  costCenterId?: string;
+  /** Contexte de sécurité (rôle + périmètre). */
+  scope?: OperationScope;
 }
 
 @Injectable()
@@ -194,6 +229,54 @@ export class LedgerService {
   }
 
   /**
+   * Garde budgétaire par centre de coût : refuse un décaissement qui ferait dépasser
+   * le BUDGET MENSUEL du centre de coût (cumul des charges du mois en cours + `montant`
+   * > budget). Sans budget défini sur le centre de coût, aucune limite n'est appliquée.
+   *
+   * À appeler AVANT de créer l'écriture du décaissement courant (sinon elle serait
+   * comptée dans le cumul). Le cumul est calculé sur les écritures de CHARGE imputées
+   * au centre de coût ; au sein d'une même transaction (batch « décaisser tout »),
+   * les charges déjà créées via `manager` sont bien prises en compte.
+   */
+  async assertCostCenterMonthlyBudget(
+    costCenterId: string | null | undefined,
+    montant: string,
+    manager?: EntityManager,
+  ): Promise<void> {
+    if (!costCenterId) return;
+    const ccRepo = manager
+      ? manager.getRepository(CostCenter)
+      : this.ecritureRepo.manager.getRepository(CostCenter);
+    const cc = await ccRepo.findOne({ where: { id: costCenterId as any } });
+    if (!cc || cc.budgetMensuel == null) return; // pas de plafond → pas de limite
+
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const row = await this.ecrRepo(manager)
+      .createQueryBuilder('ecriture')
+      .select('SUM(CAST(ecriture.credit AS DECIMAL(19,4)))', 'totalCredit')
+      .addSelect('SUM(CAST(ecriture.debit AS DECIMAL(19,4)))', 'totalDebit')
+      .where('ecriture.compte_id = :compteId', { compteId: costCenterId })
+      .andWhere('ecriture.type_compte = :tc', { tc: 'CHARGE' })
+      .andWhere('ecriture.date_ecriture >= :from', { from })
+      .andWhere('ecriture.date_ecriture <= :to', { to })
+      .getRawOne();
+
+    const dejaDecaisse = parseFloat(row?.totalCredit || '0') - parseFloat(row?.totalDebit || '0');
+    const plafond = Number(cc.budgetMensuel);
+    if (dejaDecaisse + Number(montant) > plafond + 1e-6) {
+      const reste = Math.max(0, plafond - dejaDecaisse);
+      throw new BadRequestException(
+        `Budget mensuel du centre de coût « ${cc.code} » dépassé : plafond ${plafond.toFixed(2)}, ` +
+          `déjà décaissé ce mois ${dejaDecaisse.toFixed(2)}, reste disponible ${reste.toFixed(2)}. ` +
+          `Décaissement de ${Number(montant).toFixed(2)} refusé.`,
+      );
+    }
+  }
+
+  /**
    * Vérifie que les écritures d'une transaction sont équilibrées
    */
   async verifyTransactionBalance(transactionUuid: string): Promise<boolean> {
@@ -243,38 +326,71 @@ export class LedgerService {
     reference: 'operation.reference',
   };
 
-  async findAllOperations(opts: {
-    type?: TypeOperation;
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    sortBy?: string;
-    sortDir?: 'asc' | 'desc';
-  } = {}): Promise<Operation[]> {
-    const query = this.operationRepo.createQueryBuilder('operation').where('1=1');
-
-    if (opts.type) {
-      query.andWhere('operation.type_operation = :type', { type: opts.type });
-    }
+  /**
+   * Applique les filtres (type / recherche / dates / avancés) ET le contexte de
+   * sécurité (rôle + périmètre strict) à une requête d'opérations. `alias` = alias
+   * de la table `trx_operation` dans le QueryBuilder appelant.
+   */
+  private applyOperationFilters(
+    qb: SelectQueryBuilder<any>,
+    opts: OperationQueryOptions,
+    alias: string,
+  ): void {
+    if (opts.type) qb.andWhere(`${alias}.type_operation = :type`, { type: opts.type });
 
     if (opts.search) {
-      // transaction_uuid (UNIQUEIDENTIFIER) et montant (DECIMAL) sont castés en NVARCHAR pour le LIKE.
-      query.andWhere(
-        '(operation.reference LIKE :q' +
-          ' OR CAST(operation.transaction_uuid AS NVARCHAR(36)) LIKE :q' +
-          ' OR CAST(operation.montant AS NVARCHAR(40)) LIKE :q)',
+      qb.andWhere(
+        `(${alias}.reference LIKE :q` +
+          ` OR CAST(${alias}.transaction_uuid AS NVARCHAR(36)) LIKE :q` +
+          ` OR CAST(${alias}.montant AS NVARCHAR(40)) LIKE :q)`,
         { q: `%${opts.search}%` },
       );
     }
-
-    if (opts.dateFrom) {
-      query.andWhere('operation.date_operation >= :df', { df: new Date(opts.dateFrom) });
-    }
+    if (opts.dateFrom) qb.andWhere(`${alias}.date_operation >= :df`, { df: new Date(opts.dateFrom) });
     if (opts.dateTo) {
       const dt = new Date(opts.dateTo);
       dt.setHours(23, 59, 59, 999);
-      query.andWhere('operation.date_operation <= :dt', { dt });
+      qb.andWhere(`${alias}.date_operation <= :dt`, { dt });
     }
+
+    // Filtres avancés
+    if (opts.portefeuilleId) qb.andWhere(`${alias}.portefeuille_id = :pfId`, { pfId: opts.portefeuilleId });
+    if (opts.userId) qb.andWhere(`${alias}.user_id = :uId`, { uId: opts.userId });
+    if (opts.costCenterId) {
+      // Les opérations ne portent pas le centre de coût : on passe par les écritures
+      // de CHARGE (une charge par décaissement, imputée au centre de coût).
+      qb.andWhere(
+        `${alias}.transaction_uuid IN (SELECT e.transaction_uuid FROM trx_ecriture_comptable e` +
+          ` WHERE e.cost_center_id = :ccId AND e.type_compte = :charge)`,
+        { ccId: opts.costCenterId, charge: 'CHARGE' },
+      );
+    }
+
+    // Sécurité : rôle (types autorisés) + périmètre strict (caisse OU portefeuille
+    // du périmètre, OU opération effectuée par l'utilisateur lui-même).
+    const s = opts.scope;
+    if (s && !s.isAdmin) {
+      if (s.allowedTypes && s.allowedTypes.length > 0) {
+        qb.andWhere(`${alias}.type_operation IN (:...allowedTypes)`, { allowedTypes: s.allowedTypes });
+      }
+      const clauses: string[] = [];
+      const params: Record<string, unknown> = { me: s.currentUserId };
+      if (s.allowedCaisseIds && s.allowedCaisseIds.length > 0) {
+        clauses.push(`${alias}.caisse_id IN (:...permCaisses)`);
+        params.permCaisses = s.allowedCaisseIds;
+      }
+      if (s.allowedPortefeuilleIds && s.allowedPortefeuilleIds.length > 0) {
+        clauses.push(`${alias}.portefeuille_id IN (:...permPtfs)`);
+        params.permPtfs = s.allowedPortefeuilleIds;
+      }
+      clauses.push(`${alias}.user_id = :me`);
+      qb.andWhere('(' + clauses.join(' OR ') + ')', params);
+    }
+  }
+
+  async findAllOperations(opts: OperationQueryOptions = {}): Promise<Operation[]> {
+    const query = this.operationRepo.createQueryBuilder('operation').where('1=1');
+    this.applyOperationFilters(query, opts, 'operation');
 
     const column = LedgerService.OPERATION_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
@@ -290,14 +406,7 @@ export class LedgerService {
    * Génère un classeur Excel (.xlsx) des opérations filtrées (type / recherche / dates),
    * avec les libellés résolus (caisse, portefeuille, devise, utilisateur).
    */
-  async exportOperationsXlsx(opts: {
-    type?: TypeOperation;
-    search?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    /** Restriction par rôle : si fournie, on ne sort que ces types (sauf si `type` est précisé). */
-    allowedTypes?: string[];
-  } = {}): Promise<Buffer> {
+  async exportOperationsXlsx(opts: OperationQueryOptions = {}): Promise<Buffer> {
     const qb = this.operationRepo
       .createQueryBuilder('op')
       .leftJoin('fin_caisse', 'c', 'c.id = op.caisse_id')
@@ -317,25 +426,7 @@ export class LedgerService {
       .addSelect('u.prenom', 'prenom')
       .addSelect('u.nom', 'nom');
 
-    if (opts.type) {
-      qb.andWhere('op.type_operation = :type', { type: opts.type });
-    } else if (opts.allowedTypes && opts.allowedTypes.length > 0) {
-      qb.andWhere('op.type_operation IN (:...allowed)', { allowed: opts.allowedTypes });
-    }
-    if (opts.search) {
-      qb.andWhere(
-        '(op.reference LIKE :q' +
-          ' OR CAST(op.transaction_uuid AS NVARCHAR(36)) LIKE :q' +
-          ' OR CAST(op.montant AS NVARCHAR(40)) LIKE :q)',
-        { q: `%${opts.search}%` },
-      );
-    }
-    if (opts.dateFrom) qb.andWhere('op.date_operation >= :df', { df: new Date(opts.dateFrom) });
-    if (opts.dateTo) {
-      const dt = new Date(opts.dateTo);
-      dt.setHours(23, 59, 59, 999);
-      qb.andWhere('op.date_operation <= :dt', { dt });
-    }
+    this.applyOperationFilters(qb, opts, 'op');
     const rows: any[] = await qb.orderBy('op.date_operation', 'DESC').getRawMany();
 
     const wb = new Workbook();

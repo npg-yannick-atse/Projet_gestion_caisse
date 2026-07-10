@@ -1,12 +1,14 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ReferentielService } from './referentiel.service';
 import { TypePartenaire } from './entities/partenaire.entity';
 import { CreatePartenaireDto } from './dto/create-partenaire.dto';
 import { CreateCostCenterDto } from './dto/create-cost-center.dto';
+import { UpdateCostCenterDto } from './dto/update-cost-center.dto';
 import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
 import { UpdateNatureOperationDto } from './dto/update-nature-operation.dto';
 import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
+import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { Roles } from '@modules/auth/decorators/roles.decorator';
@@ -56,6 +58,17 @@ export class ReferentielController {
   @ApiOperation({ summary: 'Créer un centre de coût' })
   createCostCenter(@Body() dto: CreateCostCenterDto, @CurrentUser() user: JwtPayload) {
     return this.referentiel.createCostCenter(dto, user.sub);
+  }
+
+  @Patch('cost-centers/:id')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Mettre à jour un centre de coût (code non modifiable)' })
+  updateCostCenter(
+    @Param('id') id: string,
+    @Body() dto: UpdateCostCenterDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.referentiel.updateCostCenter(id, dto, user.sub);
   }
 
   @Delete('cost-centers/:id')
@@ -135,5 +148,50 @@ export class ReferentielController {
   @ApiOperation({ summary: 'Lister les sites actifs' })
   listSites() {
     return this.referentiel.listSites();
+  }
+
+  // ---------- Pays ----------
+  @Get('pays')
+  @ApiOperation({ summary: 'Lister les pays actifs' })
+  listPays() {
+    return this.referentiel.listPays();
+  }
+
+  @Post('pays')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Créer un pays' })
+  createPays(@Body() dto: CreatePaysDto, @CurrentUser() user: JwtPayload) {
+    return this.referentiel.createPays(dto, user.sub);
+  }
+
+  @Delete('pays/:id')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Désactiver un pays (soft-delete)' })
+  async deletePays(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.referentiel.deletePays(id, user.sub);
+  }
+
+  // ---------- Division ----------
+  @Get('divisions')
+  @ApiOperation({ summary: 'Lister les divisions actives (filtrable par pays)' })
+  @ApiQuery({ name: 'paysId', required: false })
+  listDivisions(@Query('paysId') paysId?: string) {
+    return this.referentiel.listDivisions(paysId);
+  }
+
+  @Post('divisions')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Créer une division' })
+  createDivision(@Body() dto: CreateDivisionDto, @CurrentUser() user: JwtPayload) {
+    return this.referentiel.createDivision(dto, user.sub);
+  }
+
+  @Delete('divisions/:id')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Désactiver une division (soft-delete)' })
+  async deleteDivision(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.referentiel.deleteDivision(id, user.sub);
   }
 }

@@ -5,8 +5,11 @@ import type {
   CreateCostCenterPayload,
   CreatePartenairePayload,
   CreatePlanComptablePayload,
+  Division,
+  NatureComptable,
   NatureOperation,
   Partenaire,
+  Pays,
   PlanComptable,
   TypeBon,
 } from '@/types/api';
@@ -32,6 +35,14 @@ export async function listCostCenters(): Promise<CostCenter[]> {
 
 export async function createCostCenter(payload: CreateCostCenterPayload): Promise<CostCenter> {
   const { data } = await api.post<CostCenter>('/cost-centers', payload);
+  return data;
+}
+
+export async function updateCostCenter(
+  id: string,
+  payload: Partial<CreateCostCenterPayload>,
+): Promise<CostCenter> {
+  const { data } = await api.patch<CostCenter>(`/cost-centers/${id}`, payload);
   return data;
 }
 
@@ -76,6 +87,15 @@ export function useCreateCostCenter() {
   });
 }
 
+export function useUpdateCostCenter() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<CreateCostCenterPayload> }) =>
+      updateCostCenter(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cost-centers'] }),
+  });
+}
+
 export function useDeleteCostCenter() {
   const qc = useQueryClient();
   return useMutation({
@@ -86,6 +106,73 @@ export function useDeleteCostCenter() {
 
 export function useTypeBons() {
   return useQuery({ queryKey: ['type-bons'], queryFn: listTypeBons });
+}
+
+export async function listNaturesComptable(): Promise<NatureComptable[]> {
+  const { data } = await api.get<NatureComptable[]>('/natures-comptable');
+  return data;
+}
+
+export function useNaturesComptable() {
+  return useQuery({ queryKey: ['natures-comptable'], queryFn: listNaturesComptable });
+}
+
+// ---------- Pays / Division ----------
+
+export async function listPays(): Promise<Pays[]> {
+  const { data } = await api.get<Pays[]>('/pays');
+  return data;
+}
+export async function createPays(payload: { code: string; libelle: string }): Promise<Pays> {
+  const { data } = await api.post<Pays>('/pays', payload);
+  return data;
+}
+export async function deletePays(id: string): Promise<void> {
+  await api.delete(`/pays/${id}`);
+}
+export function usePays() {
+  return useQuery({ queryKey: ['pays'], queryFn: listPays });
+}
+export function useCreatePays() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: createPays, onSuccess: () => qc.invalidateQueries({ queryKey: ['pays'] }) });
+}
+export function useDeletePays() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: deletePays, onSuccess: () => qc.invalidateQueries({ queryKey: ['pays'] }) });
+}
+
+export async function listDivisions(paysId?: string): Promise<Division[]> {
+  const { data } = await api.get<Division[]>('/divisions', { params: paysId ? { paysId } : undefined });
+  return data;
+}
+export async function createDivision(payload: {
+  code?: string;
+  libelle: string;
+  paysId: string;
+}): Promise<Division> {
+  const { data } = await api.post<Division>('/divisions', payload);
+  return data;
+}
+export async function deleteDivision(id: string): Promise<void> {
+  await api.delete(`/divisions/${id}`);
+}
+export function useDivisions(paysId?: string) {
+  return useQuery({ queryKey: ['divisions', paysId ?? 'all'], queryFn: () => listDivisions(paysId) });
+}
+export function useCreateDivision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createDivision,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['divisions'] }),
+  });
+}
+export function useDeleteDivision() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDivision,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['divisions'] }),
+  });
 }
 
 export async function listNaturesOperation(): Promise<NatureOperation[]> {

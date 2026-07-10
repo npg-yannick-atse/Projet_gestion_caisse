@@ -11,6 +11,7 @@ import {
   useSignBon,
   useCancelBon,
   useDecaisserBon,
+  useValidations,
 } from '@/api/bons';
 import { useBonCaisseByBon } from '@/api/bonsCaisse';
 import { useCostCenters, useNaturesOperation } from '@/api/referentiel';
@@ -21,6 +22,7 @@ import type { Bon, BonCaisse, SousBon } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CharCounter } from '@/components/ui/char-counter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatutBadge } from '@/components/StatutBadge';
 import { SignaturePad } from '@/components/SignaturePad';
@@ -143,6 +145,7 @@ export function BonDetailPage() {
   const bonQuery = useBon(bonId);
   const sousBonsQuery = useSousBons(bonId);
   const impressionQuery = useImpression(bonId);
+  const validationsQuery = useValidations(bonId);
   const { data: usersList } = useUsers();
   const { data: costCenters } = useCostCenters();
   const { data: naturesOperation } = useNaturesOperation();
@@ -177,6 +180,19 @@ export function BonDetailPage() {
     return map;
   }, [bonCaisses]);
 
+  // BonCaisse FINALISE par sous-bon → permet d'afficher le montant RÉELLEMENT
+  // décaissé (le caissier peut avoir ajusté le montant : il vit dans montantAjuste,
+  // le sous-bon d'origine, lui, garde son montant initial).
+  const finaliseBySousBonId = useMemo(() => {
+    const map = new Map<string, BonCaisse>();
+    for (const bc of bonCaisses) {
+      if (bc.statut === 'FINALISE' && bc.sousBonSourceId) {
+        map.set(String(bc.sousBonSourceId), bc);
+      }
+    }
+    return map;
+  }, [bonCaisses]);
+
   // Rôle utilisateur pour gating de l'action "Décaisser"
   const { data: roles } = useUserRoles(currentUser?.id ?? null);
   const isAdminRole = (roles ?? []).some((r) => r.code === 'ADMINISTRATEUR' || r.code === 'SUPER_ADMIN');
@@ -186,6 +202,9 @@ export function BonDetailPage() {
   // Droit de modifier un bon/sous-bon : VALIDATEUR (admins inclus) ou permission BON_MODIFIER_SPEC.
   const { data: myPermissions } = useMyPermissions(currentUser?.id ?? null);
   const hasModifSpec = (myPermissions ?? []).includes('BON_MODIFIER_SPEC');
+  // Annuler un bon DÉJÀ VALIDÉ requiert la permission BON_ANNULER_VALIDE (admins inclus).
+  // Un bon au statut CREE reste annulable par son demandeur sans permission.
+  const canAnnulerValide = isAdminRole || (myPermissions ?? []).includes('BON_ANNULER_VALIDE');
 
   const [commentaire, setCommentaire] = useState('');
   const [showSignModal, setShowSignModal] = useState(false);
@@ -203,12 +222,26 @@ export function BonDetailPage() {
   const soubons = sousBonsQuery.data ?? [];
   // Sous-bons encore décaissables (statut VALIDE) → cible du « Décaisser tout ».
   const sousBonsDecaissables = soubons.filter((sb) => sb.statut === 'VALIDE');
+  // Montant réellement décaissé (montant ajusté par le caissier inclus) et reste à décaisser.
+  const montantDecaisse = soubons.reduce((acc, sb) => {
+    if (!['DECAISSE', 'COMPTABILISE'].includes(sb.statut)) return acc;
+    const fin = finaliseBySousBonId.get(String(sb.id));
+    return acc + Number(fin?.montantAjuste ?? sb.montant ?? 0);
+  }, 0);
+  const montantRestant = Number(bon?.montantTotal ?? 0) - montantDecaisse;
   const impression = impressionQuery.data ?? null;
   const porteurValue = porteurDraft ?? bon?.porteur ?? '';
   // Modification autorisée uniquement au statut CREE, pour un validateur ou BON_MODIFIER_SPEC.
   const canEditBon = bon?.statut === 'CREE' && (isValidateur || hasModifSpec);
 
   const userById = useMemo(() => new Map((usersList ?? []).map((u) => [u.id, u])), [usersList]);
+  const userName = (id?: string | null) => {
+    if (!id) return '—';
+    const u = userById.get(String(id));
+    return u ? `${u.prenom} ${u.nom}` : `#${id}`;
+  };
+  // Validations triées du plus récent au plus ancien → [0] = décision courante.
+  const latestValidation = (validationsQuery.data ?? [])[0] ?? null;
   const imprimeParLabel = impression
     ? (() => {
         const u = userById.get(impression.imprimeParId);
@@ -269,6 +302,44 @@ export function BonDetailPage() {
               <div className="flex items-baseline justify-between">
                 <span className="text-sm text-muted-foreground">Montant total</span>
                 <span className="text-lg font-semibold tabular-nums">{formatMontant(bon.montantTotal)}</span>
+              </div>
+              <div className="flex items-baseline justify-between border-t pt-2">
+                <span className="text-sm text-muted-foreground">Montant décaissé</span>
+                <span className="text-base font-semibold tabular-nums text-[#047857]">
+                  {formatMontant(String(montantDecaisse))}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm text-muted-foreground">Reste à décaisser (soldé)</span>
+                <span className="text-base font-semibold tabular-nums text-[#B45309]">
+                  {formatMontant(String(montantRestant))}
+                </span>
+              </div>
+              <div className="space-y-1 border-t pt-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-muted-foreground">Demandeur</span>
+                  <span className="text-sm font-medium">{userName(bon.demandeurId)}</span>
+                </div>
+                {latestValidation && (
+                  <>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        {latestValidation.action === 'REFUSE' ? 'Refusé par' : 'Validé par'}
+                      </span>
+                      <span className="text-sm font-medium">
+                        {userName(latestValidation.validateurId)}
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          · {new Date(latestValidation.dateValidation).toLocaleDateString('fr-FR')}
+                        </span>
+                      </span>
+                    </div>
+                    {latestValidation.commentaire && (
+                      <p className="text-[12px] text-muted-foreground">
+                        Commentaire : {latestValidation.commentaire}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
               {bon.porteur && (
                 <div className="flex items-baseline justify-between border-t pt-2">
@@ -398,7 +469,27 @@ export function BonDetailPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">{formatMontant(sb.montant)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          {(() => {
+                            const fin = finaliseBySousBonId.get(String(sb.id));
+                            const effectif = fin?.montantAjuste ?? null;
+                            const ajuste =
+                              effectif != null && String(effectif) !== String(sb.montant);
+                            if (ajuste) {
+                              return (
+                                <span title="Montant ajusté au décaissement">
+                                  <span className="block font-semibold text-[#0F172A]">
+                                    {formatMontant(effectif!)}
+                                  </span>
+                                  <span className="block text-[10px] text-muted-foreground line-through">
+                                    {formatMontant(sb.montant)}
+                                  </span>
+                                </span>
+                              );
+                            }
+                            return formatMontant(sb.montant);
+                          })()}
+                        </td>
                         <td className="px-4 py-2">
                           <StatutBadge statut={sb.statut} />
                         </td>
@@ -468,7 +559,9 @@ export function BonDetailPage() {
                       value={commentaire}
                       onChange={(e) => setCommentaire(e.target.value)}
                       placeholder="Motif de validation ou de refus…"
+                      maxLength={500}
                     />
+                    <CharCounter value={commentaire} max={500} />
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -639,7 +732,7 @@ export function BonDetailPage() {
                 <p className="text-sm text-muted-foreground">Aucune action disponible pour ce statut.</p>
               )}
 
-              {(bon.statut === 'CREE' || bon.statut === 'VALIDE') && (
+              {(bon.statut === 'CREE' || (bon.statut === 'VALIDE' && canAnnulerValide)) && (
                 <div className="border-t pt-4">
                   <Button variant="ghost" disabled={cancel.isPending} onClick={() => cancel.mutate()}>
                     Annuler le bon

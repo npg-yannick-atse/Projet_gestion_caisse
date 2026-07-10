@@ -6,6 +6,7 @@ import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
+import { AuditPermissionService } from '../audit-permission.service';
 
 @Injectable()
 export class RolesService {
@@ -16,6 +17,7 @@ export class RolesService {
     private readonly permissionRepo: Repository<Permission>,
     @InjectRepository(RolePermission)
     private readonly rolePermissionRepo: Repository<RolePermission>,
+    private readonly auditPerm: AuditPermissionService,
   ) {}
 
   async createRole(dto: CreateRoleDto): Promise<Role> {
@@ -96,7 +98,12 @@ export class RolesService {
     return this.permissionRepo.save(permission);
   }
 
-  async assignPermissionToRole(roleId: string, permissionId: string): Promise<RolePermission> {
+  async assignPermissionToRole(
+    roleId: string,
+    permissionId: string,
+    actorId?: string,
+    ip?: string | null,
+  ): Promise<RolePermission> {
     await this.findRole(roleId);
     await this.findPermission(permissionId);
 
@@ -108,10 +115,18 @@ export class RolesService {
     }
 
     const rp = this.rolePermissionRepo.create({ roleId, permissionId });
-    return this.rolePermissionRepo.save(rp);
+    const saved = await this.rolePermissionRepo.save(rp);
+    // Fan-out : tous les utilisateurs portant ce rôle GAGNENT cette permission.
+    if (actorId) await this.auditPerm.logRolePermissionChange(roleId, permissionId, 'GAIN', actorId, ip);
+    return saved;
   }
 
-  async removePermissionFromRole(roleId: string, permissionId: string): Promise<void> {
+  async removePermissionFromRole(
+    roleId: string,
+    permissionId: string,
+    actorId?: string,
+    ip?: string | null,
+  ): Promise<void> {
     await this.findRole(roleId);
     await this.findPermission(permissionId);
 
@@ -123,6 +138,7 @@ export class RolesService {
     if (result.affected === 0) {
       throw new NotFoundException('Association rôle-permission introuvable');
     }
+    if (actorId) await this.auditPerm.logRolePermissionChange(roleId, permissionId, 'PERTE', actorId, ip);
   }
 
   async getRolePermissions(roleId: string): Promise<Permission[]> {

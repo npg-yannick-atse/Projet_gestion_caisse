@@ -25,8 +25,13 @@ function PortefeuilleBurnCard({ portefeuille }: { portefeuille: Portefeuille }) 
   const { data: solde } = usePortefeuilleSolde(portefeuille.id);
   const soldeNum = Number(solde?.solde ?? 0);
   const initial = Number(portefeuille.soldeInitial ?? 0);
-  const consumed = Math.max(0, initial - soldeNum);
-  const burnPct = initial > 0 ? Math.min(100, Math.round((consumed / initial) * 100)) : 0;
+  // Budget mensuel (si défini) : plafond = budgetMensuel, disponible du mois = écritures (solde − soldeInitial).
+  const cap = portefeuille.budgetMensuel != null ? Number(portefeuille.budgetMensuel) : null;
+  const mensuel = cap != null;
+  const base = mensuel ? cap : initial;
+  const remaining = mensuel ? soldeNum - initial : soldeNum;
+  const consumed = Math.max(0, base - remaining);
+  const burnPct = base > 0 ? Math.min(100, Math.round((consumed / base) * 100)) : 0;
   const alert = burnPct >= 80;
 
   return (
@@ -60,9 +65,11 @@ function PortefeuilleBurnCard({ portefeuille }: { portefeuille: Portefeuille }) 
         </span>
       </div>
       <div className="mb-2 flex items-baseline justify-between text-[10px]">
-        <span className="text-[#94A3B8]">Initial : {formatMontant(initial)}</span>
+        <span className="text-[#94A3B8]">
+          {mensuel ? `Plafond mensuel : ${formatMontant(base)}` : `Initial : ${formatMontant(initial)}`}
+        </span>
         <span className="tabular-nums text-[#475569]">
-          {burnPct}% consommé
+          {burnPct}% consommé{mensuel ? ' ce mois' : ''}
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded bg-[#F1F5F9]">
@@ -125,7 +132,10 @@ export function GestionnaireDashboard({ user }: Props) {
   }, [inFlight]);
 
   // Burn moyen (somme des % consommés / nb portefeuilles) — affiché en %
-  const initialTotal = myPortefeuilles.reduce((acc, p) => acc + Number(p.soldeInitial ?? 0), 0);
+  const initialTotal = myPortefeuilles.reduce(
+    (acc, p) => acc + Number(p.budgetMensuel ?? p.soldeInitial ?? 0),
+    0,
+  );
   const budget = usePortefeuillesBudget(myPortefeuilles.map((p) => p.id));
 
   return (

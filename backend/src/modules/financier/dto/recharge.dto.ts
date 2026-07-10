@@ -1,7 +1,16 @@
-import { IsNotEmpty, IsOptional, IsNumberString, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsIn, IsNumberString, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RechargeDto {
+  @ApiProperty({
+    required: false,
+    enum: ['CAISSE_VERS_PORTEFEUILLE', 'PORTEFEUILLE_VERS_CAISSE'],
+    description: 'Sens du mouvement (défaut : caisse → portefeuille).',
+  })
+  @IsOptional()
+  @IsIn(['CAISSE_VERS_PORTEFEUILLE', 'PORTEFEUILLE_VERS_CAISSE'])
+  sens?: 'CAISSE_VERS_PORTEFEUILLE' | 'PORTEFEUILLE_VERS_CAISSE';
+
   @ApiProperty({ description: 'Caisse source (doit être OUVERTE)' })
   @IsNotEmpty()
   @IsNumberString()

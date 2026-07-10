@@ -9,10 +9,12 @@ import {
   Bell,
   BellOff,
   BookOpen,
+  Globe,
   Tags,
   Briefcase,
   Building2,
   CheckCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -33,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
+import { useIdleLogout } from '@/hooks/useIdleLogout';
 import { useMe } from '@/api/auth';
 import { useBons } from '@/api/bons';
 import { useUserRoles, useMyPermissions } from '@/api/users';
@@ -47,6 +50,7 @@ import {
 } from '@/stores/notifications.store';
 import { useDemandesRecharge } from '@/api/demandesRecharge';
 import { useDemandesTransfert } from '@/api/demandesTransfert';
+import { track } from '@/lib/telemetry';
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -87,26 +91,32 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: 'Gestion',
+    title: 'Opération',
     items: [
       { to: '/bons', label: 'Bons', icon: Receipt, exact: false },
       { to: '/bons-manuels', label: 'Bons manuels', icon: BookText, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'DAF'] },
-      { to: '/extensions', label: "Demandes d'extension", icon: TrendingUp, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'EXTENSION_APPROUVER' },
-      { to: '/users', label: 'Utilisateurs', icon: Users, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/roles', label: 'Rôles', icon: ShieldCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/extensions', label: "Demandes d'extension", icon: TrendingUp, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'], permission: 'EXTENSION_APPROUVER' },
       { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/audit', label: 'Audit', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
+      { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
     ],
   },
   {
-    title: 'Référentiel',
+    title: 'Administration',
+    items: [
+      { to: '/users', label: 'Utilisateurs', icon: Users, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/roles', label: 'Rôles', icon: ShieldCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+    ],
+  },
+  {
+    title: 'Master Data',
     items: [
       { to: '/directions', label: 'Directions', icon: Network, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/partenaires', label: 'Partenaires', icon: Building2, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/natures-operation', label: "Natures d'opération", icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/plan-comptable', label: 'Plan comptable', icon: BookOpen, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
     ],
   },
 ];
@@ -126,6 +136,53 @@ function titleFor(pathname: string): string {
 }
 
 const SIDEBAR_STORAGE_KEY = 'fdc.sidebar.collapsed';
+const SECTIONS_STORAGE_KEY = 'fdc.sidebar.sections.closed';
+// « Principal » reste toujours déployé ; les autres sections sont des menus déroulants.
+const ALWAYS_OPEN_SECTION = 'Principal';
+
+/**
+ * Écran affiché lorsqu'un compte connecté n'a AUCUN rôle : l'application n'est pas
+ * accessible tant qu'un administrateur ne lui a pas attribué au moins un rôle (on ne
+ * le présente PAS par défaut comme « demandeur »).
+ */
+function NoRoleScreen({
+  user,
+  onLogout,
+}: {
+  user: { prenom?: string; nom?: string; matricule?: string } | null;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#F1F5F9] p-6">
+      <div className="w-full max-w-md rounded-[16px] border border-[rgba(15,76,129,0.1)] bg-white p-8 text-center shadow-[0_12px_32px_rgba(15,23,42,0.1)]">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[#FFFBEB] text-[#B45309]">
+          <ShieldCheck className="h-7 w-7" />
+        </div>
+        <h1 className="font-display text-lg font-semibold text-[#0F172A]">Aucun rôle attribué</h1>
+        <p className="mt-2 text-sm text-[#475569]">
+          Votre compte n'a encore aucun rôle. L'accès à l'application nécessite au moins un
+          rôle attribué par un administrateur.
+        </p>
+        {user && (
+          <p className="mt-2 text-xs text-[#94A3B8]">
+            {user.prenom} {user.nom}
+            {user.matricule ? ` · #${user.matricule}` : ''}
+          </p>
+        )}
+        <p className="mt-3 text-xs text-[#94A3B8]">
+          Contactez un administrateur pour obtenir vos accès.
+        </p>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="mt-6 inline-flex items-center gap-2 rounded-[10px] bg-[#0F4C81] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#1A6DB5]"
+        >
+          <LogOut className="h-4 w-4" /> Se déconnecter
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function Layout() {
   const navigate = useNavigate();
@@ -146,6 +203,31 @@ export function Layout() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
+
+  // Sections repliées (menus déroulants). Persisté en localStorage.
+  const [closedSections, setClosedSections] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = window.localStorage.getItem(SECTIONS_STORAGE_KEY);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+    // Premier chargement : on REPLIE les sections déroulantes (sauf « Principal »)
+    // pour montrer l'effet ; la section de la page active se rouvre automatiquement.
+    return new Set(NAV_SECTIONS.map((s) => s.title).filter((t) => t !== ALWAYS_OPEN_SECTION));
+  });
+  const toggleSection = (titleKey: string) => {
+    setClosedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(titleKey)) next.delete(titleKey);
+      else next.add(titleKey);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(SECTIONS_STORAGE_KEY, JSON.stringify([...next]));
+      }
+      return next;
+    });
+  };
 
   const { data: userRoles } = useUserRoles(user?.id ?? null);
   const roleCodes = useMemo(() => new Set<RoleCode>((userRoles ?? []).map((r) => r.code)), [userRoles]);
@@ -348,6 +430,26 @@ export function Layout() {
     };
   }, [notifOpen]);
 
+  // Télémétrie de test : navigation (changement de page).
+  useEffect(() => {
+    track('page', { path: pathname });
+  }, [pathname]);
+
+  // Télémétrie de test : clics sur boutons / liens (libellé uniquement, pas les saisies).
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement | null)?.closest('button, a, [role="button"]');
+      if (!el) return;
+      const label =
+        el.getAttribute('aria-label') ||
+        el.getAttribute('title') ||
+        (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
+      if (label) track('click', { label });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
+
   const navSections = useMemo(() => {
     return NAV_SECTIONS.map((section) => ({
       ...section,
@@ -373,9 +475,19 @@ export function Layout() {
     navigate({ to: '/login' });
   };
 
+  // Déconnexion automatique après 1 h d'inactivité (souris/clavier), onglet ouvert ou non.
+  useIdleLogout(handleLogout, !!user);
+
   const initials = `${user?.prenom?.[0] ?? ''}${user?.nom?.[0] ?? ''}`.toUpperCase() || '?';
   const title = titleFor(pathname);
   const isAdmin = roleCodes.has('SUPER_ADMIN') || roleCodes.has('ADMINISTRATEUR');
+
+  // Garde d'accès : un compte connecté SANS aucun rôle ne doit pas entrer dans
+  // l'application. On attend que les rôles soient chargés (userRoles !== undefined)
+  // pour ne pas déclencher un faux positif pendant le chargement.
+  if (user && userRoles !== undefined && roleCodes.size === 0) {
+    return <NoRoleScreen user={user} onLogout={handleLogout} />;
+  }
 
   return (
     <div className="flex min-h-screen bg-[#F1F5F9] text-[#0F172A]">
@@ -422,41 +534,63 @@ export function Layout() {
         </div>
 
         <nav className={cn('relative flex-1 overflow-y-auto py-4', collapsed ? 'px-2' : 'px-3')}>
-          {navSections.map((section) => (
-            <div key={section.title} className="mb-1">
-              {collapsed ? (
-                <div className="mx-2 my-3 h-px bg-white/10 first:mt-1" />
-              ) : (
-                <div className="px-3 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[1.5px] text-white/35">
-                  {section.title}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {section.items.map((item) => (
-                  <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact }}>
-                    {({ isActive }) => (
-                      <span
-                        title={collapsed ? item.label : undefined}
-                        className={cn(
-                          'relative flex items-center rounded-[10px] text-sm transition-colors',
-                          collapsed ? 'justify-center px-2 py-3' : 'gap-3.5 px-3.5 py-3',
-                          isActive
-                            ? 'bg-[#00C896]/[0.14] font-medium text-[#00C896]'
-                            : 'text-white/55 hover:bg-white/[0.06] hover:text-white/90',
+          {navSections.map((section) => {
+            // En mode étendu, toutes les sections sauf « Principal » sont déroulantes.
+            const isCollapsible = !collapsed && section.title !== ALWAYS_OPEN_SECTION;
+            const hasActive = section.items.some((it) =>
+              it.exact ? pathname === it.to : it.to !== '/' && pathname.startsWith(it.to),
+            );
+            // Ouvert si : non repliable, OU contient la page active, OU pas marqué fermé.
+            const open = !isCollapsible || hasActive || !closedSections.has(section.title);
+            return (
+              <div key={section.title} className="mb-1">
+                {collapsed ? (
+                  <div className="mx-2 my-3 h-px bg-white/10 first:mt-1" />
+                ) : isCollapsible ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.title)}
+                    className="flex w-full items-center justify-between rounded-[8px] px-3 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[1.5px] text-white/35 transition-colors hover:text-white/70"
+                  >
+                    <span>{section.title}</span>
+                    <ChevronDown
+                      className={cn('h-3.5 w-3.5 transition-transform duration-200', !open && '-rotate-90')}
+                    />
+                  </button>
+                ) : (
+                  <div className="px-3 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[1.5px] text-white/35">
+                    {section.title}
+                  </div>
+                )}
+                {open && (
+                  <div className="space-y-0.5">
+                    {section.items.map((item) => (
+                      <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact }}>
+                        {({ isActive }) => (
+                          <span
+                            title={collapsed ? item.label : undefined}
+                            className={cn(
+                              'relative flex items-center rounded-[10px] text-sm transition-colors',
+                              collapsed ? 'justify-center px-2 py-3' : 'gap-3.5 px-3.5 py-3',
+                              isActive
+                                ? 'bg-[#00C896]/[0.14] font-medium text-[#00C896]'
+                                : 'text-white/55 hover:bg-white/[0.06] hover:text-white/90',
+                            )}
+                          >
+                            {isActive && (
+                              <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-[#00C896]" />
+                            )}
+                            <item.icon className="h-5 w-5 shrink-0" />
+                            {!collapsed && item.label}
+                          </span>
                         )}
-                      >
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-[#00C896]" />
-                        )}
-                        <item.icon className="h-5 w-5 shrink-0" />
-                        {!collapsed && item.label}
-                      </span>
-                    )}
-                  </Link>
-                ))}
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div
@@ -712,7 +846,7 @@ export function Layout() {
         </nav>
 
         <main className="flex-1 overflow-y-auto p-5 sm:p-7">
-          <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-[1440px]">
             <Outlet />
           </div>
         </main>

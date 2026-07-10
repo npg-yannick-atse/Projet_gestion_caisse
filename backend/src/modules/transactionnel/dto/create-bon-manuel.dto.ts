@@ -39,11 +39,11 @@ export class CreateBonManuelDto {
   @IsNumberString()
   partenaireId?: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiProperty({ required: false, description: 'Requis selon le type de bon (requiertBl)' })
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  numeroBl!: string;
+  numeroBl?: string;
 
   @ApiProperty()
   @IsNotEmpty()

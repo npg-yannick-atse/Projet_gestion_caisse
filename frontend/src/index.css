@@ -33,4 +33,11 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Masque l'icône « œil »/« croix » native d'Edge/IE sur les champs mot de passe :
+     l'application fournit déjà son propre bouton d'affichage (évite le double œil). */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
 }

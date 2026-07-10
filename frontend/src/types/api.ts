@@ -183,6 +183,8 @@ export interface SoldeResponse {
   solde: string;
   /** Budget alloué (solde initial) — présent pour les portefeuilles, sert au calcul du taux d'utilisation. */
   soldeInitial?: string;
+  /** Plafond budgétaire mensuel (si défini) — dénominateur du taux d'utilisation « ce mois ». */
+  budgetMensuel?: string | null;
 }
 
 export type BonStatut = 'CREE' | 'VALIDE' | 'DECAISSE' | 'COMPTABILISE' | 'ANNULE' | 'REFUSE';
@@ -197,6 +199,8 @@ export interface Bon {
   estRecurrent: boolean;
   frequenceRecurrence?: FrequenceRecurrence | null;
   montantTotal: string;
+  /** Total réellement décaissé (ajustements caissier inclus). null si rien décaissé. */
+  montantDecaisse?: string | null;
   demandeExtension?: boolean;
   descriptionExtension?: string | null;
   statutExtension?: StatutExtension;
@@ -209,6 +213,18 @@ export interface Bon {
 
 export type StatutExtension = 'NON' | 'EN_ATTENTE' | 'APPROUVEE' | 'REFUSEE';
 export type ExtensionMode = 'DECOUVERT' | 'RECHARGE';
+
+export interface ValidationBon {
+  id: string;
+  bonId?: string | null;
+  sousBonId?: string | null;
+  validateurId: string;
+  validateurInterimId?: string | null;
+  /** 'VALIDE' = approuvé, 'REFUSE' = refusé. */
+  action: 'VALIDE' | 'REFUSE';
+  commentaire?: string | null;
+  dateValidation: string;
+}
 
 export interface SousBon {
   id: string;
@@ -223,6 +239,9 @@ export interface SousBon {
   codeManutention: string;
   costCenterId?: string | null;
   natureOperationId?: string | null;
+  caisseId?: string | null;
+  portefeuilleId?: string | null;
+  deviseId?: string | null;
   statut: BonStatut;
   dateDecaissement?: string | null;
 }
@@ -265,6 +284,9 @@ export interface Portefeuille {
   proprietaireId: string;
   gestionnaireId?: string | null;
   soldeInitial?: string;
+  /** Plafond budgétaire mensuel (réajusté chaque mois, sans report). Null = pas de plafond mensuel. */
+  budgetMensuel?: string | null;
+  budgetResetMois?: string | null;
   estActif: boolean;
 }
 
@@ -284,7 +306,7 @@ export interface CostCenter {
   code: string;
   libelle: string;
   directionId?: string | null;
-  budgetAnnuel?: string | null;
+  budgetMensuel?: string | null;
   estActif: boolean;
 }
 
@@ -295,6 +317,32 @@ export interface TypeBon {
   requiertNumeroClient: boolean;
   requiertPartenaire: boolean;
   requiertBl: boolean;
+  requiertNomClient: boolean;
+  estActif: boolean;
+}
+
+export interface NatureComptable {
+  id: string;
+  libelle: string;
+  description?: string | null;
+  costCenterId?: string | null;
+  planComptableId?: string | null;
+  codeComptableSap?: string | null;
+  estActif: boolean;
+}
+
+export interface Pays {
+  id: string;
+  code: string;
+  libelle: string;
+  estActif: boolean;
+}
+
+export interface Division {
+  id: string;
+  code: string;
+  libelle: string;
+  paysId: string;
   estActif: boolean;
 }
 
@@ -317,10 +365,14 @@ export interface SousBonInput {
   codeManutention: string;
   costCenterId: string;
   natureOperationId?: string | null;
+  natureComptableId?: string | null;
   caisseId: string;
   portefeuilleId: string;
   deviseId: string;
   numeroClient?: string;
+  nomClient?: string;
+  paysId?: string;
+  divisionId?: string;
   description?: string;
 }
 
@@ -335,11 +387,15 @@ export interface CreateBonPayload {
   porteur?: string;
 }
 
+export type RechargeSens = 'CAISSE_VERS_PORTEFEUILLE' | 'PORTEFEUILLE_VERS_CAISSE';
+
 export interface RechargePayload {
   caisseId: string;
   portefeuilleId: string;
   montant: string;
   reference?: string;
+  /** Sens du mouvement (défaut : caisse → portefeuille). */
+  sens?: RechargeSens;
 }
 
 export interface CreateCaissePayload {
@@ -359,6 +415,7 @@ export interface CreatePortefeuillePayload {
   proprietaireId: string;
   gestionnaireId?: string;
   soldeInitial?: string;
+  budgetMensuel?: string;
 }
 
 export interface UpdateCaissePayload {
@@ -379,6 +436,7 @@ export interface UpdatePortefeuillePayload {
   proprietaireId?: string;
   gestionnaireId?: string;
   soldeInitial?: string;
+  budgetMensuel?: string;
   estActif?: boolean;
 }
 
@@ -467,7 +525,7 @@ export interface CreateCostCenterPayload {
   code: string;
   libelle: string;
   directionId?: string;
-  budgetAnnuel?: string;
+  budgetMensuel?: string;
 }
 
 export interface CreateDirectionPayload {

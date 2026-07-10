@@ -11,6 +11,7 @@ import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { Interim } from './entities/interim.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UserCaisseAccess } from './entities/user-caisse-access.entity';
+import { UserDivisionAccess } from './entities/user-division-access.entity';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRATEUR'];
 
@@ -322,6 +323,28 @@ export class AuthorizationService {
     const perim = await this.getPortefeuillePerimeter(userId);
     if (perim && !perim.has(String(portefeuilleId))) {
       throw new ForbiddenException('Ce portefeuille est hors de votre périmètre.');
+    }
+  }
+
+  /**
+   * Divisions (régions de pays) autorisées pour l'utilisateur.
+   * null = toutes (admin). Set (même vide) = liste stricte (aucun repli "tout voir"),
+   * car l'accès aux restitutions par division doit être explicitement accordé.
+   */
+  async getDivisionPerimeter(userId: string): Promise<Set<string> | null> {
+    if (await this.isAdmin(userId)) return null;
+    const rows = await this.dataSource
+      .getRepository(UserDivisionAccess)
+      .find({ where: { userId: userId as any } });
+    return new Set(rows.map((r) => String(r.divisionId)));
+  }
+
+  /** Vérifie que l'utilisateur a accès à la division (sinon Forbidden). */
+  async assertDivisionInPerimeter(userId: string, divisionId: string): Promise<void> {
+    const perim = await this.getDivisionPerimeter(userId);
+    if (perim === null) return; // admin : accès total
+    if (!perim.has(String(divisionId))) {
+      throw new ForbiddenException("Cette division est hors de votre périmètre d'autorisation.");
     }
   }
 }

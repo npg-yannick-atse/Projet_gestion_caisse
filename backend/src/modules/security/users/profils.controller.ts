@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Ip,
   Param,
   Patch,
   Post,
@@ -14,6 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProfilsService } from './profils.service';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Security / Profils')
@@ -70,8 +72,10 @@ export class ProfilsController {
   assignPermission(
     @Param('profilId') profilId: string,
     @Param('permissionId') permissionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
-    return this.profilsService.assignPermissionToProfil(profilId, permissionId);
+    return this.profilsService.assignPermissionToProfil(profilId, permissionId, user.sub, ip);
   }
 
   @Delete(':profilId/permissions/:permissionId')
@@ -81,7 +85,9 @@ export class ProfilsController {
   async removePermission(
     @Param('profilId') profilId: string,
     @Param('permissionId') permissionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
-    await this.profilsService.removePermissionFromProfil(profilId, permissionId);
+    await this.profilsService.removePermissionFromProfil(profilId, permissionId, user.sub, ip);
   }
 }

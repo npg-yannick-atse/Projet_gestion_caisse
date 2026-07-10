@@ -164,3 +164,29 @@ export function useToggleUserProfil(userId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'profils'] }),
   });
 }
+
+// ---------- Accès division (restitutions) ----------
+
+export async function listUserDivisions(userId: string): Promise<string[]> {
+  const { data } = await api.get<string[]>(`/users/${userId}/divisions`);
+  return data;
+}
+
+export function useUserDivisions(userId: string | null) {
+  return useQuery({
+    queryKey: ['user', userId, 'divisions'],
+    queryFn: () => listUserDivisions(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useToggleUserDivision(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ divisionId, has }: { divisionId: string; has: boolean }) =>
+      has
+        ? api.delete(`/users/${userId}/divisions/${divisionId}`)
+        : api.post(`/users/${userId}/divisions/${divisionId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'divisions'] }),
+  });
+}

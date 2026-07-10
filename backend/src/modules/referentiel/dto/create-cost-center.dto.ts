@@ -19,8 +19,8 @@ export class CreateCostCenterDto {
   @IsNumberString()
   directionId?: string;
 
-  @ApiProperty({ required: false, description: 'DECIMAL(19,4) en string' })
+  @ApiProperty({ required: false, description: 'Budget mensuel — DECIMAL(19,4) en string' })
   @IsOptional()
   @IsNumberString()
-  budgetAnnuel?: string;
+  budgetMensuel?: string;
 }

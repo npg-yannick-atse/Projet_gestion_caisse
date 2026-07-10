@@ -6,6 +6,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from '@common/filters/all-exceptions.filter';
+import { TrimPipe } from '@common/pipes/trim.pipe';
+import { requestLogger } from '@common/logging/request-logger.middleware';
+import { testLogger } from '@common/logging/test-logger';
 
 function getLanIPv4(): string[] {
   const ips: string[] = [];
@@ -32,12 +35,18 @@ async function bootstrap() {
 
   app.use(helmet({ contentSecurityPolicy: false }));
 
+  // Journalisation FICHIER (suivi des tests) : une ligne JSONL par requête, sur res 'finish'.
+  app.use(requestLogger);
+
   app.enableCors({
     origin: corsOrigins.includes('*') ? true : corsOrigins,
     credentials: true,
   });
 
   app.useGlobalPipes(
+    // Le TrimPipe s'exécute AVANT le ValidationPipe : un champ rempli d'espaces
+    // devient vide et sera donc rejeté par @IsNotEmpty.
+    new TrimPipe(),
     new ValidationPipe({
       transform: true,
       whitelist: true,
@@ -71,6 +80,7 @@ async function bootstrap() {
     Logger.log(`  → http://${host}:${port}/${apiPrefix}`, 'Bootstrap');
   }
   Logger.log(`Swagger UI : http://${hosts[hosts.length - 1] ?? 'localhost'}:${port}/${apiPrefix}/docs`, 'Bootstrap');
+  Logger.log(`Logs de test (JSONL) : ${testLogger.directory}`, 'Bootstrap');
 }
 
 bootstrap().catch((err) => {

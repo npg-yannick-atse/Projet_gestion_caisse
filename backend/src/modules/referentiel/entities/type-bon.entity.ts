@@ -28,6 +28,10 @@ export class TypeBon extends AuditableEntity {
   @Column({ name: 'requiert_bl', type: 'bit', default: true })
   requiertBl!: boolean;
 
+  @ApiProperty({ default: false })
+  @Column({ name: 'requiert_nom_client', type: 'bit', default: false })
+  requiertNomClient!: boolean;
+
   @ApiProperty({ default: true })
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;

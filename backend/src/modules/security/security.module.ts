@@ -12,7 +12,10 @@ import { ProfilPermission } from './entities/profil-permission.entity';
 import { UserCaisseAccess } from './entities/user-caisse-access.entity';
 import { UserCostCenter } from './entities/user-cost-center.entity';
 import { UserPermissionExtra } from './entities/user-permission-extra.entity';
+import { UserDivisionAccess } from './entities/user-division-access.entity';
 import { Interim } from './entities/interim.entity';
+import { ChangementPermission } from '@modules/audit/entities/changement-permission.entity';
+import { AuditPermissionService } from './audit-permission.service';
 import { UsersService } from './users/users.service';
 import { UsersController } from './users/users.controller';
 import { DirectionsService } from './users/directions.service';
@@ -42,10 +45,12 @@ import { AuthorizationService } from './authorization.service';
       UserCaisseAccess,
       UserCostCenter,
       UserPermissionExtra,
+      UserDivisionAccess,
       Interim,
+      ChangementPermission,
     ]),
   ],
-  providers: [UsersService, DirectionsService, RolesService, ProfilsService, InterimsService, LdapDirectoryService, AuthorizationService],
+  providers: [UsersService, DirectionsService, RolesService, ProfilsService, InterimsService, LdapDirectoryService, AuthorizationService, AuditPermissionService],
   controllers: [
     UsersController,
     DirectionsController,

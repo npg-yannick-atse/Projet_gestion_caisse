@@ -2,61 +2,101 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Search, Trash2 } from 'lucide-react';
-import { useCostCenters, useCreateCostCenter, useDeleteCostCenter } from '@/api/referentiel';
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  useCostCenters,
+  useCreateCostCenter,
+  useUpdateCostCenter,
+  useDeleteCostCenter,
+} from '@/api/referentiel';
 import { useDirections } from '@/api/directions';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
+import type { CostCenter } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { PowerOff } from 'lucide-react';
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const schema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   directionId: z.string().optional(),
-  budgetAnnuel: z
+  budgetMensuel: z
     .string()
     .optional()
     .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
 });
 type FormValues = z.infer<typeof schema>;
 
-function CreateCostCenterForm({ onDone }: { onDone: () => void }) {
+function CostCenterForm({ costCenter, onDone }: { costCenter?: CostCenter; onDone: () => void }) {
+  const isEdit = !!costCenter;
   const { data: directions } = useDirections();
   const create = useCreateCostCenter();
+  const update = useUpdateCostCenter();
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: costCenter
+      ? {
+          code: costCenter.code,
+          libelle: costCenter.libelle,
+          directionId: costCenter.directionId ?? '',
+          budgetMensuel: costCenter.budgetMensuel ?? '',
+        }
+      : undefined,
+  });
+
+  const pending = create.isPending || update.isPending;
+  const mutError = create.error || update.error;
+  const hasError = create.isError || update.isError;
 
   const onSubmit = handleSubmit((values) => {
-    const payload = {
-      code: values.code,
-      libelle: values.libelle,
-      directionId: values.directionId || undefined,
-      budgetAnnuel: values.budgetAnnuel || undefined,
+    const done = () => {
+      reset();
+      onDone();
     };
-    create.mutate(payload, {
-      onSuccess: () => {
-        reset();
-        onDone();
-      },
-    });
+    if (isEdit) {
+      // Le code n'est pas modifiable : on n'envoie que les champs éditables.
+      update.mutate(
+        {
+          id: costCenter!.id,
+          payload: {
+            libelle: values.libelle,
+            directionId: values.directionId ?? '',
+            budgetMensuel: values.budgetMensuel ?? '',
+          },
+        },
+        { onSuccess: done },
+      );
+    } else {
+      create.mutate(
+        {
+          code: values.code,
+          libelle: values.libelle,
+          directionId: values.directionId || undefined,
+          budgetMensuel: values.budgetMensuel || undefined,
+        },
+        { onSuccess: done },
+      );
+    }
   });
 
   return (
     <Panel>
-      <PanelHeader title="Nouveau centre de coût" />
+      <PanelHeader title={isEdit ? `Modifier le centre ${costCenter!.code}` : 'Nouveau centre de coût'} />
       <form onSubmit={onSubmit} className="grid gap-4 p-[18px] sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="code">Code</Label>
-          <Input id="code" {...register('code')} />
+          <Label htmlFor="code">Code{isEdit && ' (non modifiable)'}</Label>
+          <Input id="code" disabled={isEdit} {...register('code')} />
           {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
         </div>
         <div className="space-y-1.5">
@@ -76,19 +116,21 @@ function CreateCostCenterForm({ onDone }: { onDone: () => void }) {
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="budgetAnnuel">Budget annuel (optionnel)</Label>
-          <Input id="budgetAnnuel" inputMode="decimal" placeholder="0" {...register('budgetAnnuel')} />
-          {errors.budgetAnnuel && <p className="text-sm text-destructive">{errors.budgetAnnuel.message}</p>}
+          <Label htmlFor="budgetMensuel">Budget mensuel (optionnel)</Label>
+          <Input id="budgetMensuel" inputMode="decimal" placeholder="0" {...register('budgetMensuel')} />
+          {errors.budgetMensuel && <p className="text-sm text-destructive">{errors.budgetMensuel.message}</p>}
         </div>
         <div className="flex items-center gap-2 sm:col-span-2">
-          <Button type="submit" disabled={create.isPending}>
-            {create.isPending ? 'Création…' : 'Créer'}
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Créer'}
           </Button>
           <Button type="button" variant="ghost" onClick={onDone}>
             Annuler
           </Button>
-          {create.isError && (
-            <p className="text-sm text-destructive">{apiErrorMessage(create.error, 'Création impossible')}</p>
+          {hasError && (
+            <p className="text-sm text-destructive">
+              {apiErrorMessage(mutError, isEdit ? 'Modification impossible' : 'Création impossible')}
+            </p>
           )}
         </div>
       </form>
@@ -101,7 +143,22 @@ export function CostCentersPage() {
   const { data: directions } = useDirections();
   const remove = useDeleteCostCenter();
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<CostCenter | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CostCenter | null>(null);
   const [search, setSearch] = useState('');
+
+  const openCreate = () => {
+    setEditing(null);
+    setShowForm(true);
+  };
+  const openEdit = (c: CostCenter) => {
+    setEditing(c);
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
+  };
 
   const directionLabel = useMemo(
     () => new Map((directions ?? []).map((d) => [d.id, `${d.code} — ${d.libelle}`])),
@@ -117,14 +174,16 @@ export function CostCentersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreateCostCenterForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <CostCenterForm key={editing?.id ?? 'new'} costCenter={editing ?? undefined} onDone={closeForm} />
+      )}
 
       <Panel>
         <PanelHeader title="Centres de coût" badge={`${costCenters?.length ?? 0}`}>
           {!showForm && (
             <button
               type="button"
-              onClick={() => setShowForm(true)}
+              onClick={openCreate}
               className="ml-auto flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5]"
             >
               <Plus className="h-4 w-4" /> Nouveau centre
@@ -152,7 +211,7 @@ export function CostCentersPage() {
                 <th className="px-4 py-2.5 font-semibold">Code</th>
                 <th className="px-4 py-2.5 font-semibold">Libellé</th>
                 <th className="px-4 py-2.5 font-semibold">Direction</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Budget annuel</th>
+                <th className="px-4 py-2.5 text-right font-semibold">Budget mensuel</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -174,20 +233,27 @@ export function CostCentersPage() {
                     {c.directionId ? (directionLabel.get(c.directionId) ?? c.directionId) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
-                    {c.budgetAnnuel ? formatMontant(c.budgetAnnuel) : '—'}
+                    {c.budgetMensuel ? formatMontant(c.budgetMensuel) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      aria-label="Désactiver"
-                      disabled={remove.isPending}
-                      onClick={() => {
-                        if (confirm(`Désactiver le centre ${c.code} ?`)) remove.mutate(c.id);
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        aria-label="Modifier"
+                        onClick={() => openEdit(c)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Désactiver"
+                        onClick={() => setPendingDelete(c)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -195,6 +261,29 @@ export function CostCentersPage() {
           </table>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="warning"
+        icon={PowerOff}
+        title={pendingDelete ? `Désactiver le centre ${pendingDelete.code} ?` : ''}
+        description={
+          pendingDelete
+            ? `« ${pendingDelete.libelle} » n'apparaîtra plus dans les listes de sélection. Les bons et natures d'opération existants ne sont pas affectés.`
+            : undefined
+        }
+        confirmLabel="Désactiver"
+        busy={remove.isPending}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
+        onCancel={() => {
+          setPendingDelete(null);
+          remove.reset();
+        }}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) });
+        }}
+      />
     </div>
   );
 }

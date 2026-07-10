@@ -8,6 +8,7 @@ import { apiErrorMessage, cn } from '@/lib/utils';
 import type { Interim, InterimStatut } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
@@ -204,6 +205,7 @@ function InterimsPageInner() {
   const { data: permissions } = usePermissions();
   const revoke = useRevokeInterim();
   const [showForm, setShowForm] = useState(false);
+  const [pendingRevoke, setPendingRevoke] = useState<Interim | null>(null);
 
   const userById = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
   const roleById = useMemo(() => new Map((roles ?? []).map((r) => [r.id, r])), [roles]);
@@ -286,9 +288,7 @@ function InterimsPageInner() {
                           <button
                             type="button"
                             disabled={revoke.isPending}
-                            onClick={() => {
-                              if (confirm(`Révoquer cet intérim ?`)) revoke.mutate(i.id);
-                            }}
+                            onClick={() => setPendingRevoke(i)}
                             title="Révoquer"
                             className="inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2.5 py-1 text-[11px] font-medium text-[#B42318] hover:bg-[#FEF3F2] disabled:opacity-60"
                           >
@@ -304,6 +304,18 @@ function InterimsPageInner() {
           </div>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!pendingRevoke}
+        variant="warning"
+        title="Révoquer cet intérim ?"
+        description="L'intérim sera révoqué : le remplaçant perdra les droits associés."
+        confirmLabel="Révoquer"
+        busy={revoke.isPending}
+        error={revoke.isError ? apiErrorMessage(revoke.error, 'Révocation impossible') : undefined}
+        onCancel={() => { setPendingRevoke(null); revoke.reset(); }}
+        onConfirm={() => { if (pendingRevoke) revoke.mutate(pendingRevoke.id, { onSuccess: () => setPendingRevoke(null) }); }}
+      />
     </div>
   );
 }

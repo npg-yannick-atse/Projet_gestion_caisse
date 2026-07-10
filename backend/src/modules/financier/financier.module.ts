@@ -21,6 +21,7 @@ import { DemandesTransfertService } from './demandes-transfert.service';
 import { DemandesTransfertController } from './demandes-transfert.controller';
 import { DemandesRechargeService } from './demandes-recharge.service';
 import { DemandesRechargeController } from './demandes-recharge.controller';
+import { CaisseAutoCloseJob } from './jobs/caisse-auto-close.job';
 import { TransactionnelModule } from '@modules/transactionnel/transactionnel.module';
 import { SecurityModule } from '@modules/security/security.module';
 
@@ -47,6 +48,7 @@ import { SecurityModule } from '@modules/security/security.module';
     PortefeuillesService,
     DemandesTransfertService,
     DemandesRechargeService,
+    CaisseAutoCloseJob,
   ],
   controllers: [
     CaissesController,

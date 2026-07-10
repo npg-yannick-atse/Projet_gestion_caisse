@@ -386,7 +386,27 @@ export function BonsPage() {
                   <td className="px-4 py-3">
                     <StatutBadge statut={bon.statut} />
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMontant(bon.montantTotal)}</td>
+                  <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                    {(() => {
+                      // Bon entièrement traité + montant effectif différent du demandé
+                      // => on affiche le montant réellement décaissé (ajusté), l'original barré.
+                      const traite = bon.statut === 'DECAISSE' || bon.statut === 'COMPTABILISE';
+                      const eff = bon.montantDecaisse;
+                      const ajuste =
+                        traite && eff != null && String(eff) !== String(bon.montantTotal);
+                      if (ajuste) {
+                        return (
+                          <span title="Montant ajusté au décaissement">
+                            <span className="block text-[#0F172A]">{formatMontant(eff!)}</span>
+                            <span className="block text-[10px] font-normal text-[#94A3B8] line-through">
+                              {formatMontant(bon.montantTotal)}
+                            </span>
+                          </span>
+                        );
+                      }
+                      return formatMontant(bon.montantTotal);
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-[#64748B]">{new Date(bon.createdAt).toLocaleDateString('fr-FR')}</td>
                   <td className="px-4 py-3">
                     <RowActions bon={bon} canValidate={isValidateur} />

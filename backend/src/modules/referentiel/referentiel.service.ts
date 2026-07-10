@@ -8,8 +8,13 @@ import { NatureOperation } from './entities/nature-operation.entity';
 import { NatureComptable } from './entities/nature-comptable.entity';
 import { PlanComptable } from './entities/plan-comptable.entity';
 import { Site } from './entities/site.entity';
+import { Pays } from './entities/pays.entity';
+import { Division } from './entities/division.entity';
+import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
+import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
 import { CreatePartenaireDto } from './dto/create-partenaire.dto';
 import { CreateCostCenterDto } from './dto/create-cost-center.dto';
+import { UpdateCostCenterDto } from './dto/update-cost-center.dto';
 import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
 import { UpdateNatureOperationDto } from './dto/update-nature-operation.dto';
 import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
@@ -31,7 +36,80 @@ export class ReferentielService {
     private readonly planComptableRepo: Repository<PlanComptable>,
     @InjectRepository(Site)
     private readonly siteRepo: Repository<Site>,
+    @InjectRepository(Pays)
+    private readonly paysRepo: Repository<Pays>,
+    @InjectRepository(Division)
+    private readonly divisionRepo: Repository<Division>,
   ) {}
+
+  // ---------- Pays ----------
+  listPays(): Promise<Pays[]> {
+    return this.paysRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+  }
+
+  async createPays(dto: CreatePaysDto, userId: string): Promise<Pays> {
+    // withDeleted : le code a une contrainte UNIQUE en base qui compte aussi les
+    // lignes soft-deleted → un code déjà supprimé doit renvoyer 409, pas une erreur SQL brute.
+    const existing = await this.paysRepo.findOne({ where: { code: dto.code }, withDeleted: true });
+    if (existing) throw new ConflictException(`Un pays avec le code ${dto.code} existe déjà`);
+    return this.paysRepo.save(
+      this.paysRepo.create({ code: dto.code, libelle: dto.libelle, estActif: true, createdById: userId as any }),
+    );
+  }
+
+  async deletePays(id: string, userId: string): Promise<void> {
+    const p = await this.paysRepo.findOne({ where: { id } });
+    if (!p) throw new NotFoundException(`Pays ${id} introuvable`);
+    p.estActif = false;
+    p.deletedAt = new Date();
+    p.deletedById = userId as any;
+    await this.paysRepo.save(p);
+  }
+
+  // ---------- Division ----------
+  listDivisions(paysId?: string): Promise<Division[]> {
+    return this.divisionRepo.find({
+      where: { estActif: true, ...(paysId ? { paysId } : {}) },
+      order: { libelle: 'ASC' },
+    });
+  }
+
+  async createDivision(dto: CreateDivisionDto, userId: string): Promise<Division> {
+    const pays = await this.paysRepo.findOne({ where: { id: dto.paysId } });
+    if (!pays) throw new NotFoundException(`Pays ${dto.paysId} introuvable`);
+    // Code optionnel : dérivé du libellé (slug MAJUSCULE), rendu unique par pays.
+    // Colonne ref_division.code = 20 : on préserve jusqu'à 20 caractères (au lieu de
+    // tronquer à 16), et on réserve la place du suffixe « _N » en cas de collision.
+    const base =
+      (dto.code?.trim() || dto.libelle.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_'))
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 20) || 'DIV';
+    let code = base;
+    let n = 1;
+    while (await this.divisionRepo.findOne({ where: { paysId: dto.paysId, code } })) {
+      const suffix = `_${++n}`;
+      code = `${base.slice(0, 20 - suffix.length)}${suffix}`;
+      if (n > 99) throw new ConflictException('Trop de divisions similaires pour ce pays');
+    }
+    return this.divisionRepo.save(
+      this.divisionRepo.create({
+        code,
+        libelle: dto.libelle.trim(),
+        paysId: dto.paysId,
+        estActif: true,
+        createdById: userId as any,
+      }),
+    );
+  }
+
+  async deleteDivision(id: string, userId: string): Promise<void> {
+    const d = await this.divisionRepo.findOne({ where: { id } });
+    if (!d) throw new NotFoundException(`Division ${id} introuvable`);
+    d.estActif = false;
+    d.deletedAt = new Date();
+    d.deletedById = userId as any;
+    await this.divisionRepo.save(d);
+  }
 
   listPartenaires(type?: TypePartenaire): Promise<Partenaire[]> {
     return this.partenaireRepo.find({
@@ -95,11 +173,38 @@ export class ReferentielService {
       code: dto.code,
       libelle: dto.libelle,
       directionId: dto.directionId ?? null,
-      budgetAnnuel: dto.budgetAnnuel ?? null,
+      budgetMensuel: dto.budgetMensuel ?? null,
       estActif: true,
       createdById: userId as any,
     });
-    return this.costCenterRepo.save(cc);
+    const saved = await this.costCenterRepo.save(cc);
+    await this.propagerBudgetAuxPortefeuilles(saved);
+    return saved;
+  }
+
+  async updateCostCenter(id: string, dto: UpdateCostCenterDto, userId: string): Promise<CostCenter> {
+    const cc = await this.findCostCenter(id);
+    // Le code n'est pas modifiable (référencé ailleurs) : on n'édite que ces champs.
+    if (dto.libelle !== undefined) cc.libelle = dto.libelle;
+    if (dto.directionId !== undefined) cc.directionId = dto.directionId || null;
+    if (dto.budgetMensuel !== undefined) cc.budgetMensuel = dto.budgetMensuel || null;
+    cc.updatedById = userId as any;
+    const saved = await this.costCenterRepo.save(cc);
+    await this.propagerBudgetAuxPortefeuilles(saved);
+    return saved;
+  }
+
+  /**
+   * Répercute le budget mensuel d'un centre de coût sur les portefeuilles de sa
+   * direction (règle : une direction = un centre de coût, et le portefeuille de
+   * direction hérite du budget du CC, non modifiable).
+   */
+  private async propagerBudgetAuxPortefeuilles(cc: CostCenter): Promise<void> {
+    if (!cc.directionId) return;
+    await this.costCenterRepo.manager.getRepository(Portefeuille).update(
+      { proprietaireType: 'DIRECTION' as any, proprietaireId: cc.directionId as any },
+      { budgetMensuel: cc.budgetMensuel ?? null },
+    );
   }
 
   async deleteCostCenter(id: string, userId: string): Promise<void> {

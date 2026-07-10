@@ -114,8 +114,14 @@ function BonLifecycleRow({ bon }: { bon: Bon }) {
 
 function BudgetGauge({ portefeuilleId, label }: { portefeuilleId: string; label: string }) {
   const { data } = usePortefeuilleSolde(portefeuilleId);
-  const dispo = Number(data?.solde ?? 0);
-  const alloue = Number(data?.soldeInitial ?? 0);
+  // Budget mensuel (si défini) : le plafond est budgetMensuel et le « disponible du mois »
+  // est le solde des écritures (solde courant − soldeInitial), cohérent avec la garde de décaissement.
+  const soldeInitial = Number(data?.soldeInitial ?? 0);
+  const soldeCourant = Number(data?.solde ?? 0);
+  const budgetMensuel = data?.budgetMensuel != null ? Number(data.budgetMensuel) : null;
+  const mensuel = budgetMensuel != null;
+  const alloue = mensuel ? budgetMensuel : soldeInitial;
+  const dispo = mensuel ? soldeCourant - soldeInitial : soldeCourant;
   const consomme = Math.max(0, alloue - dispo);
   const pct = alloue > 0 ? Math.min(100, (consomme / alloue) * 100) : 0;
   const hasBudget = alloue > 0;
@@ -131,7 +137,10 @@ function BudgetGauge({ portefeuilleId, label }: { portefeuilleId: string; label:
   return (
     <div className="rounded-[12px] border border-[rgba(15,76,129,0.08)] bg-white p-4">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-[11px] uppercase tracking-[0.8px] text-[#64748B]">{label}</span>
+        <span className="text-[11px] uppercase tracking-[0.8px] text-[#64748B]">
+          {label}
+          {mensuel && <span className="ml-1 normal-case text-[#1A6DB5]">· ce mois</span>}
+        </span>
         {hasBudget ? (
           <span className="font-display text-[14px] font-semibold tabular-nums text-[#0F172A]">
             {Math.round(pct)} %
@@ -248,9 +257,9 @@ export function DemandeurDashboard({ user }: Props) {
         />
         <Kpi
           icon={XCircle}
-          label="Bons rejetés"
-          value={countBy('REFUSE')}
-          sub="Refusés au total"
+          label="Rejetés / annulés"
+          value={countByList(['REFUSE', 'ANNULE'])}
+          sub="Refusés ou annulés"
           tone="red"
           to="/bons"
           searchObj={{ statut: 'REFUSE' }}

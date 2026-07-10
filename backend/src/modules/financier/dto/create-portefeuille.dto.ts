@@ -43,4 +43,9 @@ export class CreatePortefeuilleDto {
   @IsOptional()
   @IsNumberString()
   soldeInitial?: string;
+
+  @ApiProperty({ required: false, description: 'Plafond budgétaire mensuel (réajusté chaque mois, sans report). Vide = pas de plafond mensuel.' })
+  @IsOptional()
+  @IsNumberString()
+  budgetMensuel?: string;
 }

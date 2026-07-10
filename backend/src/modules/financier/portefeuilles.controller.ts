@@ -63,10 +63,26 @@ export class PortefeuillesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lister les portefeuilles actifs (filtrable par caisse source)' })
+  @ApiOperation({
+    summary:
+      'Lister les portefeuilles visibles par l’utilisateur (les siens + ceux de sa direction ; tout pour admin/caissier)',
+  })
   @ApiQuery({ name: 'caisseId', required: false })
-  findAll(@Query('caisseId') caisseId?: string) {
-    return this.portefeuillesService.findAll(caisseId);
+  async findAll(@CurrentUser() user: JwtPayload, @Query('caisseId') caisseId?: string) {
+    // Périmètre de visibilité piloté par PERMISSION :
+    //   « voit tout » = permission PORTEFEUILLE_VOIR_TOUS (assignable aux rôles / profils
+    //   via le back-office). Les admins (SUPER_ADMIN / ADMINISTRATEUR, et DAF par
+    //   expansion) passent toujours. Les autres ne voient que leurs portefeuilles
+    //   (possédés, gérés, ou ceux de leur direction).
+    const seeAll =
+      (await this.authz.isAdmin(user.sub)) ||
+      (await this.authz.hasPermission(user.sub, 'PORTEFEUILLE_VOIR_TOUS'));
+    if (seeAll) return this.portefeuillesService.findAll(caisseId);
+
+    // Un périmètre `null` ici (admins déjà couverts) = aucun portefeuille rattaché
+    // → liste vide (pas de repli "tout voir").
+    const perim = await this.authz.getPortefeuillePerimeter(user.sub);
+    return this.portefeuillesService.findByIds(perim ? [...perim] : [], caisseId);
   }
 
   @Get(':id')
@@ -78,7 +94,7 @@ export class PortefeuillesController {
   @Get(':id/solde')
   @ApiOperation({ summary: 'Solde courant du portefeuille (calculé depuis les écritures)' })
   async getSolde(@Param('id') id: string) {
-    const { solde, soldeInitial } = await this.portefeuillesService.getSoldeDetail(id);
-    return { portefeuilleId: id, typeCompte: 'PORTEFEUILLE', solde, soldeInitial };
+    const { solde, soldeInitial, budgetMensuel } = await this.portefeuillesService.getSoldeDetail(id);
+    return { portefeuilleId: id, typeCompte: 'PORTEFEUILLE', solde, soldeInitial, budgetMensuel };
   }
 }

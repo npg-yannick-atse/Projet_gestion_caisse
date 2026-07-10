@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -11,12 +12,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Bon } from './entities/bon.entity';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BonsService } from './bons.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
 import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
 
 /**
@@ -42,10 +43,14 @@ interface CreateBonRequest {
     codeManutention: string;
     costCenterId: string;
     natureOperationId?: string | null;
+    natureComptableId?: string | null;
     caisseId: string;
     portefeuilleId: string;
     deviseId: string;
     numeroClient?: string;
+    nomClient?: string;
+    paysId?: string;
+    divisionId?: string;
     description?: string;
   }>;
   estRecurrent?: boolean;
@@ -80,6 +85,27 @@ export class BonsController {
     const codes = await this.authz.getUserRoleCodes(user.sub);
     const privileged = Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c));
     return privileged ? clientDemandeurId : user.sub;
+  }
+
+  /**
+   * Charge un bon en vérifiant le droit de LECTURE (anti-IDOR) : mêmes règles que la
+   * liste — les rôles privilégiés voient tout, sinon on ne voit que ses propres bons.
+   * Lève NotFound si le bon n'existe pas, Forbidden s'il est hors périmètre.
+   */
+  private async loadReadableBon(user: JwtPayload, id: string): Promise<Bon> {
+    const bon = await this.bonsService.findOne(id);
+    // Son propre bon : toujours lisible.
+    if (String(bon.demandeurId) === String(user.sub)) return bon;
+    // Rôle privilégié : voit tous les bons.
+    const codes = await this.authz.getUserRoleCodes(user.sub);
+    if (Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c))) return bon;
+    // Droit métier accordé via un PROFIL (sans rôle privilégié) : quiconque peut
+    // valider ou décaisser un bon doit pouvoir le lire pour agir dessus.
+    const canByPermission =
+      (await this.authz.hasPermission(user.sub, 'BON_DECAISSER')) ||
+      (await this.authz.hasPermission(user.sub, 'BON_VALIDER'));
+    if (canByPermission) return bon;
+    throw new ForbiddenException("Vous n'avez pas accès à ce bon.");
   }
 
   @Post()
@@ -172,20 +198,29 @@ export class BonsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtenir un bon par id' })
-  async findOne(@Param('id') id: string) {
-    return this.bonsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.loadReadableBon(user, id);
   }
 
   @Get(':id/soubons')
   @ApiOperation({ summary: 'Lister les sous-bons d\'un bon' })
-  async getSoubons(@Param('id') id: string) {
+  async getSoubons(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.loadReadableBon(user, id); // contrôle d'accès au bon parent
     return this.bonsService.getSousBoinsOfBon(id);
   }
 
   @Get(':id/impression')
   @ApiOperation({ summary: 'Obtenir la dernière impression du bon (null si non imprimé)' })
-  async getImpression(@Param('id') id: string) {
+  async getImpression(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.loadReadableBon(user, id); // contrôle d'accès au bon parent
     return this.bonsService.getLatestImpression(id);
+  }
+
+  @Get(':id/validations')
+  @ApiOperation({ summary: 'Historique des validations du bon (validateur, décision, commentaire)' })
+  async getValidations(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.loadReadableBon(user, id); // contrôle d'accès au bon parent
+    return this.bonsService.getValidations(id);
   }
 
   @Patch(':id')
@@ -262,13 +297,13 @@ export class BonsController {
   }
 
   @Post(':id/decaisser')
-  @Roles('CAISSIER')
-  @ApiOperation({ summary: 'Décaisser un bon (caissier uniquement)' })
+  @ApiOperation({ summary: 'Décaisser un bon (permission BON_DECAISSER)' })
   async decaisser(
     @Param('id') id: string,
     @Body() dto: { beneficiaire: string; beneficiairePiece?: string; modifications?: any },
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'décaisser un bon');
     return this.bonsService.decaisserBon(id, user.sub, dto.beneficiaire, dto.beneficiairePiece, dto.modifications);
   }
 

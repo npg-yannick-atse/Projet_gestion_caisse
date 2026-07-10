@@ -447,6 +447,7 @@ CREATE TABLE dbo.ref_type_bon (
     requiert_numero_client      BIT NOT NULL CONSTRAINT DF_ref_tb_nc DEFAULT 0,
     requiert_partenaire         BIT NOT NULL CONSTRAINT DF_ref_tb_p DEFAULT 1,
     requiert_bl                 BIT NOT NULL CONSTRAINT DF_ref_tb_bl DEFAULT 1,
+    requiert_nom_client         BIT NOT NULL CONSTRAINT DF_ref_tb_nomc DEFAULT 0,
     est_actif                   BIT NOT NULL CONSTRAINT DF_ref_tb_actif DEFAULT 1,
     created_at                  DATETIME2(3) NOT NULL CONSTRAINT DF_ref_tb_created DEFAULT SYSUTCDATETIME(),
     created_by_id               BIGINT NULL,
@@ -457,6 +458,57 @@ CREATE TABLE dbo.ref_type_bon (
     version                     INT NOT NULL CONSTRAINT DF_ref_tb_version DEFAULT 1,
     CONSTRAINT PK_ref_type_bon PRIMARY KEY CLUSTERED (id),
     CONSTRAINT UQ_ref_type_bon_code UNIQUE (code)
+);
+GO
+
+/* -- Pays / Division (référentiel pour les restitutions client) ------------- */
+IF OBJECT_ID('dbo.ref_pays', 'U') IS NULL
+CREATE TABLE dbo.ref_pays (
+    id              BIGINT IDENTITY(1,1) NOT NULL,
+    code            NVARCHAR(10)  NOT NULL,
+    libelle         NVARCHAR(150) NOT NULL,
+    est_actif       BIT NOT NULL CONSTRAINT DF_ref_pays_actif DEFAULT 1,
+    created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_ref_pays_created DEFAULT SYSUTCDATETIME(),
+    created_by_id   BIGINT NULL,
+    updated_at      DATETIME2(3) NULL,
+    updated_by_id   BIGINT NULL,
+    deleted_at      DATETIME2(3) NULL,
+    deleted_by_id   BIGINT NULL,
+    version         INT NOT NULL CONSTRAINT DF_ref_pays_version DEFAULT 1,
+    CONSTRAINT PK_ref_pays PRIMARY KEY CLUSTERED (id),
+    CONSTRAINT UQ_ref_pays_code UNIQUE (code)
+);
+GO
+
+IF OBJECT_ID('dbo.ref_division', 'U') IS NULL
+CREATE TABLE dbo.ref_division (
+    id              BIGINT IDENTITY(1,1) NOT NULL,
+    code            NVARCHAR(20)  NOT NULL,
+    libelle         NVARCHAR(150) NOT NULL,
+    pays_id         BIGINT NOT NULL,
+    est_actif       BIT NOT NULL CONSTRAINT DF_ref_div_actif DEFAULT 1,
+    created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_ref_div_created DEFAULT SYSUTCDATETIME(),
+    created_by_id   BIGINT NULL,
+    updated_at      DATETIME2(3) NULL,
+    updated_by_id   BIGINT NULL,
+    deleted_at      DATETIME2(3) NULL,
+    deleted_by_id   BIGINT NULL,
+    version         INT NOT NULL CONSTRAINT DF_ref_div_version DEFAULT 1,
+    CONSTRAINT PK_ref_division PRIMARY KEY CLUSTERED (id),
+    CONSTRAINT UQ_ref_division_code UNIQUE (pays_id, code),
+    CONSTRAINT FK_ref_division_pays FOREIGN KEY (pays_id) REFERENCES dbo.ref_pays(id)
+);
+GO
+
+IF OBJECT_ID('dbo.sec_user_division_access', 'U') IS NULL
+CREATE TABLE dbo.sec_user_division_access (
+    user_id         BIGINT NOT NULL,
+    division_id     BIGINT NOT NULL,
+    created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_sec_uda_created DEFAULT SYSUTCDATETIME(),
+    created_by_id   BIGINT NULL,
+    CONSTRAINT PK_sec_user_division_access PRIMARY KEY CLUSTERED (user_id, division_id),
+    CONSTRAINT FK_sec_uda_user FOREIGN KEY (user_id) REFERENCES dbo.sec_user(id),
+    CONSTRAINT FK_sec_uda_division FOREIGN KEY (division_id) REFERENCES dbo.ref_division(id)
 );
 GO
 
@@ -659,8 +711,11 @@ CREATE TABLE dbo.trx_sous_bon (
     description                 NVARCHAR(MAX) NULL,
     montant                     DECIMAL(19,4) NOT NULL,
     montant_a_payer_client      DECIMAL(19,4) NULL,
-    partenaire_id               BIGINT NOT NULL,
+    partenaire_id               BIGINT NULL,
     numero_client               NVARCHAR(50)  NULL,
+    nom_client                  NVARCHAR(150) NULL,
+    pays_id                     BIGINT NULL,
+    division_id                 BIGINT NULL,
     numero_bl                   NVARCHAR(100) NOT NULL,
     code_manutention            NVARCHAR(100) NOT NULL,
     nature_comptable_id         BIGINT NULL,
@@ -1474,8 +1529,8 @@ GO
 
 /* -- Types de bon de base --------------------------------------------------- */
 IF NOT EXISTS (SELECT 1 FROM dbo.ref_type_bon WHERE code = N'RESTITUTION_CLIENT')
-    INSERT INTO dbo.ref_type_bon(code, libelle, description, requiert_numero_client, requiert_partenaire, requiert_bl)
-    VALUES (N'RESTITUTION_CLIENT', N'Restitution Client', N'Restitution d''avance ou de caution client', 1, 1, 1);
+    INSERT INTO dbo.ref_type_bon(code, libelle, description, requiert_numero_client, requiert_partenaire, requiert_bl, requiert_nom_client)
+    VALUES (N'RESTITUTION_CLIENT', N'Restitution Client', N'Restitution d''avance ou de caution client', 1, 0, 0, 1);
 IF NOT EXISTS (SELECT 1 FROM dbo.ref_type_bon WHERE code = N'ACHAT')
     INSERT INTO dbo.ref_type_bon(code, libelle, description, requiert_numero_client, requiert_partenaire, requiert_bl)
     VALUES (N'ACHAT', N'Achat', N'Bon d''achat fournisseur', 0, 1, 1);
@@ -1512,10 +1567,14 @@ IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'PORTEFEUILLE_MODI
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'PORTEFEUILLE_MODIFIER', N'Creer / modifier / (des)activer un portefeuille', N'PORTEFEUILLE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'PORTEFEUILLE_SUPPRIMER')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'PORTEFEUILLE_SUPPRIMER', N'Supprimer un portefeuille', N'PORTEFEUILLE');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'PORTEFEUILLE_VOIR_TOUS')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'PORTEFEUILLE_VOIR_TOUS', N'Voir tous les portefeuilles (au-dela de son perimetre)', N'PORTEFEUILLE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'CAISSE_PRINCIPAL_CHOISIR')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'CAISSE_PRINCIPAL_CHOISIR', N'Choisir la caisse principale lors d''un bon', N'BON');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'BON_MODIFIER_SPEC')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'BON_MODIFIER_SPEC', N'Modifier un bon specifique', N'BON');
+IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'BON_ANNULER')
+    INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'BON_ANNULER', N'Annuler le bon d''un autre utilisateur', N'BON');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'TRANSFERT_INITIER')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'TRANSFERT_INITIER', N'Initier un transfert', N'CAISSE');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'INTERIM_DECLARER')
@@ -1524,6 +1583,46 @@ IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'ADMIN_USER')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'ADMIN_USER', N'Administrer les utilisateurs', N'ADMIN');
 IF NOT EXISTS (SELECT 1 FROM dbo.sec_permission WHERE code = N'ADMIN_ROLE')
     INSERT INTO dbo.sec_permission(code, libelle, module) VALUES (N'ADMIN_ROLE', N'Administrer les roles et profils', N'ADMIN');
+GO
+
+/* -- Câblage rôle → permission (sec_role_permission) ------------------------ */
+;WITH mapping(role_code, perm_code) AS (
+    SELECT rc, pc FROM (VALUES
+        (N'DEMANDEUR',                 N'BON_CREER'),
+        (N'VALIDATEUR',                N'BON_CREER'),
+        (N'VALIDATEUR',                N'BON_VALIDER'),
+        (N'VALIDATEUR',                N'BON_SIGNER'),
+        (N'VALIDATEUR',                N'BON_MODIFIER_SPEC'),
+        (N'VALIDATEUR',                N'BON_ANNULER'),
+        (N'VALIDATEUR',                N'EXTENSION_APPROUVER'),
+        (N'CAISSIER',                  N'BON_CREER'),
+        (N'CAISSIER',                  N'BON_DECAISSER'),
+        (N'CAISSIER',                  N'BON_SIGNER'),
+        (N'CAISSIER',                  N'CAISSE_OUVRIR'),
+        (N'CAISSIER',                  N'CAISSE_CLOTURER'),
+        (N'CAISSIER',                  N'TRANSFERT_INITIER'),
+        (N'CAISSIER',                  N'PORTEFEUILLE_VOIR_TOUS'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'BON_CREER'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'PORTEFEUILLE_MODIFIER'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'PORTEFEUILLE_VOIR_TOUS'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'EXTENSION_APPROUVER'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'TRANSFERT_INITIER'),
+        (N'GESTIONNAIRE_PORTEFEUILLE', N'INTERIM_DECLARER')
+    ) AS m(rc, pc)
+)
+INSERT INTO dbo.sec_role_permission(role_id, permission_id)
+SELECT r.id, p.id
+FROM mapping m
+JOIN dbo.sec_role r ON r.code = m.role_code
+JOIN dbo.sec_permission p ON p.code = m.perm_code
+WHERE NOT EXISTS (SELECT 1 FROM dbo.sec_role_permission rp WHERE rp.role_id = r.id AND rp.permission_id = p.id);
+
+INSERT INTO dbo.sec_role_permission(role_id, permission_id)
+SELECT r.id, p.id
+FROM dbo.sec_role r
+CROSS JOIN dbo.sec_permission p
+WHERE r.code IN (N'SUPER_ADMIN', N'ADMINISTRATEUR', N'DAF')
+  AND NOT EXISTS (SELECT 1 FROM dbo.sec_role_permission rp WHERE rp.role_id = r.id AND rp.permission_id = p.id);
 GO
 
 

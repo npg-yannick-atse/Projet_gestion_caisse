@@ -44,6 +44,17 @@ export function DashboardPage() {
   }
 
   const roleCodes = new Set<RoleCode>((userRoles ?? []).map((r) => r.code));
+
+  // Compte sans aucun rôle : on n'affiche PAS un tableau de bord « demandeur » par
+  // défaut. (Le Layout bloque déjà l'accès ; garde-fou supplémentaire ici.)
+  if (roleCodes.size === 0) {
+    return (
+      <div className="rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white p-8 text-center text-sm text-[#475569]">
+        Aucun rôle n'est attribué à votre compte. Contactez un administrateur pour obtenir vos accès.
+      </div>
+    );
+  }
+
   // effectivePersona respecte le choix explicite de l'utilisateur s'il a toujours
   // le rôle correspondant, sinon retombe sur la priorité par défaut.
   const persona = effectivePersona(roleCodes, activePersona);

@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -11,9 +12,13 @@ import { SessionCaisse, TypeCloture } from './entities/session-caisse.entity';
 import { CreateCaisseDto } from './dto/create-caisse.dto';
 import { UpdateCaisseDto } from './dto/update-caisse.dto';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
+import { Role } from '@modules/security/entities/role.entity';
+import { UserRole } from '@modules/security/entities/user-role.entity';
 
 @Injectable()
 export class CaissesService {
+  private readonly logger = new Logger('CaissesService');
+
   constructor(
     @InjectRepository(Caisse)
     private readonly caisseRepo: Repository<Caisse>,
@@ -185,5 +190,52 @@ export class CaissesService {
 
       return session;
     });
+  }
+
+  /**
+   * Clôture automatique de toutes les caisses encore ouvertes (job planifié 20h).
+   * Chaque caisse est clôturée indépendamment (type AUTO_20H, solde = solde calculé
+   * depuis les écritures) au nom de l'utilisateur « système » ; un échec sur une
+   * caisse n'interrompt pas les autres. Idempotent : une caisse déjà fermée est ignorée.
+   */
+  async autoCloseAll(): Promise<{ closed: number; failed: number }> {
+    const systemUserId = await this.resolveSystemUserId();
+    if (!systemUserId) {
+      this.logger.warn(
+        'Clôture automatique 20h ignorée : aucun utilisateur administrateur trouvé (acteur système).',
+      );
+      return { closed: 0, failed: 0 };
+    }
+
+    const ouvertes = await this.caisseRepo.find({ where: { statut: 'OUVERTE' } });
+    if (ouvertes.length === 0) return { closed: 0, failed: 0 };
+
+    let closed = 0;
+    let failed = 0;
+    for (const caisse of ouvertes) {
+      try {
+        await this.close(String(caisse.id), systemUserId, undefined, 'AUTO_20H');
+        closed++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(
+          `Clôture automatique de la caisse ${caisse.code} échouée : ${(e as Error).message}`,
+        );
+      }
+    }
+    this.logger.log(`Clôture automatique 20h : ${closed} caisse(s) clôturée(s), ${failed} échec(s).`);
+    return { closed, failed };
+  }
+
+  /** Premier utilisateur admin (acteur « système » des clôtures automatiques). */
+  private async resolveSystemUserId(): Promise<string | null> {
+    const row: { userId?: string } | undefined = await this.dataSource
+      .getRepository(UserRole)
+      .createQueryBuilder('ur')
+      .innerJoin(Role, 'r', 'r.id = ur.role_id')
+      .where('r.code IN (:...codes)', { codes: ['SUPER_ADMIN', 'ADMINISTRATEUR'] })
+      .select('ur.user_id', 'userId')
+      .getRawOne();
+    return row?.userId ? String(row.userId) : null;
   }
 }

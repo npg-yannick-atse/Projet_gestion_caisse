@@ -58,9 +58,9 @@ const selectClass =
 // CRÉATION CAISSE (inline)
 // ============================================================
 const createCaisseSchema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
-  deviseId: z.string().min(1, 'Devise requise'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
+  deviseId: z.string().trim().min(1, 'Devise requise'),
   estPrincipale: z.boolean().optional(),
 });
 type CreateCaisseFormValues = z.infer<typeof createCaisseSchema>;
@@ -136,9 +136,9 @@ function CreateCaisseModal({ onClose }: { onClose: () => void }) {
 // ÉDITION CAISSE (modal)
 // ============================================================
 const editCaisseSchema = z.object({
-  code: z.string().min(1),
-  libelle: z.string().min(1),
-  deviseId: z.string().min(1),
+  code: z.string().trim().min(1),
+  libelle: z.string().trim().min(1),
+  deviseId: z.string().trim().min(1),
   estPrincipale: z.boolean().optional(),
 });
 type EditCaisseFormValues = z.infer<typeof editCaisseSchema>;
@@ -215,10 +215,14 @@ function EditCaisseModal({ caisse, onClose }: { caisse: Caisse; onClose: () => v
 // ÉDITION PORTEFEUILLE (modal)
 // ============================================================
 const editPortefeuilleSchema = z.object({
-  code: z.string().min(1),
-  libelle: z.string().min(1),
+  code: z.string().trim().min(1),
+  libelle: z.string().trim().min(1),
   gestionnaireId: z.string().optional(),
   soldeInitial: z
+    .string()
+    .optional()
+    .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
+  budgetMensuel: z
     .string()
     .optional()
     .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
@@ -265,6 +269,7 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
       gestionnaireId: portefeuille.gestionnaireId != null ? String(portefeuille.gestionnaireId) : '',
       // soldeInitial est un DECIMAL : selon le driver il peut arriver en nombre → on force la string.
       soldeInitial: portefeuille.soldeInitial != null ? String(portefeuille.soldeInitial) : '',
+      budgetMensuel: portefeuille.budgetMensuel != null ? String(portefeuille.budgetMensuel) : '',
     },
   });
 
@@ -281,6 +286,7 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
           // Pour réellement désaffecter, on envoie une valeur spéciale : ici on omet si vide.
           gestionnaireId: values.gestionnaireId ? values.gestionnaireId : undefined,
           soldeInitial: values.soldeInitial || undefined,
+          budgetMensuel: values.budgetMensuel || undefined,
         },
       },
       { onSuccess: () => onClose() },
@@ -306,6 +312,16 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
           <Input id="pf-edit-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
           {errors.soldeInitial && (
             <p className="text-sm text-destructive">{errors.soldeInitial.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="pf-edit-budget">
+            Budget mensuel <span className="text-xs font-normal text-[#64748B]">(optionnel)</span>
+          </Label>
+          <Input id="pf-edit-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
+          {errors.budgetMensuel && (
+            <p className="text-sm text-destructive">{errors.budgetMensuel.message}</p>
           )}
         </div>
 
@@ -348,12 +364,16 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
 // CRÉATION PORTEFEUILLE INLINE (à l'intérieur d'une caisse)
 // ============================================================
 const createPortefeuilleSchema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   proprietaireType: z.enum(['USER', 'DIRECTION']),
-  proprietaireId: z.string().min(1, 'Propriétaire requis'),
+  proprietaireId: z.string().trim().min(1, 'Propriétaire requis'),
   gestionnaireId: z.string().optional(),
   soldeInitial: z.string().optional(),
+  budgetMensuel: z
+    .string()
+    .optional()
+    .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
 });
 type CreatePortefeuilleFormValues = z.infer<typeof createPortefeuilleSchema>;
 
@@ -391,6 +411,7 @@ function NewPortefeuilleInline({
         deviseId,
         gestionnaireId: values.gestionnaireId || undefined,
         soldeInitial: values.soldeInitial || undefined,
+        budgetMensuel: values.budgetMensuel || undefined,
       },
       {
         onSuccess: () => onDone(),
@@ -461,6 +482,11 @@ function NewPortefeuilleInline({
         <div className="space-y-1">
           <Label htmlFor="pf-solde">Solde initial (optionnel)</Label>
           <Input id="pf-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="pf-budget">Budget mensuel (optionnel)</Label>
+          <Input id="pf-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
+          {errors.budgetMensuel && <p className="text-xs text-destructive">{errors.budgetMensuel.message}</p>}
         </div>
         <div className="flex items-end gap-2">
           <Button type="submit" disabled={create.isPending} size="sm">

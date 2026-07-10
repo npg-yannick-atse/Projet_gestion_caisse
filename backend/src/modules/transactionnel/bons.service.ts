@@ -23,6 +23,7 @@ import { User } from '@modules/security/entities/user.entity';
 import { UserCostCenter } from '@modules/security/entities/user-cost-center.entity';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
+import { TypeBon } from '@modules/referentiel/entities/type-bon.entity';
 import { Caisse } from '@modules/financier/entities/caisse.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
@@ -38,10 +39,14 @@ interface CreateBonInput {
     codeManutention: string;
     costCenterId: string;
     natureOperationId?: string | null;
+    natureComptableId?: string | null;
     caisseId: string;
     portefeuilleId: string;
     deviseId: string;
     numeroClient?: string;
+    nomClient?: string;
+    paysId?: string;
+    divisionId?: string;
     description?: string;
   }>;
   estRecurrent?: boolean;
@@ -87,6 +92,11 @@ export class BonsService {
       throw new BadRequestException('Un bon doit contenir au moins un sous-bon');
     }
 
+    // Habilitation : permission BON_CREER (les admins passent). Bloque les comptes
+    // sans droit — dont ceux SANS aucun rôle. Les permissions sont câblées aux rôles
+    // via sec_role_permission (cf. seed / migration_role_permissions.sql).
+    await this.authz.assertPermission(currentUserId, 'BON_CREER', 'créer un bon');
+
     // Cloisonnement : périmètre direction/CC + caisses + portefeuilles, et règle multi-CC.
     await this.enforceBonPerimeter(
       currentUserId,
@@ -96,6 +106,38 @@ export class BonsService {
         portefeuilleId: String(sb.portefeuilleId),
       })),
     );
+
+    // Restitution client : pays + division obligatoires, et l'utilisateur qui crée
+    // doit avoir l'ACCÈS à la division choisie (sauf admin).
+    const typeBon = await this.dataSource
+      .getRepository(TypeBon)
+      .findOne({ where: { id: input.typeBonId } });
+    if (typeBon?.requiertNomClient) {
+      for (const sb of input.soubons) {
+        if (!sb.paysId || !sb.divisionId) {
+          throw new BadRequestException('Pays et division sont requis pour une restitution client.');
+        }
+        if (!sb.nomClient || !sb.nomClient.trim()) {
+          throw new BadRequestException('Le nom du client est requis pour une restitution client.');
+        }
+        await this.authz.assertDivisionInPerimeter(currentUserId, sb.divisionId);
+      }
+    }
+    if (typeBon?.requiertNumeroClient) {
+      for (const sb of input.soubons) {
+        if (!sb.numeroClient || !String(sb.numeroClient).trim()) {
+          throw new BadRequestException('Le numéro du client est requis pour ce type de bon.');
+        }
+      }
+    }
+
+    // Nature d'opération obligatoire sur chaque sous-bon (contrôle serveur, vaut aussi
+    // pour l'API et le mobile ; le formulaire web l'impose déjà côté client).
+    for (const sb of input.soubons) {
+      if (!sb.natureOperationId) {
+        throw new BadRequestException("La nature d'opération est requise pour chaque sous-bon.");
+      }
+    }
 
     const montantTotal = input.soubons.reduce((sum, sb) => {
       return (parseFloat(sum) + parseFloat(sb.montant)).toString();
@@ -136,18 +178,26 @@ export class BonsService {
             bonId: savedBon.id as any,
             uuid: uuidv4(),
             numeroSousBon,
-            libelle: sbData.libelle,
+            // Libellé non saisi (ex. restitution) : on retombe sur le nom client.
+            libelle:
+              (sbData.libelle && sbData.libelle.trim()) ||
+              (sbData.nomClient && sbData.nomClient.trim()) ||
+              'Sous-bon',
             description: sbData.description ?? null,
             montant: sbData.montant,
             partenaireId: sbData.partenaireId ? (sbData.partenaireId as any) : null,
-            numeroBl: sbData.numeroBl,
+            numeroBl: sbData.numeroBl ?? '',
             codeManutention: sbData.codeManutention,
             costCenterId: sbData.costCenterId as any,
             natureOperationId: sbData.natureOperationId ? (sbData.natureOperationId as any) : null,
+            natureComptableId: sbData.natureComptableId ? (sbData.natureComptableId as any) : null,
             caisseId: sbData.caisseId as any,
             portefeuilleId: sbData.portefeuilleId as any,
             deviseId: sbData.deviseId as any,
             numeroClient: sbData.numeroClient ?? null,
+            nomClient: sbData.nomClient?.trim() ? sbData.nomClient.trim() : null,
+            paysId: sbData.paysId ? (sbData.paysId as any) : null,
+            divisionId: sbData.divisionId ? (sbData.divisionId as any) : null,
             statut: statutInitial,
             createdById: currentUserId as any,
           }),
@@ -185,6 +235,14 @@ export class BonsService {
     const bon = await this.bonRepo.findOne({ where: { id } });
     if (!bon) throw new NotFoundException(`Bon ${id} introuvable`);
     return bon;
+  }
+
+  /** Historique des validations d'un bon (validateur, décision, commentaire, date). */
+  async getValidations(bonId: string): Promise<ValidationBon[]> {
+    return this.validationBonRepo.find({
+      where: { bonId: bonId as any },
+      order: { dateValidation: 'DESC' },
+    });
   }
 
   // ───────────────────────── Circuit d'extension de budget ─────────────────────────
@@ -534,6 +592,16 @@ export class BonsService {
       query.andWhere('bon.created_at <= :dt', { dt });
     }
 
+    // Montant RÉELLEMENT décaissé (somme des décaissements effectifs, ajustements
+    // caissier inclus) — exposé en plus du montant demandé (bon.montant_total) pour
+    // que les listes affichent le bon montant sans requête N+1.
+    query.addSelect(
+      '(SELECT COALESCE(SUM(d.montant), 0) FROM trx_decaissement d ' +
+        'INNER JOIN trx_bon_caisse bc ON bc.id = d.bon_caisse_id ' +
+        'WHERE bc.bon_source_id = bon.id)',
+      'montantDecaisse',
+    );
+
     // Tri (whitelist + direction normalisée). Par défaut : created_at DESC.
     const column = BonsService.BON_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
@@ -542,7 +610,15 @@ export class BonsService {
     } else {
       query.orderBy('bon.created_at', 'DESC');
     }
-    return query.getMany();
+
+    const { entities, raw } = await query.getRawAndEntities();
+    return entities.map((bon, i) => {
+      const md = (raw[i] as Record<string, unknown>)?.montantDecaisse;
+      // null si rien décaissé ; sinon le total effectif (string DECIMAL).
+      (bon as Bon & { montantDecaisse?: string | null }).montantDecaisse =
+        md != null && Number(md) > 0 ? String(md) : null;
+      return bon;
+    });
   }
 
   /**
@@ -622,10 +698,21 @@ export class BonsService {
       montant: number;
     }>
   > {
+    // Montant RÉELLEMENT décaissé par sous-bon (ajustements caissier inclus). SQL Server
+    // interdit un sous-SELECT dans un SUM() : on pré-agrège les décaissements par sous-bon
+    // dans une sous-requête JOINTE, puis on somme la colonne (repli sur le montant demandé
+    // si aucun décaissement). Évite l'écart demandé/décaissé (remarque de test #10).
+    const decJoin =
+      '(SELECT bc.sous_bon_source_id AS sb_id, SUM(dd.montant) AS montant_dec ' +
+      'FROM trx_decaissement dd INNER JOIN trx_bon_caisse bc ON bc.id = dd.bon_caisse_id ' +
+      'GROUP BY bc.sous_bon_source_id)';
+    const montantEffectif = 'COALESCE(dec.montant_dec, CAST(sb.montant AS DECIMAL(19,4)))';
+
     const qb = this.sousBonRepo
       .createQueryBuilder('sb')
       .leftJoin('ref_cost_center', 'cc', 'cc.id = sb.cost_center_id')
       .leftJoin('sec_direction', 'd', 'd.id = cc.direction_id')
+      .leftJoin(decJoin, 'dec', 'dec.sb_id = sb.id')
       .where('sb.deleted_at IS NULL')
       .andWhere('sb.statut IN (:...statuts)', { statuts: ['DECAISSE', 'COMPTABILISE'] })
       .select('d.id', 'directionId')
@@ -633,7 +720,7 @@ export class BonsService {
       .addSelect('d.libelle', 'directionLibelle')
       .addSelect('COUNT(sb.id)', 'nbSousBons')
       .addSelect('COUNT(DISTINCT sb.bon_id)', 'nbBons')
-      .addSelect('SUM(CAST(sb.montant AS DECIMAL(19,4)))', 'montant')
+      .addSelect(`SUM(${montantEffectif})`, 'montant')
       .groupBy('d.id')
       .addGroupBy('d.code')
       .addGroupBy('d.libelle');
@@ -646,7 +733,7 @@ export class BonsService {
       qb.andWhere('sb.created_at >= :cutoff', { cutoff });
     }
 
-    qb.orderBy('SUM(CAST(sb.montant AS DECIMAL(19,4)))', 'DESC');
+    qb.orderBy(`SUM(${montantEffectif})`, 'DESC');
 
     const rows: Array<{
       directionId: string | null;
@@ -891,8 +978,8 @@ export class BonsService {
     }
 
     // --- Contrôle d'autorisation de la validation ---
-    // 1) Rôle requis : VALIDATEUR (les admins / DAF passent via assertAnyRole).
-    await this.authz.assertAnyRole(validateurId, ['VALIDATEUR'], 'valider un bon');
+    // 1) Permission requise : BON_VALIDER (les admins / DAF passent).
+    await this.authz.assertPermission(validateurId, 'BON_VALIDER', 'valider un bon');
 
     const isAdmin = await this.authz.isAdmin(validateurId);
 
@@ -1104,6 +1191,14 @@ export class BonsService {
           }),
         );
 
+        // Garde budgétaire : refuse si le budget mensuel du centre de coût serait dépassé
+        // (le cumul inclut les sous-bons déjà décaissés plus haut dans cette transaction).
+        await this.ledger.assertCostCenterMonthlyBudget(
+          sb.costCenterId ? String(sb.costCenterId) : null,
+          String(sb.montant),
+          manager,
+        );
+
         // Partie double (cf. Dossier) : DÉBIT portefeuille / CRÉDIT charge (centre de coût).
         await this.ledger.createPairedEcritures(
           { compteId: sb.portefeuilleId, typeCompte: 'PORTEFEUILLE', deviseId: sb.deviseId, costCenterId: sb.costCenterId },
@@ -1165,9 +1260,45 @@ export class BonsService {
       throw new BadRequestException(`Impossible d'annuler un bon au statut ${bon.statut}`);
     }
 
-    bon.statut = 'ANNULE';
-    bon.updatedById = userId as any;
-    bon.updatedAt = new Date();
-    return this.bonRepo.save(bon);
+    const isOwn = String(bon.demandeurId) === String(userId);
+
+    // Autorisations (les admins passent), toutes basées sur des PERMISSIONS
+    // (assignables via un rôle ou un profil dans le back-office) :
+    //  - Bon DÉJÀ VALIDÉ  → permission BON_ANNULER_VALIDE. Un demandeur ne peut donc
+    //    plus annuler son propre bon une fois qu'il est validé, sauf droit explicite.
+    //  - Bon d'un AUTRE utilisateur → permission BON_ANNULER.
+    //  - Son propre bon encore au statut CREE → autorisé sans permission.
+    if (bon.statut === 'VALIDE') {
+      await this.authz.assertPermission(userId, 'BON_ANNULER_VALIDE', 'annuler un bon déjà validé');
+    }
+    if (!isOwn) {
+      await this.authz.assertPermission(userId, 'BON_ANNULER', "annuler le bon d'un autre utilisateur");
+    }
+
+    // Annulation en cascade : les sous-bons encore actifs (non décaissés) passent
+    // ANNULE, et une demande d'extension encore en attente est neutralisée. Sinon ils
+    // resteraient « en attente » (compteurs, file de décaissement) alors que le bon
+    // est annulé — c'est le comportement remonté par les tests.
+    return this.dataSource.transaction(async (manager) => {
+      const sousBonRepo = manager.getRepository(SousBon);
+      const bonRepo = manager.getRepository(Bon);
+      const terminaux = ['DECAISSE', 'COMPTABILISE', 'ANNULE', 'REFUSE'];
+
+      const sousBons = await sousBonRepo.find({ where: { bonId: bonId as any } });
+      for (const sb of sousBons) {
+        if (!terminaux.includes(sb.statut)) {
+          sb.statut = 'ANNULE';
+          sb.updatedById = userId as any;
+          sb.updatedAt = new Date();
+          await sousBonRepo.save(sb);
+        }
+      }
+
+      bon.statut = 'ANNULE';
+      if (bon.statutExtension === 'EN_ATTENTE') bon.statutExtension = 'NON';
+      bon.updatedById = userId as any;
+      bon.updatedAt = new Date();
+      return bonRepo.save(bon);
+    });
   }
 }

@@ -29,6 +29,12 @@ export class AuthService {
    * porter les droits applicatifs (rôles/permissions).
    */
   async validateUser(identifiant: string, motDePasse: string): Promise<User> {
+    // Mode LOCAL (LDAP_ENABLED=false) : pas de LDAP. Un compte local actif se
+    // connecte en saisissant n'importe quel mot de passe (environnement de test).
+    if (this.config.get<boolean>('ldap.enabled') === false) {
+      return this.validateLocal(identifiant);
+    }
+
     const ldap = await this.ldapAuthenticate(identifiant, motDePasse);
     const matriculeLdap = this.extractMatricule(ldap);
 
@@ -37,6 +43,27 @@ export class AuthService {
       (identifiant.includes('@')
         ? await this.users.findByEmail(identifiant)
         : await this.users.findByMatricule(identifiant));
+
+    if (!user || !user.estActif) {
+      throw new UnauthorizedException(
+        "Compte introuvable ou désactivé dans l'application. Contactez l'administrateur.",
+      );
+    }
+    return user;
+  }
+
+  /**
+   * Authentification LOCALE (LDAP désactivé) : aucun contrôle de mot de passe.
+   * Le compte doit simplement exister et être actif. Réservé aux environnements
+   * de test (comptes absents du LDAP).
+   */
+  private async validateLocal(identifiant: string): Promise<User> {
+    // Local : on accepte email, matricule OU username (préfixe d'email),
+    // car le LDAP étant désactivé, l'utilisateur tape son username habituel.
+    const user = identifiant.includes('@')
+      ? await this.users.findByEmail(identifiant)
+      : ((await this.users.findByMatricule(identifiant)) ??
+        (await this.users.findByUsername(identifiant)));
 
     if (!user || !user.estActif) {
       throw new UnauthorizedException(

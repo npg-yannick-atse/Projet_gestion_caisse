@@ -7,6 +7,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Ip,
   Param,
   Patch,
   Post,
@@ -99,13 +100,14 @@ export class UsersController {
     @Param('id') id: string,
     @Param('roleId') roleId: string,
     @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         "Vous ne pouvez pas modifier vos propres rôles. Demandez à un autre administrateur.",
       );
     }
-    await this.usersService.assignRole(id, roleId, user.sub);
+    await this.usersService.assignRole(id, roleId, user.sub, ip);
   }
 
   @Delete(':id/roles/:roleId')
@@ -116,13 +118,14 @@ export class UsersController {
     @Param('id') id: string,
     @Param('roleId') roleId: string,
     @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         "Vous ne pouvez pas modifier vos propres rôles. Demandez à un autre administrateur.",
       );
     }
-    await this.usersService.removeRole(id, roleId);
+    await this.usersService.removeRole(id, roleId, user.sub, ip);
   }
 
   // ---------- Profils d'un utilisateur ----------
@@ -141,13 +144,14 @@ export class UsersController {
     @Param('id') id: string,
     @Param('profilId') profilId: string,
     @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         'Vous ne pouvez pas modifier vos propres profils. Demandez à un autre administrateur.',
       );
     }
-    await this.usersService.assignProfil(id, profilId, user.sub);
+    await this.usersService.assignProfil(id, profilId, user.sub, ip);
   }
 
   @Delete(':id/profils/:profilId')
@@ -158,12 +162,41 @@ export class UsersController {
     @Param('id') id: string,
     @Param('profilId') profilId: string,
     @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
   ) {
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         'Vous ne pouvez pas modifier vos propres profils. Demandez à un autre administrateur.',
       );
     }
-    await this.usersService.removeProfil(id, profilId);
+    await this.usersService.removeProfil(id, profilId, user.sub, ip);
+  }
+
+  // ---------- Accès division (restitutions) ----------
+
+  @Get(':id/divisions')
+  @ApiOperation({ summary: "Lister les divisions auxquelles l'utilisateur a accès" })
+  getDivisions(@Param('id') id: string) {
+    return this.usersService.getDivisionAccess(id);
+  }
+
+  @Post(':id/divisions/:divisionId')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Donner accès à une division' })
+  async assignDivision(
+    @Param('id') id: string,
+    @Param('divisionId') divisionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.usersService.assignDivision(id, divisionId, user.sub);
+  }
+
+  @Delete(':id/divisions/:divisionId')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Retirer l'accès à une division" })
+  async removeDivision(@Param('id') id: string, @Param('divisionId') divisionId: string) {
+    await this.usersService.removeDivision(id, divisionId);
   }
 }

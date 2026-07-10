@@ -12,6 +12,7 @@ const ROLE_BADGE: Record<RoleCode, { cls: string; icon: LucideIcon }> = {
   VALIDATEUR: { cls: 'bg-[#FFFBEB] text-[#78350F]', icon: Eye },
   CAISSIER: { cls: 'bg-[#ECFDF5] text-[#065F46]', icon: Banknote },
   GESTIONNAIRE_PORTEFEUILLE: { cls: 'bg-[#ECFEFF] text-[#0E7490]', icon: Briefcase },
+  DAF: { cls: 'bg-[#F5F3FF] text-[#5B21B6]', icon: ShieldCheck },
   DEMANDEUR: { cls: 'bg-[#F8FAFC] text-[#475569]', icon: User },
 };
 

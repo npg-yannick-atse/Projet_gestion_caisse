@@ -38,6 +38,21 @@ export class BonsManuelsService {
     if (dto.numeroFin < dto.numeroDebut) {
       throw new BadRequestException('Le numéro de fin doit être ≥ au numéro de début.');
     }
+    // Anti-chevauchement : la plage [début, fin] ne doit recouvrir AUCUN carnet
+    // existant — deux plages se chevauchent si début ≤ autre.fin ET fin ≥ autre.début.
+    // Garantit qu'un même numéro n'appartient jamais à deux carnets.
+    const conflit = await this.carnetRepo
+      .createQueryBuilder('c')
+      .where('c.numero_debut <= :fin', { fin: dto.numeroFin })
+      .andWhere('c.numero_fin >= :debut', { debut: dto.numeroDebut })
+      .getOne();
+    if (conflit) {
+      throw new BadRequestException(
+        `La plage ${dto.numeroDebut}–${dto.numeroFin} chevauche le carnet ` +
+          `${conflit.libelle ? `« ${conflit.libelle} » ` : ''}(${conflit.numeroDebut}–${conflit.numeroFin}). ` +
+          `Choisissez une plage qui ne recouvre aucun numéro déjà attribué.`,
+      );
+    }
     const carnet = this.carnetRepo.create({
       uuid: uuidv4(),
       libelle: dto.libelle?.trim() || null,
@@ -148,7 +163,7 @@ export class BonsManuelsService {
           typeBonId: dto.typeBonId as any,
           libelle: dto.libelle.trim(),
           partenaireId: dto.partenaireId ? (dto.partenaireId as any) : null,
-          numeroBl: dto.numeroBl.trim(),
+          numeroBl: dto.numeroBl?.trim() || '',
           codeManutention: dto.codeManutention.trim(),
           costCenterId: dto.costCenterId as any,
           numeroClient: dto.numeroClient?.trim() || null,
@@ -176,6 +191,9 @@ export class BonsManuelsService {
         },
         manager,
       );
+
+      // Garde budgétaire : refuse si le budget mensuel du centre de coût serait dépassé.
+      await this.ledger.assertCostCenterMonthlyBudget(String(dto.costCenterId), dto.montant, manager);
 
       // Écritures en partie double (cf. Dossier) : DÉBIT portefeuille (le solde baisse,
       // solde = Σcrédit − Σdébit) / CRÉDIT compte de CHARGE imputé au centre de coût.

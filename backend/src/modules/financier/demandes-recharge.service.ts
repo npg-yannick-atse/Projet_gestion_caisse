@@ -39,8 +39,20 @@ export class DemandesRechargeService {
    * direction (DIRECTION). Sert au choix lorsqu'il en a plusieurs.
    */
   async getPortefeuillesRechargeables(userId: string): Promise<Portefeuille[]> {
-    const user = await this.dataSource.getRepository(User).findOne({ where: { id: userId } });
     const ptfRepo = this.dataSource.getRepository(Portefeuille);
+
+    // « Recharge tout » piloté par PERMISSION : un admin ou un compte ayant
+    // PORTEFEUILLE_VOIR_TOUS peut demander une recharge pour N'IMPORTE QUEL
+    // portefeuille actif (il en choisit un dans la liste).
+    const seeAll =
+      (await this.authz.isAdmin(userId)) ||
+      (await this.authz.hasPermission(userId, 'PORTEFEUILLE_VOIR_TOUS'));
+    if (seeAll) {
+      return ptfRepo.find({ where: { estActif: true } as any, order: { id: 'ASC' } });
+    }
+
+    // Sinon : uniquement le sien (USER) et ceux de sa direction (DIRECTION).
+    const user = await this.dataSource.getRepository(User).findOne({ where: { id: userId } });
     const where: Array<Record<string, unknown>> = [
       { proprietaireType: 'USER', proprietaireId: userId, estActif: true },
     ];

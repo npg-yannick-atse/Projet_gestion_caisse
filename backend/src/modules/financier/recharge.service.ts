@@ -7,12 +7,16 @@ import { EcritureComptable } from '@modules/transactionnel/entities/ecriture-com
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 
+export type RechargeSens = 'CAISSE_VERS_PORTEFEUILLE' | 'PORTEFEUILLE_VERS_CAISSE';
+
 interface RechargeInput {
   caisseId: string;
   portefeuilleId: string;
   montant: string;
   userId: string;
   reference?: string;
+  /** Sens du mouvement. Par défaut caisse → portefeuille (recharge classique). */
+  sens?: RechargeSens;
 }
 
 @Injectable()
@@ -62,6 +66,21 @@ export class RechargeService {
         throw new BadRequestException('Devise incohérente entre la caisse et le portefeuille');
       }
 
+      const sens: RechargeSens = input.sens ?? 'CAISSE_VERS_PORTEFEUILLE';
+      const inverse = sens === 'PORTEFEUILLE_VERS_CAISSE';
+
+      // Sens inverse (portefeuille → caisse) : on ne peut pas renvoyer plus que le
+      // solde disponible du portefeuille (budget initial + écritures).
+      if (inverse) {
+        const ledgerBal = await this.ledgerService.calculateBalance(portefeuille.id, 'PORTEFEUILLE');
+        const dispo = Number(portefeuille.soldeInitial || 0) + Number(ledgerBal || 0);
+        if (parseFloat(input.montant) > dispo) {
+          throw new BadRequestException(
+            `Solde du portefeuille ${portefeuille.code} insuffisant (disponible : ${dispo.toFixed(4)})`,
+          );
+        }
+      }
+
       const operation = await this.ledgerService.createOperation(
         {
           typeOperation: 'RECHARGE',
@@ -75,9 +94,12 @@ export class RechargeService {
         manager,
       );
 
+      // Partie double : DÉBIT (1er) / CRÉDIT (2e). On inverse les deux comptes selon le sens.
+      const caisseAcc = { compteId: caisse.id, typeCompte: 'CAISSE' as const, deviseId: caisse.deviseId };
+      const ptfAcc = { compteId: portefeuille.id, typeCompte: 'PORTEFEUILLE' as const, deviseId: caisse.deviseId };
       const ecritures = await this.ledgerService.createPairedEcritures(
-        { compteId: caisse.id, typeCompte: 'CAISSE', deviseId: caisse.deviseId },
-        { compteId: portefeuille.id, typeCompte: 'PORTEFEUILLE', deviseId: caisse.deviseId },
+        inverse ? ptfAcc : caisseAcc,
+        inverse ? caisseAcc : ptfAcc,
         input.montant,
         operation.transactionUuid,
         manager,

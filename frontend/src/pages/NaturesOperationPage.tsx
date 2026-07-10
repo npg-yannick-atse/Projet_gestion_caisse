@@ -18,13 +18,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const schema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   costCenterId: z.string().optional(),
   planComptableId: z.string().optional(),
 });
@@ -123,6 +124,7 @@ function NaturesOperationPageInner() {
   // null = formulaire fermé ; { } = création ; un objet = édition de cette nature.
   const [form, setForm] = useState<{ editing: NatureOperation | null } | null>(null);
   const [search, setSearch] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<NatureOperation | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -204,9 +206,7 @@ function NaturesOperationPageInner() {
                         type="button"
                         aria-label="Supprimer"
                         disabled={remove.isPending}
-                        onClick={() => {
-                          if (confirm(`Supprimer la nature ${n.code} ?`)) remove.mutate(n.id);
-                        }}
+                        onClick={() => setPendingDelete(n)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -219,6 +219,18 @@ function NaturesOperationPageInner() {
           </table>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="warning"
+        title={pendingDelete ? `Désactiver la nature ${pendingDelete.code} ?` : ''}
+        description={pendingDelete ? `« ${pendingDelete.libelle} » ne sera plus sélectionnable. Rien n'est supprimé définitivement.` : undefined}
+        confirmLabel="Désactiver"
+        busy={remove.isPending}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
+        onCancel={() => { setPendingDelete(null); remove.reset(); }}
+        onConfirm={() => { if (pendingDelete) remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) }); }}
+      />
     </div>
   );
 }

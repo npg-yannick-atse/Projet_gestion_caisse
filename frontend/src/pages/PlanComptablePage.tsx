@@ -9,13 +9,14 @@ import {
   useDeletePlanComptable,
 } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/utils';
-import type { TypeCompte } from '@/types/api';
+import type { PlanComptable, TypeCompte } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Pill, type PillTone } from '@/components/ui/pill';
 import { RoleGuard } from '@/components/RoleGuard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -35,8 +36,12 @@ const TYPE_OPTIONS: { value: TypeCompte; label: string }[] = [
 ];
 
 const schema = z.object({
-  numeroCompte: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  numeroCompte: z
+    .string()
+    .trim()
+    .min(1, 'Requis')
+    .regex(/^\d+$/, 'Le numéro de compte doit être numérique (chiffres uniquement)'),
+  libelle: z.string().trim().min(1, 'Requis'),
   typeCompte: z.enum(['ACTIF', 'PASSIF', 'CHARGE', 'PRODUIT']),
   parentId: z.string().optional(),
 });
@@ -78,7 +83,12 @@ function CreatePlanComptableForm({ onDone }: { onDone: () => void }) {
       <form onSubmit={onSubmit} className="grid gap-4 p-[18px] sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="numeroCompte">Numéro de compte</Label>
-          <Input id="numeroCompte" placeholder="ex. 401, 411, 512100" {...register('numeroCompte')} />
+          <Input
+            id="numeroCompte"
+            inputMode="numeric"
+            placeholder="ex. 401, 411, 512100"
+            {...register('numeroCompte')}
+          />
           {errors.numeroCompte && (
             <p className="text-sm text-destructive">{errors.numeroCompte.message}</p>
           )}
@@ -135,6 +145,7 @@ function PlanComptablePageInner() {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<TypeCompte | 'ALL'>('ALL');
+  const [pendingDelete, setPendingDelete] = useState<PlanComptable | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -274,10 +285,7 @@ function PlanComptablePageInner() {
                         type="button"
                         aria-label="Désactiver"
                         disabled={remove.isPending}
-                        onClick={() => {
-                          if (confirm(`Désactiver le compte ${c.numeroCompte} — ${c.libelle} ?`))
-                            remove.mutate(c.id);
-                        }}
+                        onClick={() => setPendingDelete(c)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -290,6 +298,18 @@ function PlanComptablePageInner() {
           </table>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="warning"
+        title={pendingDelete ? `Désactiver le compte ${pendingDelete.numeroCompte} ?` : ''}
+        description={pendingDelete ? `« ${pendingDelete.libelle} » ne sera plus sélectionnable. Rien n'est supprimé définitivement.` : undefined}
+        confirmLabel="Désactiver"
+        busy={remove.isPending}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
+        onCancel={() => { setPendingDelete(null); remove.reset(); }}
+        onConfirm={() => { if (pendingDelete) remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) }); }}
+      />
     </div>
   );
 }

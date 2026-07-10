@@ -8,6 +8,8 @@ import { Partenaire } from './entities/partenaire.entity';
 import { PartenaireNatureComptable } from './entities/partenaire-nature-comptable.entity';
 import { Site } from './entities/site.entity';
 import { TypeBon } from './entities/type-bon.entity';
+import { Pays } from './entities/pays.entity';
+import { Division } from './entities/division.entity';
 import { ReferentielService } from './referentiel.service';
 import { ReferentielController } from './referentiel.controller';
 
@@ -22,6 +24,8 @@ import { ReferentielController } from './referentiel.controller';
       PartenaireNatureComptable,
       Site,
       TypeBon,
+      Pays,
+      Division,
     ]),
   ],
   providers: [ReferentielService],

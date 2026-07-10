@@ -16,6 +16,7 @@ import type {
   Portefeuille,
   SousBon,
   StatutExtension,
+  ValidationBon,
 } from '@/types/api';
 
 /**
@@ -105,6 +106,15 @@ export async function getImpression(id: string): Promise<ImpressionBon | null> {
 
 export function useImpression(id: string) {
   return useQuery({ queryKey: ['bon', id, 'impression'], queryFn: () => getImpression(id) });
+}
+
+export async function getValidations(id: string): Promise<ValidationBon[]> {
+  const { data } = await api.get<ValidationBon[]>(`/bons/${id}/validations`);
+  return data;
+}
+
+export function useValidations(id: string) {
+  return useQuery({ queryKey: ['bon', id, 'validations'], queryFn: () => getValidations(id) });
 }
 
 export function useBons(filters: ListBonsFilters | BonStatut = {}) {

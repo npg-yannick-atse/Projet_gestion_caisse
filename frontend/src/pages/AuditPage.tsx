@@ -20,6 +20,50 @@ function actionClass(a: string): string {
   return ACTION_CLS[a] ?? 'bg-[#F1F5F9] text-[#475569]';
 }
 
+/** Libellé FR lisible pour la ressource technique journalisée. */
+const RESOURCE_LABELS: Record<string, string> = {
+  users: 'Utilisateur',
+  directions: 'Direction',
+  roles: 'Rôle',
+  profils: 'Profil',
+  permissions: 'Permission',
+  portefeuilles: 'Portefeuille',
+  caisses: 'Caisse',
+  partenaires: 'Partenaire',
+  'cost-centers': 'Centre de coût',
+  'natures-operation': "Nature d'opération",
+  'plan-comptable': 'Plan comptable',
+  interims: 'Intérim',
+  bons: 'Bon',
+  'bons-caisse': 'Bon de caisse',
+  'bons-manuels': 'Bon manuel',
+  carnets: 'Carnet',
+  'demandes-recharge': 'Demande de recharge',
+  'demandes-transfert': 'Demande de transfert',
+  recharges: 'Recharge',
+  'push-tokens': 'Jeton push',
+};
+
+/** Tente d'extraire un nom lisible depuis un détail JSON (avant/après). */
+function extractName(json?: string | null): string | null {
+  if (!json) return null;
+  try {
+    const o = JSON.parse(json) as Record<string, unknown>;
+    const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    if (o.prenom || o.nom) return [s(o.prenom), s(o.nom)].filter(Boolean).join(' ') || null;
+    return (
+      s(o.libelle) ??
+      s(o.raison_sociale) ??
+      s(o.raisonSociale) ??
+      s(o.numero) ??
+      s(o.code) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Date du jour au format YYYY-MM-DD (heure locale). */
 function todayLocal(): string {
   const d = new Date();
@@ -134,11 +178,39 @@ function AuditPageInner() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-[#475569]">
-                      {e.entiteConcernee}
-                      {e.entiteId ? <span className="text-[#94A3B8]"> #{e.entiteId}</span> : null}
+                      {(() => {
+                        const label = RESOURCE_LABELS[e.entiteConcernee] ?? e.entiteConcernee;
+                        const u =
+                          e.entiteConcernee === 'users' && e.entiteId ? userById.get(e.entiteId) : undefined;
+                        const name = u
+                          ? `${u.prenom} ${u.nom}`
+                          : (extractName(e.nouvelleValeur) ?? extractName(e.ancienneValeur));
+                        return (
+                          <>
+                            <div className="font-medium text-[#0F172A]">{label}</div>
+                            <div className="text-[10px] text-[#94A3B8]">
+                              {name}
+                              {name && e.entiteId ? ' · ' : ''}
+                              {e.entiteId ? `#${e.entiteId}` : ''}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </td>
-                    <td className="max-w-[360px] truncate px-4 py-2.5 font-mono text-[10px] text-[#64748B]" title={e.nouvelleValeur ?? ''}>
-                      {e.nouvelleValeur || '—'}
+                    <td className="max-w-[360px] px-4 py-2.5 font-mono text-[10px] text-[#64748B]">
+                      {e.ancienneValeur && (
+                        <div className="truncate text-[#B42318]" title={e.ancienneValeur}>
+                          <span className="text-[#94A3B8]">avant : </span>
+                          {e.ancienneValeur}
+                        </div>
+                      )}
+                      {e.nouvelleValeur && (
+                        <div className="truncate text-[#047857]" title={e.nouvelleValeur}>
+                          {e.ancienneValeur && <span className="text-[#94A3B8]">après : </span>}
+                          {e.nouvelleValeur}
+                        </div>
+                      )}
+                      {!e.ancienneValeur && !e.nouvelleValeur && '—'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-[10px] text-[#94A3B8]">{e.adresseIp || '—'}</td>
                   </tr>

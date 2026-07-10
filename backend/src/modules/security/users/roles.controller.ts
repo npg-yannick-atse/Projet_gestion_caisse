@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Ip,
   Param,
   Patch,
   Post,
@@ -15,6 +16,7 @@ import { RolesService } from './roles.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto, AssignPermissionToRoleDto, RemovePermissionFromRoleDto } from './dto/permission.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Security / Roles & Permissions')
@@ -98,16 +100,26 @@ export class RolesController {
   @Post(':roleId/permissions/:permissionId')
   @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Assigner une permission à un rôle' })
-  assignPermission(@Param('roleId') roleId: string, @Param('permissionId') permissionId: string) {
-    return this.rolesService.assignPermissionToRole(roleId, permissionId);
+  assignPermission(
+    @Param('roleId') roleId: string,
+    @Param('permissionId') permissionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
+  ) {
+    return this.rolesService.assignPermissionToRole(roleId, permissionId, user.sub, ip);
   }
 
   @Delete(':roleId/permissions/:permissionId')
   @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Retirer une permission d\'un rôle' })
-  async removePermissionFromRole(@Param('roleId') roleId: string, @Param('permissionId') permissionId: string) {
-    await this.rolesService.removePermissionFromRole(roleId, permissionId);
+  async removePermissionFromRole(
+    @Param('roleId') roleId: string,
+    @Param('permissionId') permissionId: string,
+    @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
+  ) {
+    await this.rolesService.removePermissionFromRole(roleId, permissionId, user.sub, ip);
   }
 
   @Get(':roleId/permissions')

@@ -29,6 +29,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const CATEGORIES: ProfilCategorie[] = ['VALIDATEUR', 'DEMANDEUR', 'CAISSIER', 'INTERIM'];
 
@@ -43,8 +44,8 @@ const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const schema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   categorie: z.enum(['VALIDATEUR', 'DEMANDEUR', 'CAISSIER', 'INTERIM']),
   description: z.string().optional(),
 });
@@ -263,6 +264,7 @@ function ProfilsPageInner() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // form: { mode: 'create' } | { mode: 'edit', profil } | null
   const [form, setForm] = useState<{ profil: Profil | null } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Profil | null>(null);
   const selected = profils?.find((p) => p.id === selectedId) ?? null;
 
   return (
@@ -304,12 +306,7 @@ function ProfilsPageInner() {
                   selected={selectedId === profil.id}
                   onPermissions={() => setSelectedId((id) => (id === profil.id ? null : profil.id))}
                   onEdit={() => setForm({ profil })}
-                  onDelete={() => {
-                    if (confirm(`Désactiver le profil ${profil.code} ?`)) {
-                      remove.mutate(profil.id);
-                      if (selectedId === profil.id) setSelectedId(null);
-                    }
-                  }}
+                  onDelete={() => setPendingDelete(profil)}
                 />
               ))}
               {profils.length === 0 && (
@@ -332,6 +329,30 @@ function ProfilsPageInner() {
           <Trash2 className="inline h-3 w-3" /> = désactiver.
         </p>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="warning"
+        title={pendingDelete ? `Désactiver le profil ${pendingDelete.code} ?` : ''}
+        description="Le profil ne sera plus assignable. Rien n'est supprimé définitivement."
+        confirmLabel="Désactiver"
+        busy={remove.isPending}
+        error={remove.error ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
+        onCancel={() => {
+          setPendingDelete(null);
+          remove.reset();
+        }}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          const id = pendingDelete.id;
+          remove.mutate(id, {
+            onSuccess: () => {
+              if (selectedId === id) setSelectedId(null);
+              setPendingDelete(null);
+            },
+          });
+        }}
+      />
     </div>
   );
 }

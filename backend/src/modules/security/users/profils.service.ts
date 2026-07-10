@@ -5,6 +5,7 @@ import { Profil } from '../entities/profil.entity';
 import { Permission } from '../entities/permission.entity';
 import { ProfilPermission } from '../entities/profil-permission.entity';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
+import { AuditPermissionService } from '../audit-permission.service';
 
 @Injectable()
 export class ProfilsService {
@@ -15,6 +16,7 @@ export class ProfilsService {
     private readonly permissionRepo: Repository<Permission>,
     @InjectRepository(ProfilPermission)
     private readonly profilPermissionRepo: Repository<ProfilPermission>,
+    private readonly auditPerm: AuditPermissionService,
   ) {}
 
   async createProfil(dto: CreateProfilDto): Promise<Profil> {
@@ -63,7 +65,12 @@ export class ProfilsService {
     return links.map((l) => l.permission).filter((p) => p && p.estActif !== false);
   }
 
-  async assignPermissionToProfil(profilId: string, permissionId: string): Promise<ProfilPermission> {
+  async assignPermissionToProfil(
+    profilId: string,
+    permissionId: string,
+    actorId?: string,
+    ip?: string | null,
+  ): Promise<ProfilPermission> {
     await this.findProfil(profilId);
     const permission = await this.permissionRepo.findOne({ where: { id: permissionId } });
     if (!permission) throw new NotFoundException(`Permission ${permissionId} introuvable`);
@@ -73,14 +80,23 @@ export class ProfilsService {
       throw new ConflictException('Permission déjà assignée à ce profil');
     }
     const pp = this.profilPermissionRepo.create({ profilId, permissionId });
-    return this.profilPermissionRepo.save(pp);
+    const saved = await this.profilPermissionRepo.save(pp);
+    // Fan-out : tous les utilisateurs rattachés à ce profil GAGNENT cette permission.
+    if (actorId) await this.auditPerm.logProfilPermissionChange(profilId, permissionId, 'GAIN', actorId, ip);
+    return saved;
   }
 
-  async removePermissionFromProfil(profilId: string, permissionId: string): Promise<void> {
+  async removePermissionFromProfil(
+    profilId: string,
+    permissionId: string,
+    actorId?: string,
+    ip?: string | null,
+  ): Promise<void> {
     await this.findProfil(profilId);
     const result = await this.profilPermissionRepo.delete({ profilId, permissionId });
     if (result.affected === 0) {
       throw new NotFoundException('Association profil-permission introuvable');
     }
+    if (actorId) await this.auditPerm.logProfilPermissionChange(profilId, permissionId, 'PERTE', actorId, ip);
   }
 }

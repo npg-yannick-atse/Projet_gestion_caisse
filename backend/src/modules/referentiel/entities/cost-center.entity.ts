@@ -17,9 +17,9 @@ export class CostCenter extends AuditableEntity {
   @Column({ name: 'direction_id', type: 'bigint', nullable: true })
   directionId?: string | null;
 
-  @ApiProperty({ required: false })
-  @Column({ name: 'budget_annuel', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
-  budgetAnnuel?: string | null;
+  @ApiProperty({ required: false, description: 'Budget mensuel du centre de coût (DECIMAL(19,4) en string)' })
+  @Column({ name: 'budget_mensuel', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
+  budgetMensuel?: string | null;
 
   @ApiProperty({ default: true })
   @Column({ name: 'est_actif', type: 'bit', default: true })

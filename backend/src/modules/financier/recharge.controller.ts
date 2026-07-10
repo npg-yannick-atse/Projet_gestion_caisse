@@ -21,6 +21,7 @@ export class RechargeController {
       montant: dto.montant,
       userId: user.sub,
       reference: dto.reference,
+      sens: dto.sens,
     });
   }
 }

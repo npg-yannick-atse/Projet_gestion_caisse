@@ -8,8 +8,10 @@ import { Role } from '../entities/role.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { Profil } from '../entities/profil.entity';
 import { UserProfil } from '../entities/user-profil.entity';
+import { UserDivisionAccess } from '../entities/user-division-access.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AuditPermissionService } from '../audit-permission.service';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -26,7 +28,33 @@ export class UsersService {
     private readonly userProfilRepo: Repository<UserProfil>,
     @InjectRepository(Profil)
     private readonly profilRepo: Repository<Profil>,
+    @InjectRepository(UserDivisionAccess)
+    private readonly userDivisionRepo: Repository<UserDivisionAccess>,
+    private readonly auditPerm: AuditPermissionService,
   ) {}
+
+  // ---------- Accès division (restitutions) ----------
+  async getDivisionAccess(userId: string): Promise<string[]> {
+    await this.findOne(userId);
+    const rows = await this.userDivisionRepo.find({ where: { userId } });
+    return rows.map((r) => String(r.divisionId));
+  }
+
+  async assignDivision(userId: string, divisionId: string, actorId: string): Promise<void> {
+    await this.findOne(userId);
+    const existing = await this.userDivisionRepo.findOne({ where: { userId, divisionId } });
+    if (existing) return;
+    await this.userDivisionRepo.save(
+      this.userDivisionRepo.create({ userId, divisionId, createdById: actorId }),
+    );
+  }
+
+  async removeDivision(userId: string, divisionId: string): Promise<void> {
+    const result = await this.userDivisionRepo.delete({ userId, divisionId });
+    if (result.affected === 0) {
+      throw new NotFoundException('Accès division introuvable');
+    }
+  }
 
   async getProfils(userId: string): Promise<Profil[]> {
     await this.findOne(userId);
@@ -34,7 +62,7 @@ export class UsersService {
     return links.map((l) => l.profil).filter((p) => p && p.estActif !== false);
   }
 
-  async assignProfil(userId: string, profilId: string, actorId: string): Promise<void> {
+  async assignProfil(userId: string, profilId: string, actorId: string, ip?: string | null): Promise<void> {
     await this.findOne(userId);
     const profil = await this.profilRepo.findOne({ where: { id: profilId } });
     if (!profil) throw new NotFoundException(`Profil ${profilId} introuvable`);
@@ -43,13 +71,15 @@ export class UsersService {
     await this.userProfilRepo.save(
       this.userProfilRepo.create({ userId, profilId, attribueParId: actorId }),
     );
+    await this.auditPerm.logUserProfilChange(userId, profilId, 'GAIN', actorId, ip);
   }
 
-  async removeProfil(userId: string, profilId: string): Promise<void> {
+  async removeProfil(userId: string, profilId: string, actorId: string, ip?: string | null): Promise<void> {
     const result = await this.userProfilRepo.delete({ userId, profilId });
     if (result.affected === 0) {
       throw new NotFoundException('Association utilisateur-profil introuvable');
     }
+    await this.auditPerm.logUserProfilChange(userId, profilId, 'PERTE', actorId, ip);
   }
 
   async getRoles(userId: string): Promise<Role[]> {
@@ -58,7 +88,7 @@ export class UsersService {
     return links.map((l) => l.role).filter((r) => r && r.estActif !== false);
   }
 
-  async assignRole(userId: string, roleId: string, actorId: string): Promise<void> {
+  async assignRole(userId: string, roleId: string, actorId: string, ip?: string | null): Promise<void> {
     await this.findOne(userId);
     const role = await this.roleRepo.findOne({ where: { id: roleId } });
     if (!role) throw new NotFoundException(`Rôle ${roleId} introuvable`);
@@ -67,13 +97,15 @@ export class UsersService {
     await this.userRoleRepo.save(
       this.userRoleRepo.create({ userId, roleId, attribueParId: actorId }),
     );
+    await this.auditPerm.logUserRoleChange(userId, roleId, 'GAIN', actorId, ip);
   }
 
-  async removeRole(userId: string, roleId: string): Promise<void> {
+  async removeRole(userId: string, roleId: string, actorId: string, ip?: string | null): Promise<void> {
     const result = await this.userRoleRepo.delete({ userId, roleId });
     if (result.affected === 0) {
       throw new NotFoundException('Association utilisateur-rôle introuvable');
     }
+    await this.auditPerm.logUserRoleChange(userId, roleId, 'PERTE', actorId, ip);
   }
 
   async create(dto: CreateUserDto): Promise<User> {
@@ -165,6 +197,20 @@ export class UsersService {
 
   findByEmail(email: string): Promise<User | null> {
     return this.userRepo.findOne({ where: { email: email.toLowerCase(), deletedAt: IsNull() } });
+  }
+
+  /**
+   * Username = préfixe de l'email (ex. « yannick.atse » → yannick.atse@npgandour.com).
+   * Les métacaractères LIKE (`%`, `_`, `[`, `\`) sont échappés pour empêcher un
+   * identifiant comme « % » de matcher tous les comptes (usurpation en mode LOCAL).
+   */
+  findByUsername(username: string): Promise<User | null> {
+    const escaped = username.toLowerCase().replace(/[\\%_[]/g, (c) => `\\${c}`);
+    return this.userRepo
+      .createQueryBuilder('u')
+      .where('u.email LIKE :pattern ESCAPE :esc', { pattern: `${escaped}@%`, esc: '\\' })
+      .andWhere('u.deletedAt IS NULL')
+      .getOne();
   }
 
   async update(id: string, dto: UpdateUserDto): Promise<User> {

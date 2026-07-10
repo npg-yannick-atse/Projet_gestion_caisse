@@ -1,10 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Portefeuille } from './entities/portefeuille.entity';
 import { CreatePortefeuilleDto } from './dto/create-portefeuille.dto';
 import { UpdatePortefeuilleDto } from './dto/update-portefeuille.dto';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
+import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
 
 @Injectable()
 export class PortefeuillesService {
@@ -14,11 +15,30 @@ export class PortefeuillesService {
     private readonly ledgerService: LedgerService,
   ) {}
 
+  /**
+   * Budget mensuel hérité du centre de coût de la direction (règle métier : une
+   * direction = un centre de coût). Renvoie le budget du CC, ou null si aucun.
+   */
+  private async budgetDirection(proprietaireId: string): Promise<string | null> {
+    const cc = await this.portefeuilleRepo.manager
+      .getRepository(CostCenter)
+      .findOne({ where: { directionId: proprietaireId as any } });
+    return cc?.budgetMensuel ?? null;
+  }
+
   async create(dto: CreatePortefeuilleDto, userId: string): Promise<Portefeuille> {
     const existing = await this.portefeuilleRepo.findOne({ where: { code: dto.code } });
     if (existing) {
       throw new ConflictException(`Un portefeuille avec le code ${dto.code} existe déjà`);
     }
+    // Portefeuille de DIRECTION : le budget mensuel est hérité (non saisi) du centre
+    // de coût de la direction. Portefeuille USER : budget saisi manuellement.
+    const budgetMensuel =
+      dto.proprietaireType === 'DIRECTION' && dto.proprietaireId
+        ? await this.budgetDirection(String(dto.proprietaireId))
+        : dto.budgetMensuel
+          ? dto.budgetMensuel
+          : null;
     const portefeuille = this.portefeuilleRepo.create({
       code: dto.code,
       libelle: dto.libelle,
@@ -28,6 +48,7 @@ export class PortefeuillesService {
       proprietaireId: dto.proprietaireId as any,
       gestionnaireId: dto.gestionnaireId ? (dto.gestionnaireId as any) : null,
       soldeInitial: dto.soldeInitial ?? '0',
+      budgetMensuel,
       estActif: true,
       createdById: userId as any,
     });
@@ -48,6 +69,13 @@ export class PortefeuillesService {
     if (dto.proprietaireId !== undefined) pf.proprietaireId = dto.proprietaireId as any;
     if (dto.gestionnaireId !== undefined) pf.gestionnaireId = dto.gestionnaireId ? (dto.gestionnaireId as any) : null;
     if (dto.soldeInitial !== undefined) pf.soldeInitial = dto.soldeInitial;
+    // Budget mensuel : hérité du centre de coût pour un portefeuille de DIRECTION
+    // (non modifiable), saisi manuellement pour un portefeuille USER (chaîne vide => null).
+    if (pf.proprietaireType === 'DIRECTION') {
+      pf.budgetMensuel = pf.proprietaireId ? await this.budgetDirection(String(pf.proprietaireId)) : null;
+    } else if (dto.budgetMensuel !== undefined) {
+      pf.budgetMensuel = dto.budgetMensuel ? dto.budgetMensuel : null;
+    }
     if (dto.estActif !== undefined) pf.estActif = dto.estActif;
     pf.updatedById = userId as any;
     return this.portefeuilleRepo.save(pf);
@@ -80,6 +108,21 @@ export class PortefeuillesService {
     });
   }
 
+  /**
+   * Liste restreinte à un ensemble d'ids (périmètre de l'utilisateur).
+   * Ensemble vide → liste vide (l'utilisateur ne voit aucun portefeuille).
+   */
+  findByIds(ids: string[], caisseId?: string): Promise<Portefeuille[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.portefeuilleRepo.find({
+      where: {
+        id: In(ids) as any,
+        ...(caisseId ? { caisseSourceId: caisseId } : {}),
+      },
+      order: { libelle: 'ASC' },
+    });
+  }
+
   async findOne(id: string): Promise<Portefeuille> {
     const portefeuille = await this.portefeuilleRepo.findOne({ where: { id } });
     if (!portefeuille) throw new NotFoundException(`Portefeuille ${id} introuvable`);
@@ -95,11 +138,17 @@ export class PortefeuillesService {
    * Détail du solde : solde courant + budget alloué (soldeInitial), pour calculer
    * le taux d'utilisation du budget côté tableaux de bord.
    */
-  async getSoldeDetail(id: string): Promise<{ solde: string; soldeInitial: string }> {
+  async getSoldeDetail(
+    id: string,
+  ): Promise<{ solde: string; soldeInitial: string; budgetMensuel: string | null }> {
     const pf = await this.findOne(id);
     const ledger = await this.ledgerService.calculateBalance(id, 'PORTEFEUILLE');
     const soldeInitial = Number(pf.soldeInitial || 0);
     const total = soldeInitial + Number(ledger || 0);
-    return { solde: total.toFixed(4), soldeInitial: soldeInitial.toFixed(4) };
+    return {
+      solde: total.toFixed(4),
+      soldeInitial: soldeInitial.toFixed(4),
+      budgetMensuel: pf.budgetMensuel != null ? Number(pf.budgetMensuel).toFixed(4) : null,
+    };
   }
 }

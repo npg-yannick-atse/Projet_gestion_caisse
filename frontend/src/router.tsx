@@ -23,6 +23,7 @@ import { BonCreatePage } from '@/pages/BonCreatePage';
 import { PartenairesPage } from '@/pages/PartenairesPage';
 import { CostCentersPage } from '@/pages/CostCentersPage';
 import { DirectionsPage } from '@/pages/DirectionsPage';
+import { PaysDivisionsPage } from '@/pages/PaysDivisionsPage';
 import { OperationsPage } from '@/pages/OperationsPage';
 import { PlanComptablePage } from '@/pages/PlanComptablePage';
 import { NaturesOperationPage } from '@/pages/NaturesOperationPage';
@@ -152,6 +153,16 @@ const directionsRoute = createRoute({
   component: DirectionsPage,
 });
 
+const paysDivisionsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/pays-divisions',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <PaysDivisionsPage />
+    </RoleGuard>
+  ),
+});
+
 const operationsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/operations',
@@ -215,6 +226,7 @@ const routeTree = rootRoute.addChildren([
     partenairesRoute,
     costCentersRoute,
     directionsRoute,
+    paysDivisionsRoute,
     operationsRoute,
     planComptableRoute,
     naturesOperationRoute,

@@ -6,11 +6,14 @@ import {
   ArrowRight,
   ArrowRightLeft,
   Ban,
+  CalendarRange,
   CheckCircle2,
   Filter,
   PlayCircle,
   Plus,
+  Search,
   Send,
+  X,
   XCircle,
 } from 'lucide-react';
 import {
@@ -25,13 +28,14 @@ import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useUsers, useUserRoles } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
-import { apiErrorMessage, cn, formatMontant, timeAgo } from '@/lib/utils';
+import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type {
   DemandeTransfert,
   DemandeTransfertStatut,
   TransfertCompteType,
 } from '@/types/api';
 import { Button } from '@/components/ui/button';
+import { CharCounter } from '@/components/ui/char-counter';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 
@@ -40,6 +44,7 @@ type DtSortCol = (typeof DT_SORT_COLUMNS)[number];
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -54,6 +59,12 @@ const STATUT_TONE: Record<
   REJETEE: { bg: 'bg-[#FEF3F2]', text: 'text-[#B42318]', label: 'Rejetée' },
   ANNULEE: { bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]', label: 'Annulée' },
 };
+
+/** Date du jour au format YYYY-MM-DD (heure locale). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const FILTRES: { key: 'ALL' | DemandeTransfertStatut; label: string }[] = [
   { key: 'ALL', label: 'Toutes' },
@@ -70,11 +81,11 @@ const FILTRES: { key: 'ALL' | DemandeTransfertStatut; label: string }[] = [
 const schema = z
   .object({
     sourceType: z.enum(['CAISSE', 'PORTEFEUILLE']),
-    sourceId: z.string().min(1, 'Source requise'),
+    sourceId: z.string().trim().min(1, 'Source requise'),
     destinationType: z.enum(['CAISSE', 'PORTEFEUILLE']),
-    destinationId: z.string().min(1, 'Destination requise'),
+    destinationId: z.string().trim().min(1, 'Destination requise'),
     montant: z.string().regex(/^\d+(\.\d{1,4})?$/, 'Montant invalide'),
-    deviseId: z.string().min(1, 'Devise requise'),
+    deviseId: z.string().trim().min(1, 'Devise requise'),
     motif: z.string().max(500).optional(),
   })
   .refine(
@@ -125,25 +136,57 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
           ));
   };
 
-  const onSubmit = handleSubmit((values) => {
+  // Étape de confirmation : on retient les valeurs validées avant l'envoi réel.
+  const [pending, setPending] = useState<FormValues | null>(null);
+  const onSubmit = handleSubmit((values) => setPending(values));
+
+  const confirmSend = () => {
+    if (!pending) return;
     create.mutate(
-      {
-        ...values,
-        motif: values.motif || undefined,
-      },
+      { ...pending, motif: pending.motif || undefined },
       {
         onSuccess: () => {
           reset();
+          setPending(null);
           onDone();
         },
       },
     );
-  });
+  };
+
+  const compteLabel = (type: TransfertCompteType, id: string) => {
+    if (type === 'CAISSE') {
+      const c = caisses?.find((x) => String(x.id) === String(id));
+      return c ? `${c.code} — ${c.libelle}` : `#${id}`;
+    }
+    const p = portefeuilles?.find((x) => String(x.id) === String(id));
+    return p ? `${p.code} — ${p.libelle}` : `#${id}`;
+  };
+  const deviseLabel = pending
+    ? (devises?.find((d) => String(d.id) === String(pending.deviseId))?.code ?? '')
+    : '';
 
   return (
-    <Panel>
-      <PanelHeader title="Nouvelle demande de transfert" />
-      <form onSubmit={onSubmit} className="grid gap-4 p-[18px] sm:grid-cols-2">
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] px-5 py-3">
+          <div className="font-display text-sm font-semibold text-[#0F172A]">
+            Nouvelle demande de transfert
+          </div>
+          <button
+            type="button"
+            aria-label="Fermer"
+            onClick={onDone}
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F8FAFC] hover:text-[#0F172A]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      <form onSubmit={onSubmit} className="grid gap-4 overflow-y-auto p-5 sm:grid-cols-2">
         {/* SOURCE */}
         <div className="space-y-1.5">
           <Label htmlFor="dt-source-type">Source — Type</Label>
@@ -241,24 +284,46 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-[#1A6DB5] focus:ring-2 focus:ring-[#1A6DB5]/15"
             maxLength={500}
           />
+          <CharCounter value={watch('motif')} max={500} />
         </div>
 
-        <div className="flex items-center gap-2 sm:col-span-2">
-          <Button type="submit" disabled={create.isPending}>
-            <Send className="h-3.5 w-3.5" />
-            {create.isPending ? 'Envoi…' : 'Soumettre la demande'}
-          </Button>
+        <div className="flex items-center justify-end gap-2 border-t border-[rgba(15,76,129,0.07)] pt-3 sm:col-span-2">
           <Button type="button" variant="ghost" onClick={onDone}>
             Annuler
           </Button>
-          {create.isError && (
-            <p className="text-sm text-destructive">
-              {apiErrorMessage(create.error, 'Création impossible')}
-            </p>
-          )}
+          <Button type="submit">
+            <Send className="h-3.5 w-3.5" />
+            Soumettre la demande
+          </Button>
         </div>
       </form>
-    </Panel>
+      </div>
+
+      {/* Confirmation avant envoi réel */}
+      <ConfirmDialog
+        open={!!pending}
+        variant="default"
+        icon={ArrowRightLeft}
+        title="Confirmer la demande de transfert ?"
+        description={
+          pending
+            ? `Transfert de ${formatMontant(pending.montant)}${deviseLabel ? ` ${deviseLabel}` : ''} de « ${compteLabel(
+                pending.sourceType,
+                pending.sourceId,
+              )} » vers « ${compteLabel(pending.destinationType, pending.destinationId)} ».`
+            : undefined
+        }
+        confirmLabel="Confirmer la demande"
+        cancelLabel="Retour"
+        busy={create.isPending}
+        error={create.isError ? apiErrorMessage(create.error, 'Création impossible') : undefined}
+        onCancel={() => {
+          setPending(null);
+          create.reset();
+        }}
+        onConfirm={confirmSend}
+      />
+    </div>
   );
 }
 
@@ -314,6 +379,7 @@ function DecisionModal({
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-[#1A6DB5] focus:ring-2 focus:ring-[#1A6DB5]/15"
               maxLength={500}
             />
+            <CharCounter value={commentaire} max={500} />
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-5 py-3">
@@ -348,11 +414,18 @@ export function DemandesTransfertPage() {
   );
 
   const [statutFilter, setStatutFilter] = useState<'ALL' | DemandeTransfertStatut>('ALL');
+  const [search, setSearch] = useState('');
+  // Par défaut, on n'affiche que les demandes du JOUR (comme les autres pages).
+  const today = todayLocal();
+  const [dateFrom, setDateFrom] = useState(() => todayLocal());
+  const [dateTo, setDateTo] = useState(() => todayLocal());
   const [showForm, setShowForm] = useState(false);
   const [decisionTarget, setDecisionTarget] = useState<{
     demande: DemandeTransfert;
     approuve: boolean;
   } | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<DemandeTransfert | null>(null);
+  const [confirmExecute, setConfirmExecute] = useState<DemandeTransfert | null>(null);
 
   // Tri serveur URL-synced
   const sort = useTableSort<DtSortCol>('/transferts', DT_SORT_COLUMNS);
@@ -381,6 +454,31 @@ export function DemandesTransfertPage() {
     }
     const p = ptfById.get(id);
     return p ? `${p.code} · ${p.libelle}` : id;
+  };
+
+  // Recherche + filtre par dates (client-side, sur la liste déjà filtrée par statut).
+  const filtered = (demandes ?? []).filter((d) => {
+    if (dateFrom && new Date(d.createdAt) < new Date(`${dateFrom}T00:00:00`)) return false;
+    if (dateTo && new Date(d.createdAt) > new Date(`${dateTo}T23:59:59.999`)) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const u = userById.get(d.demandeurId);
+    const demandeur = u ? `${u.prenom} ${u.nom}`.toLowerCase() : '';
+    const src = compteLabel(d.sourceType, d.sourceId).toLowerCase();
+    const dst = compteLabel(d.destinationType, d.destinationId).toLowerCase();
+    return (
+      d.numero.toLowerCase().includes(q) ||
+      demandeur.includes(q) ||
+      src.includes(q) ||
+      dst.includes(q) ||
+      String(d.montant).includes(q)
+    );
+  });
+  const isDefaultView = !search && dateFrom === today && dateTo === today;
+  const resetFilters = () => {
+    setSearch('');
+    setDateFrom(today);
+    setDateTo(today);
   };
 
   // Compteurs pour les onglets
@@ -439,6 +537,52 @@ export function DemandesTransfertPage() {
           ))}
         </div>
 
+        {/* Recherche + filtre par dates */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#94A3B8]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (n°, demandeur, compte, montant…)"
+              className="h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white pl-8 pr-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-xs">
+            <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
+            <input
+              type="date"
+              aria-label="Du"
+              title="Du"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+            <span className="text-[#64748B]">au</span>
+            <input
+              type="date"
+              aria-label="Au"
+              title="Au"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+          </div>
+          {!isDefaultView && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              title="Revenir aux demandes du jour"
+              className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
+            >
+              Aujourd'hui
+            </button>
+          )}
+          <span className="ml-auto text-[11px] text-[#64748B]">
+            {filtered.length} résultat{filtered.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
         {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
 
         {demandes && (
@@ -477,17 +621,17 @@ export function DemandesTransfertPage() {
                 </tr>
               </thead>
               <tbody>
-                {demandes.length === 0 && (
+                {filtered.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-10 text-center text-[#64748B]">
                       <div className="mb-2 flex justify-center">
                         <ArrowRightLeft className="h-8 w-8 text-[#94A3B8]" />
                       </div>
-                      Aucune demande de transfert.
+                      {isDefaultView ? 'Aucune demande de transfert.' : 'Aucune demande pour ces filtres.'}
                     </td>
                   </tr>
                 )}
-                {demandes.map((d) => {
+                {filtered.map((d) => {
                   const u = userById.get(d.demandeurId);
                   const tone = STATUT_TONE[d.statut];
                   const dev = deviseById.get(d.deviseId);
@@ -538,8 +682,16 @@ export function DemandesTransfertPage() {
                           {tone.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-[#64748B]">
-                        {timeAgo(d.createdAt)}
+                      <td className="px-4 py-3">
+                        <div className="text-[#0F172A]">
+                          {new Date(d.createdAt).toLocaleDateString('fr-FR')}
+                        </div>
+                        <div className="text-[10px] text-[#94A3B8]">
+                          {new Date(d.createdAt).toLocaleTimeString('fr-FR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-1.5">
@@ -566,10 +718,7 @@ export function DemandesTransfertPage() {
                           {canExecute && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (confirm(`Exécuter le transfert ${d.numero} ?`))
-                                  execute.mutate(d.id);
-                              }}
+                              onClick={() => setConfirmExecute(d)}
                               disabled={execute.isPending}
                               title="Exécuter"
                               className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] bg-[#EFF6FF] text-[#0F4C81] hover:bg-[#1A6DB5] hover:text-white disabled:opacity-50"
@@ -580,10 +729,7 @@ export function DemandesTransfertPage() {
                           {canCancel && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (confirm(`Annuler votre demande ${d.numero} ?`))
-                                  cancel.mutate(d.id);
-                              }}
+                              onClick={() => setConfirmCancel(d)}
                               disabled={cancel.isPending}
                               title="Annuler"
                               className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] bg-[#F1F5F9] text-[#475569] hover:bg-[#FEF3F2] hover:text-[#B42318]"
@@ -612,6 +758,43 @@ export function DemandesTransfertPage() {
           onClose={() => setDecisionTarget(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmCancel}
+        variant="danger"
+        icon={Ban}
+        title={confirmCancel ? `Annuler la demande ${confirmCancel.numero} ?` : ''}
+        description="La demande de transfert sera annulée. Cette action est irréversible."
+        confirmLabel="Annuler la demande"
+        cancelLabel="Retour"
+        busy={cancel.isPending}
+        error={cancel.isError ? apiErrorMessage(cancel.error, 'Annulation impossible') : undefined}
+        onCancel={() => {
+          setConfirmCancel(null);
+          cancel.reset();
+        }}
+        onConfirm={() => {
+          if (confirmCancel) cancel.mutate(confirmCancel.id, { onSuccess: () => setConfirmCancel(null) });
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!confirmExecute}
+        variant="default"
+        icon={PlayCircle}
+        title={confirmExecute ? `Exécuter le transfert ${confirmExecute.numero} ?` : ''}
+        description="Le transfert sera exécuté : les comptes seront débités/crédités immédiatement."
+        confirmLabel="Exécuter"
+        busy={execute.isPending}
+        error={execute.isError ? apiErrorMessage(execute.error, 'Exécution impossible') : undefined}
+        onCancel={() => {
+          setConfirmExecute(null);
+          execute.reset();
+        }}
+        onConfirm={() => {
+          if (confirmExecute) execute.mutate(confirmExecute.id, { onSuccess: () => setConfirmExecute(null) });
+        }}
+      />
     </div>
   );
 }

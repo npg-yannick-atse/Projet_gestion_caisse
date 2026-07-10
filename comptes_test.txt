@@ -1,0 +1,21 @@
+COMPTES DE TEST — Fond de Caisse (NPG Gandour)
+================================================
+
+Connexion (mode LOCAL actif, LDAP_ENABLED=false) :
+  -> Identifiant ci-dessous (ou email) + N'IMPORTE QUEL mot de passe.
+
+Tous : actifs, accès web + mobile, aucun rôle ni direction au départ
+(à attribuer dans la page Utilisateurs).
+
+#   Identifiant        Nom affiché        Email
+--------------------------------------------------------------------------
+1   olivia.gbocho1     Olivia Gbocho 1    olivia.gbocho1@npgandour.com
+2   olivia.gbocho2     Olivia Gbocho 2    olivia.gbocho2@npgandour.com
+3   olivia.gbocho3     Olivia Gbocho 3    olivia.gbocho3@npgandour.com
+4   sara.goli1         Sara Goli 1        sara.goli1@npgandour.com
+5   sara.goli2         Sara Goli 2        sara.goli2@npgandour.com
+6   sara.goli3         Sara Goli 3        sara.goli3@npgandour.com
+
+Prérequis :
+  1. Exécuter seed_comptes_test.sql sur la base npg_gestion_caisse.
+  2. backend/.env : LDAP_ENABLED=false (déjà fait) -> relancer le backend.

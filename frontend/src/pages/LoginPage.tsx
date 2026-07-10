@@ -9,7 +9,7 @@ import { useLogin } from '@/api/auth';
 import { useAuthStore } from '@/stores/auth.store';
 
 const schema = z.object({
-  identifiant: z.string().min(1, 'Identifiant requis'),
+  identifiant: z.string().trim().min(1, 'Identifiant requis'),
   motDePasse: z.string().min(1, 'Mot de passe requis'),
 });
 

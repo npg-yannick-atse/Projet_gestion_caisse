@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import appConfig from '@config/app.config';
 import databaseConfig from '@config/database.config';
 import jwtConfig from '@config/jwt.config';
@@ -16,6 +17,7 @@ import { FinancierModule } from '@modules/financier/financier.module';
 import { TransactionnelModule } from '@modules/transactionnel/transactionnel.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { NotificationsModule } from '@modules/notifications/notifications.module';
+import { TelemetryModule } from '@modules/telemetry/telemetry.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -31,6 +33,8 @@ import { HealthModule } from './health/health.module';
         config.get<TypeOrmModuleOptions>('database')!,
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Fondation des tâches planifiées (jobs @Cron : clôture caisse 20h, etc.).
+    ScheduleModule.forRoot(),
     AuthModule,
     SecurityModule,
     ReferentielModule,
@@ -38,6 +42,7 @@ import { HealthModule } from './health/health.module';
     TransactionnelModule,
     AuditModule,
     NotificationsModule,
+    TelemetryModule,
     HealthModule,
   ],
   providers: [

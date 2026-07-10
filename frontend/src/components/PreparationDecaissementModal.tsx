@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CharCounter } from '@/components/ui/char-counter';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { BonCaisse, SousBon } from '@/types/api';
 
@@ -330,8 +331,10 @@ export function PreparationDecaissementModal({
                         id="bc-commentaire"
                         placeholder="Précisions, contrôles effectués…"
                         disabled={bonCaisse.statut !== 'PREPARE' || isMutating}
+                        maxLength={500}
                         {...form.register('commentaire')}
                       />
+                      <CharCounter value={form.watch('commentaire')} max={500} />
                     </div>
                   </div>
                 )}

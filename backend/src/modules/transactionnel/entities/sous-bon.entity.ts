@@ -43,9 +43,21 @@ export class SousBon extends AuditableEntity {
   @Column({ name: 'partenaire_id', type: 'bigint', nullable: true })
   partenaireId?: string | null;
 
-  @ApiProperty({ required: false, description: 'Obligatoire si le type de bon est RESTITUTION_CLIENT' })
+  @ApiProperty({ required: false, description: 'Code client — obligatoire si le type exige le n° client (ex. RESTITUTION_CLIENT)' })
   @Column({ name: 'numero_client', type: 'nvarchar', length: 50, nullable: true })
   numeroClient?: string | null;
+
+  @ApiProperty({ required: false, description: 'Nom client — obligatoire si le type exige le nom client (ex. RESTITUTION_CLIENT)' })
+  @Column({ name: 'nom_client', type: 'nvarchar', length: 150, nullable: true })
+  nomClient?: string | null;
+
+  @ApiProperty({ required: false, description: 'Pays (restitution) — détermine le périmètre de permission' })
+  @Column({ name: 'pays_id', type: 'bigint', nullable: true })
+  paysId?: string | null;
+
+  @ApiProperty({ required: false, description: 'Division du pays (restitution) — périmètre de permission' })
+  @Column({ name: 'division_id', type: 'bigint', nullable: true })
+  divisionId?: string | null;
 
   @ApiProperty()
   @Column({ name: 'numero_bl', type: 'nvarchar', length: 100 })

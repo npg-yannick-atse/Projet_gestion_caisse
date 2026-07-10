@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookText, Plus, Wallet } from 'lucide-react';
+import { BookText, CalendarRange, Plus, Search, Wallet, X } from 'lucide-react';
 import {
   useBonsManuels,
   useCarnets,
@@ -44,40 +44,102 @@ export function BonsManuelsPage() {
   const { data: bonsManuels } = useBonsManuels();
   const { data: caisses } = useCaisses();
   const { data: users } = useUsers();
-  const { data: portefeuilles } = usePortefeuilles();
 
   const userById = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
   const caisseById = useMemo(() => new Map((caisses ?? []).map((c) => [c.id, c])), [caisses]);
 
+  // Recherche + filtre par dates sur la liste des bons manuels.
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  // Modal de gestion des carnets (voir les carnets configurés / en créer un).
+  const [carnetsOpen, setCarnetsOpen] = useState(false);
+  const filteredBons = (bonsManuels ?? []).filter((b) => {
+    if (dateFrom && new Date(b.dateDecaissement) < new Date(`${dateFrom}T00:00:00`)) return false;
+    if (dateTo && new Date(b.dateDecaissement) > new Date(`${dateTo}T23:59:59.999`)) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const u = b.donneurOrdreUserId ? userById.get(b.donneurOrdreUserId) : undefined;
+    const donneur = (u ? `${u.prenom} ${u.nom}` : (b.donneurOrdreNom ?? '')).toLowerCase();
+    return (
+      String(b.numero).toLowerCase().includes(q) ||
+      String(b.numeroManuel).includes(q) ||
+      donneur.includes(q) ||
+      (b.beneficiaireNom ?? '').toLowerCase().includes(q) ||
+      String(b.montant).includes(q)
+    );
+  });
+  const isDefaultView = !search && !dateFrom && !dateTo;
+  const resetFilters = () => {
+    setSearch('');
+    setDateFrom('');
+    setDateTo('');
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <BookText className="h-5 w-5 text-[#0F4C81]" />
-        <h1 className="font-display text-base font-semibold text-[#0F172A]">Bons manuels</h1>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <BookText className="h-5 w-5 text-[#0F4C81]" />
+          <h1 className="font-display text-base font-semibold text-[#0F172A]">Bons manuels</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setCarnetsOpen(true)}>
+          <BookText className="h-4 w-4" /> Carnets
+        </Button>
       </div>
 
       {/* Saisie d'un bon manuel — pleine largeur */}
       <NouveauBonManuel />
 
-      {/* Carnets (liste) + création (admin) */}
-      <div className="grid items-start gap-4 lg:grid-cols-[1fr_360px]">
-      <Panel>
-        <PanelHeader title="Carnets" badge={`${carnets?.length ?? 0}`} />
-        <div className="divide-y divide-[rgba(15,76,129,0.06)]">
-          {(carnets ?? []).length === 0 && (
-            <div className="px-[18px] py-8 text-center text-sm text-[#94A3B8]">Aucun carnet.</div>
-          )}
-          {(carnets ?? []).map((c) => (
-            <CarnetRow key={c.id} carnet={c} caisseLabel={caisseById.get(c.caisseId)?.libelle} isAdmin={isAdmin} />
-          ))}
-        </div>
-      </Panel>
-        {isAdmin && <NouveauCarnet />}
-      </div>
-
       {/* Bons manuels récents */}
       <Panel>
         <PanelHeader title="Bons manuels" badge={`${bonsManuels?.length ?? 0}`} />
+
+        {/* Recherche + filtre par dates */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#94A3B8]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (n°, donneur, bénéficiaire, montant…)"
+              className="h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white pl-8 pr-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-xs">
+            <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
+            <input
+              type="date"
+              aria-label="Du"
+              title="Du"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+            <span className="text-[#64748B]">au</span>
+            <input
+              type="date"
+              aria-label="Au"
+              title="Au"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+          </div>
+          {!isDefaultView && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
+            >
+              Réinitialiser
+            </button>
+          )}
+          <span className="ml-auto text-[11px] text-[#64748B]">
+            {filteredBons.length} résultat{filteredBons.length > 1 ? 's' : ''}
+          </span>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC] text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
@@ -91,7 +153,7 @@ export function BonsManuelsPage() {
               </tr>
             </thead>
             <tbody>
-              {(bonsManuels ?? []).map((b) => (
+              {filteredBons.map((b) => (
                 <tr key={b.id} className="border-b last:border-0">
                   <td className="px-4 py-2 font-medium text-[#0F172A]">{b.numero}</td>
                   <td className="px-4 py-2">{b.numeroManuel}</td>
@@ -108,10 +170,10 @@ export function BonsManuelsPage() {
                   <td className="px-4 py-2">{new Date(b.dateDecaissement).toLocaleDateString('fr-FR')}</td>
                 </tr>
               ))}
-              {(bonsManuels ?? []).length === 0 && (
+              {filteredBons.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-[#94A3B8]">
-                    Aucun bon manuel.
+                    {isDefaultView ? 'Aucun bon manuel.' : 'Aucun bon manuel pour ces filtres.'}
                   </td>
                 </tr>
               )}
@@ -119,6 +181,67 @@ export function BonsManuelsPage() {
           </table>
         </div>
       </Panel>
+
+      {/* Modal : carnets configurés / disponibles + création */}
+      {carnetsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setCarnetsOpen(false)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-5 py-3">
+              <div className="flex items-center gap-2 font-display text-sm font-semibold text-[#0F172A]">
+                <BookText className="h-4 w-4 text-[#0F4C81]" />
+                Carnets {carnets ? `(${carnets.length})` : ''}
+              </div>
+              <button
+                type="button"
+                aria-label="Fermer"
+                onClick={() => setCarnetsOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-white hover:text-[#0F172A]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto p-4">
+              {/* Liste des carnets configurés / disponibles */}
+              <div className="overflow-hidden rounded-[10px] border border-[rgba(15,76,129,0.1)]">
+                <div className="border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+                  Carnets configurés
+                </div>
+                <div className="divide-y divide-[rgba(15,76,129,0.06)]">
+                  {(carnets ?? []).length === 0 && (
+                    <div className="px-4 py-8 text-center text-sm text-[#94A3B8]">
+                      Aucun carnet configuré.
+                    </div>
+                  )}
+                  {(carnets ?? []).map((c) => (
+                    <CarnetRow
+                      key={c.id}
+                      carnet={c}
+                      caisseLabel={caisseById.get(c.caisseId)?.libelle}
+                      isAdmin={isAdmin}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Création d'un carnet (admin) */}
+              {isAdmin ? (
+                <NouveauCarnet />
+              ) : (
+                <p className="text-[11px] text-[#64748B]">
+                  La création de carnet est réservée aux administrateurs.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -270,6 +393,13 @@ function NouveauBonManuel() {
     if (c) setNumeroManuel(String(c.prochainNumero));
   }
 
+  // Champs conditionnels selon le TYPE de bon (comme le bon normal) :
+  // partenaire / N° document (BL) / N° client requis selon les flags du type.
+  const selectedTypeBon = (typeBons ?? []).find((t) => t.id === typeBonId);
+  const reqPartenaire = selectedTypeBon?.requiertPartenaire ?? false;
+  const reqBl = selectedTypeBon?.requiertBl ?? false;
+  const reqNumeroClient = selectedTypeBon?.requiertNumeroClient ?? false;
+
   const montantValid = /^\d+(\.\d{1,4})?$/.test(montant) && Number(montant) > 0;
   const ordreOk = ordreMode === 'user' ? !!donneurUserId : donneurNom.trim().length > 0;
   const canSubmit =
@@ -279,7 +409,9 @@ function NouveauBonManuel() {
     montantValid &&
     !!typeBonId &&
     libelle.trim().length > 0 &&
-    numeroBl.trim().length > 0 &&
+    (!reqBl || numeroBl.trim().length > 0) &&
+    (!reqPartenaire || !!partenaireId) &&
+    (!reqNumeroClient || numeroClient.trim().length > 0) &&
     codeManutention.trim().length > 0 &&
     !!costCenterId &&
     ordreOk &&
@@ -295,11 +427,11 @@ function NouveauBonManuel() {
         montant,
         typeBonId,
         libelle: libelle.trim(),
-        partenaireId: partenaireId || undefined,
-        numeroBl: numeroBl.trim(),
+        partenaireId: reqPartenaire ? partenaireId || undefined : undefined,
+        numeroBl: reqBl ? numeroBl.trim() : '',
         codeManutention: codeManutention.trim(),
         costCenterId,
-        numeroClient: numeroClient.trim() || undefined,
+        numeroClient: reqNumeroClient ? numeroClient.trim() || undefined : undefined,
         description: description.trim() || undefined,
         donneurOrdreUserId: ordreMode === 'user' ? donneurUserId : undefined,
         donneurOrdreNom: ordreMode === 'nom' ? donneurNom.trim() : undefined,
@@ -403,32 +535,38 @@ function NouveauBonManuel() {
             <Input value={libelle} onChange={(e) => setLibelle(e.target.value)} placeholder="Objet du décaissement…" />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Partenaire (optionnel)</Label>
-            <select aria-label="Partenaire" className={selectClass} value={partenaireId} onChange={(e) => setPartenaireId(e.target.value)}>
-              <option value="">— Aucun —</option>
-              {(partenaires ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.raisonSociale}
-                </option>
-              ))}
-            </select>
-          </div>
+          {reqPartenaire && (
+            <div className="space-y-1.5">
+              <Label>Partenaire</Label>
+              <select aria-label="Partenaire" className={selectClass} value={partenaireId} onChange={(e) => setPartenaireId(e.target.value)}>
+                <option value="">— Choisir —</option>
+                {(partenaires ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.raisonSociale}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          <div className="space-y-1.5">
-            <Label>N° BL</Label>
-            <Input value={numeroBl} onChange={(e) => setNumeroBl(e.target.value)} placeholder="BL…" />
-          </div>
+          {reqBl && (
+            <div className="space-y-1.5">
+              <Label>N° Document</Label>
+              <Input value={numeroBl} onChange={(e) => setNumeroBl(e.target.value)} placeholder="BL…" />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Code manutention</Label>
             <Input value={codeManutention} onChange={(e) => setCodeManutention(e.target.value)} placeholder="Code…" />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>N° client (optionnel)</Label>
-            <Input value={numeroClient} onChange={(e) => setNumeroClient(e.target.value)} placeholder="N° client…" />
-          </div>
+          {reqNumeroClient && (
+            <div className="space-y-1.5">
+              <Label>N° client</Label>
+              <Input value={numeroClient} onChange={(e) => setNumeroClient(e.target.value)} placeholder="N° client…" />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Description (optionnel)</Label>

@@ -15,6 +15,7 @@ import { Decaissement } from './entities/decaissement.entity';
 import { Operation } from './entities/operation.entity';
 import { LedgerService } from './ledger.service';
 import { UpdateBonCaisseDto } from './dto/bon-caisse.dto';
+import { AuditService } from '@modules/audit/audit.service';
 
 /**
  * Workflow caissier :
@@ -40,6 +41,7 @@ export class BonsCaisseService {
     private readonly operationRepo: Repository<Operation>,
     private readonly dataSource: DataSource,
     private readonly ledger: LedgerService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -211,7 +213,7 @@ export class BonsCaisseService {
    * Tout est encapsule dans une transaction unique.
    */
   async finalizeDecaissement(bonCaisseId: string, userId: string): Promise<BonCaisse> {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const bonCaisseRepo = manager.getRepository(BonCaisse);
       const sousBonRepo = manager.getRepository(SousBon);
       const bonRepo = manager.getRepository(Bon);
@@ -277,6 +279,13 @@ export class BonsCaisseService {
         String(sousBon.portefeuilleId),
         String(montantEffectif),
         String(sousBon.bonId),
+      );
+
+      // Garde budgétaire : refuse si le budget mensuel du centre de coût serait dépassé.
+      await this.ledger.assertCostCenterMonthlyBudget(
+        sousBon.costCenterId ? String(sousBon.costCenterId) : null,
+        String(montantEffectif),
+        manager,
       );
 
       const now = new Date();
@@ -350,8 +359,35 @@ export class BonsCaisseService {
         }
       }
 
-      return bonCaisse;
+      return {
+        bonCaisse,
+        montantOriginal: String(sousBon.montant),
+        montantEffectif: String(montantEffectif),
+        beneficiaire: bonCaisse.beneficiaire,
+        sousBonId: String(sousBon.id),
+        bonId: bonCaisse.bonSourceId != null ? String(bonCaisse.bonSourceId) : null,
+      };
     });
+
+    // Audit dédié : trace explicite du décaissement avec avant/après du montant
+    // (la ligne générée par l'intercepteur global ne porte pas le montant effectif).
+    const ajuste = result.montantOriginal !== result.montantEffectif;
+    await this.audit.record({
+      userId,
+      action: ajuste ? 'DECAISSEMENT_MONTANT_AJUSTE' : 'DECAISSEMENT',
+      entiteConcernee: 'bons-caisse',
+      entiteId: String(result.bonCaisse.id),
+      ancienneValeur: JSON.stringify({ montant: result.montantOriginal }),
+      nouvelleValeur: JSON.stringify({
+        montant: result.montantEffectif,
+        ajuste,
+        beneficiaire: result.beneficiaire,
+        sousBonId: result.sousBonId,
+        bonId: result.bonId,
+      }),
+    });
+
+    return result.bonCaisse;
   }
 
   /**

@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQueries } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
-import { useTypeBons, usePartenaires } from '@/api/referentiel';
-import { useDevises, usePortefeuilleSolde } from '@/api/financierRef';
+import { useTypeBons, usePartenaires, useNaturesOperation, usePays, useDivisions } from '@/api/referentiel';
+import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { Portefeuille } from '@/types/api';
@@ -21,23 +22,30 @@ const selectClass =
 const montantRegex = /^\d+(\.\d{1,4})?$/;
 
 const sousBonSchema = z.object({
-  libelle: z.string().min(1, 'Requis'),
+  // Libellé requis sauf pour les types « nom client » (ex. restitution) — cf. superRefine.
+  libelle: z.string().optional(),
   montant: z.string().regex(montantRegex, 'Montant invalide'),
-  // Partenaire facultatif : tous les sous-bons n'en ont pas besoin (ex. retrait interne).
+  natureOperationId: z.string().trim().min(1, 'Requis'),
+  nomClient: z.string().optional(),
+  paysId: z.string().optional(),
+  divisionId: z.string().optional(),
+  // Partenaire / N° document / N° client : exigés ou non selon le TYPE de bon
+  // (flags requiertPartenaire / requiertBl / requiertNumeroClient). Validation
+  // conditionnelle ajoutée dynamiquement dans le composant (superRefine).
   partenaireId: z.string().optional(),
-  numeroBl: z.string().min(1, 'Requis'),
-  codeManutention: z.string().min(1, 'Requis'),
-  costCenterId: z.string().min(1, 'Requis'),
+  numeroBl: z.string().optional(),
+  codeManutention: z.string().trim().min(1, 'Requis'),
+  costCenterId: z.string().trim().min(1, 'Requis'),
   // Caisse et devise sont dérivées automatiquement du portefeuille choisi (cf. useEffect).
-  caisseId: z.string().min(1, 'Requis'),
-  portefeuilleId: z.string().min(1, 'Requis'),
-  deviseId: z.string().min(1, 'Requis'),
+  caisseId: z.string().trim().min(1, 'Requis'),
+  portefeuilleId: z.string().trim().min(1, 'Requis'),
+  deviseId: z.string().trim().min(1, 'Requis'),
   numeroClient: z.string().optional(),
   description: z.string().optional(),
 });
 
 const schema = z.object({
-  typeBonId: z.string().min(1, 'Requis'),
+  typeBonId: z.string().trim().min(1, 'Requis'),
   estRecurrent: z.boolean().optional(),
   frequenceRecurrence: z.enum(['MENSUEL', 'TRIMESTRIEL', 'SEMESTRIEL', 'ANNUEL']).optional(),
   porteur: z.string().optional(),
@@ -53,10 +61,14 @@ const emptySousBon = {
   numeroBl: '',
   codeManutention: '',
   costCenterId: '',
+  natureOperationId: '',
   caisseId: '',
   portefeuilleId: '',
   deviseId: '',
   numeroClient: '',
+  nomClient: '',
+  paysId: '',
+  divisionId: '',
   description: '',
 };
 
@@ -67,6 +79,9 @@ export function BonCreatePage() {
 
   const { data: typeBons } = useTypeBons();
   const { data: partenaires } = usePartenaires();
+  const { data: naturesOperation } = useNaturesOperation();
+  const { data: paysList } = usePays();
+  const { data: allDivisions } = useDivisions();
   // Tout le périmètre de création (CC, caisses, portefeuilles autorisés) vient du serveur.
   const { data: perimeter } = useMyBonPerimeter();
   const costCenters = perimeter?.costCenters;
@@ -86,6 +101,35 @@ export function BonCreatePage() {
 
   const defaultPortefeuille = userPortefeuilles[0];
 
+  // Flags du type sélectionné, lus à la validation (resolver stable + ref).
+  const flagsRef = useRef({ reqPartenaire: false, reqBl: false, reqNumeroClient: false, reqNomClient: false });
+  const resolver = useMemo(
+    () =>
+      zodResolver(
+        schema.superRefine((val, ctx) => {
+          const f = flagsRef.current;
+          val.soubons.forEach((sb, i) => {
+            // Libellé requis sauf pour les types « nom client » (restitution).
+            if (!f.reqNomClient && !sb.libelle?.trim())
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'libelle'], message: 'Requis' });
+            if (f.reqNomClient && !sb.nomClient?.trim())
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'nomClient'], message: 'Requis' });
+            if (f.reqNomClient && !sb.paysId)
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'paysId'], message: 'Requis' });
+            if (f.reqNomClient && !sb.divisionId)
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'divisionId'], message: 'Requis' });
+            if (f.reqPartenaire && !sb.partenaireId)
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'partenaireId'], message: 'Requis' });
+            if (f.reqBl && !sb.numeroBl?.trim())
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'numeroBl'], message: 'Requis' });
+            if (f.reqNumeroClient && !sb.numeroClient?.trim())
+              ctx.addIssue({ code: 'custom', path: ['soubons', i, 'numeroClient'], message: 'Requis' });
+          });
+        }),
+      ),
+    [],
+  );
+
   const {
     register,
     handleSubmit,
@@ -94,17 +138,36 @@ export function BonCreatePage() {
     setValue,
     formState: { errors },
   } = useForm<FormValues>({
-    resolver: zodResolver(schema),
+    resolver,
     defaultValues: { typeBonId: '', estRecurrent: false, soubons: [{ ...emptySousBon }] },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'soubons' });
   const estRecurrent = watch('estRecurrent');
-  const watchSoubons = watch('soubons');
+  // Abonnement réactif dédié (plus fiable que watch() pour un field array) : la
+  // simulation par portefeuille se recalcule dès qu'un montant ou un portefeuille change.
+  const watchSoubons = useWatch({ control, name: 'soubons' });
 
-  // Solde du portefeuille par défaut (= celui auquel l'utilisateur a accès)
-  const { data: soldeData } = usePortefeuilleSolde(defaultPortefeuille?.id ?? '');
-  const solde = Number(soldeData?.solde ?? 0);
+  // Type sélectionné → champs conditionnels (partenaire / N° document / N° client).
+  const selectedTypeBon = typeBons?.find((t) => t.id === watch('typeBonId'));
+  const reqPartenaire = selectedTypeBon?.requiertPartenaire ?? false;
+  const reqBl = selectedTypeBon?.requiertBl ?? false;
+  const reqNumeroClient = selectedTypeBon?.requiertNumeroClient ?? false;
+  const reqNomClient = selectedTypeBon?.requiertNomClient ?? false;
+  flagsRef.current = { reqPartenaire, reqBl, reqNumeroClient, reqNomClient };
+
+  // Montant demandé agrégé PAR PORTEFEUILLE réellement choisi dans les sous-bons.
+  const demandeParPortefeuille = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const sb of watchSoubons ?? []) {
+      if (!sb.portefeuilleId) continue;
+      const n = Number(sb.montant);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      map.set(sb.portefeuilleId, (map.get(sb.portefeuilleId) ?? 0) + n);
+    }
+    return map;
+  }, [watchSoubons]);
+
   const totalBon = useMemo(
     () =>
       (watchSoubons ?? []).reduce((acc, sb) => {
@@ -113,8 +176,32 @@ export function BonCreatePage() {
       }, 0),
     [watchSoubons],
   );
-  const reste = solde - totalBon;
-  const isInsufficient = defaultPortefeuille != null && totalBon > 0 && reste < 0;
+
+  // Solde de CHAQUE portefeuille utilisé (une requête par portefeuille distinct).
+  const usedPortefeuilleIds = useMemo(
+    () => Array.from(demandeParPortefeuille.keys()),
+    [demandeParPortefeuille],
+  );
+  const soldeQueries = useQueries({
+    queries: usedPortefeuilleIds.map((id) => ({
+      queryKey: ['portefeuille', id, 'solde'],
+      queryFn: () => getPortefeuilleSolde(id),
+      enabled: !!id,
+    })),
+  });
+  const portefeuilleById = useMemo(
+    () => new Map((portefeuilles ?? []).map((p) => [p.id, p])),
+    [portefeuilles],
+  );
+
+  // Ligne de simulation par portefeuille : solde réel, montant demandé, reste.
+  const simulation = usedPortefeuilleIds.map((id, i) => {
+    const demande = demandeParPortefeuille.get(id) ?? 0;
+    const solde = Number(soldeQueries[i]?.data?.solde ?? 0);
+    return { id, pf: portefeuilleById.get(id), demande, solde, reste: solde - demande };
+  });
+  const depassementTotal = simulation.reduce((acc, s) => acc + Math.max(0, s.demande - s.solde), 0);
+  const isInsufficient = simulation.some((s) => s.demande > 0 && s.reste < 0);
 
   // Modal de demande d'extension
   const [extensionOpen, setExtensionOpen] = useState(false);
@@ -164,9 +251,16 @@ export function BonCreatePage() {
         descriptionExtension: extension?.description || undefined,
         soubons: values.soubons.map((sb) => ({
           ...sb,
-          // Évite d'envoyer une chaîne vide pour les FK optionnelles
+          // Libellé/N° document non requis pour certains types → valeur par défaut.
+          libelle: sb.libelle ?? '',
+          numeroBl: sb.numeroBl ?? '',
+          // Évite d'envoyer une chaîne vide pour les FK / champs optionnels
           partenaireId: sb.partenaireId || undefined,
+          natureOperationId: sb.natureOperationId || undefined,
           numeroClient: sb.numeroClient || undefined,
+          nomClient: sb.nomClient || undefined,
+          paysId: sb.paysId || undefined,
+          divisionId: sb.divisionId || undefined,
           description: sb.description || undefined,
         })),
       },
@@ -271,13 +365,67 @@ export function BonCreatePage() {
               )}
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Libellé</Label>
-                <Input {...register(`soubons.${index}.libelle`)} />
-                {errors.soubons?.[index]?.libelle && (
-                  <p className="text-sm text-destructive">{errors.soubons[index]?.libelle?.message}</p>
-                )}
-              </div>
+              {!reqNomClient && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Libellé</Label>
+                  <Input {...register(`soubons.${index}.libelle`)} />
+                  {errors.soubons?.[index]?.libelle && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.libelle?.message}</p>
+                  )}
+                </div>
+              )}
+              {reqNomClient && (
+                <div className="space-y-2">
+                  <Label>Nom client</Label>
+                  <Input {...register(`soubons.${index}.nomClient`)} />
+                  {errors.soubons?.[index]?.nomClient && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.nomClient?.message}</p>
+                  )}
+                </div>
+              )}
+              {reqNomClient && (
+                <div className="space-y-2">
+                  <Label>Pays</Label>
+                  <select
+                    className={selectClass}
+                    {...register(`soubons.${index}.paysId`, {
+                      onChange: () => setValue(`soubons.${index}.divisionId`, '', { shouldValidate: false }),
+                    })}
+                  >
+                    <option value="">— Choisir —</option>
+                    {paysList?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} — {p.libelle}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.soubons?.[index]?.paysId && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.paysId?.message}</p>
+                  )}
+                </div>
+              )}
+              {reqNomClient && (
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <select
+                    className={selectClass}
+                    disabled={!watch(`soubons.${index}.paysId`)}
+                    {...register(`soubons.${index}.divisionId`)}
+                  >
+                    <option value="">— Choisir —</option>
+                    {(allDivisions ?? [])
+                      .filter((d) => d.paysId === watch(`soubons.${index}.paysId`))
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.code} — {d.libelle}
+                        </option>
+                      ))}
+                  </select>
+                  {errors.soubons?.[index]?.divisionId && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.divisionId?.message}</p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Montant</Label>
                 <Input inputMode="decimal" {...register(`soubons.${index}.montant`)} />
@@ -339,19 +487,22 @@ export function BonCreatePage() {
               </div>
               {/* Caisse : choisie automatiquement en arrière, complètement masquée */}
               <input type="hidden" {...register(`soubons.${index}.caisseId`)} />
-              <div className="space-y-2">
-                <Label>
-                  Partenaire <span className="text-xs font-normal text-[#64748B]">(optionnel)</span>
-                </Label>
-                <select className={selectClass} {...register(`soubons.${index}.partenaireId`)}>
-                  <option value="">— Aucun —</option>
-                  {partenaires?.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.raisonSociale}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {reqPartenaire && (
+                <div className="space-y-2">
+                  <Label>Partenaire</Label>
+                  <select className={selectClass} {...register(`soubons.${index}.partenaireId`)}>
+                    <option value="">— Choisir —</option>
+                    {partenaires?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.raisonSociale}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.soubons?.[index]?.partenaireId && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.partenaireId?.message}</p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Centre de coût</Label>
                 <select className={selectClass} {...register(`soubons.${index}.costCenterId`)}>
@@ -364,17 +515,43 @@ export function BonCreatePage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>N° Document</Label>
-                <Input {...register(`soubons.${index}.numeroBl`)} />
+                <Label>Nature d'opération</Label>
+                <select className={selectClass} {...register(`soubons.${index}.natureOperationId`)}>
+                  <option value="">— Choisir —</option>
+                  {naturesOperation?.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.code} — {n.libelle}
+                    </option>
+                  ))}
+                </select>
+                {errors.soubons?.[index]?.natureOperationId && (
+                  <p className="text-sm text-destructive">
+                    {errors.soubons[index]?.natureOperationId?.message}
+                  </p>
+                )}
               </div>
+              {reqBl && (
+                <div className="space-y-2">
+                  <Label>N° Document</Label>
+                  <Input {...register(`soubons.${index}.numeroBl`)} />
+                  {errors.soubons?.[index]?.numeroBl && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Code manutention</Label>
                 <Input {...register(`soubons.${index}.codeManutention`)} />
               </div>
-              <div className="space-y-2">
-                <Label>N° client (optionnel)</Label>
-                <Input {...register(`soubons.${index}.numeroClient`)} />
-              </div>
+              {reqNumeroClient && (
+                <div className="space-y-2">
+                  <Label>N° client</Label>
+                  <Input {...register(`soubons.${index}.numeroClient`)} />
+                  {errors.soubons?.[index]?.numeroClient && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.numeroClient?.message}</p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2 sm:col-span-2">
                 <Label>Description (optionnel)</Label>
                 <Input {...register(`soubons.${index}.description`)} />
@@ -429,69 +606,89 @@ export function BonCreatePage() {
             </div>
             <div>
               <div className="font-display text-[13px] font-semibold text-[#0F172A]">
-                Solde disponible
+                Solde par portefeuille
               </div>
               <div className="text-[11px] text-[#64748B]">
-                {defaultPortefeuille
-                  ? `${defaultPortefeuille.code} — ${defaultPortefeuille.libelle}`
-                  : 'Aucun portefeuille rattaché'}
+                Impact de ce bon, portefeuille par portefeuille
               </div>
             </div>
           </div>
 
-          <div className="space-y-2.5 p-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] text-[#64748B]">Solde portefeuille</span>
-              <span className="font-display text-[15px] font-semibold tabular-nums text-[#0F172A]">
-                {formatMontant(solde)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] text-[#64748B]">Montant du bon</span>
-              <span className="font-display text-[15px] font-semibold tabular-nums text-[#0F172A]">
-                {formatMontant(totalBon)}
-              </span>
-            </div>
-            <div className="border-t border-dashed border-[rgba(15,76,129,0.1)] pt-2.5">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[11px] font-medium text-[#0F172A]">Reste après ce bon</span>
-                <span
+          <div className="space-y-3 p-4">
+            {simulation.length === 0 && (
+              <div className="flex items-start gap-2 rounded-[10px] bg-[#F8FAFC] px-3 py-2.5 text-[11px] text-[#64748B]">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
+                Choisissez un portefeuille et saisissez les montants pour voir l'impact sur le solde.
+              </div>
+            )}
+
+            {simulation.map((s) => {
+              const insuffisant = s.demande > 0 && s.reste < 0;
+              return (
+                <div
+                  key={s.id}
                   className={cn(
-                    'font-display text-[17px] font-semibold tabular-nums',
-                    reste < 0 ? 'text-[#B42318]' : 'text-[#047857]',
+                    'rounded-[10px] border px-3 py-2.5',
+                    insuffisant
+                      ? 'border-[#FECDCA] bg-[#FEF3F2]'
+                      : 'border-[rgba(15,76,129,0.08)] bg-white',
                   )}
                 >
-                  {formatMontant(reste)}
-                </span>
-              </div>
-            </div>
+                  <div className="mb-1.5 text-[11px] font-semibold text-[#0F172A]">
+                    {s.pf ? `${s.pf.code} — ${s.pf.libelle}` : 'Portefeuille'}
+                  </div>
+                  <div className="flex items-baseline justify-between text-[11px]">
+                    <span className="text-[#64748B]">Solde</span>
+                    <span className="font-display font-semibold tabular-nums text-[#0F172A]">
+                      {formatMontant(s.solde)}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between text-[11px]">
+                    <span className="text-[#64748B]">Demandé</span>
+                    <span className="font-display font-semibold tabular-nums text-[#0F172A]">
+                      {formatMontant(s.demande)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-baseline justify-between border-t border-dashed border-[rgba(15,76,129,0.1)] pt-1.5">
+                    <span className="text-[11px] font-medium text-[#0F172A]">Reste après ce bon</span>
+                    <span
+                      className={cn(
+                        'font-display text-[15px] font-semibold tabular-nums',
+                        s.reste < 0 ? 'text-[#B42318]' : 'text-[#047857]',
+                      )}
+                    >
+                      {formatMontant(s.reste)}
+                    </span>
+                  </div>
+                  {insuffisant && (
+                    <div className="mt-1.5 text-[10px] text-[#B42318]">
+                      Manque {formatMontant(Math.abs(s.reste))} sur ce portefeuille.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
-            {totalBon === 0 && (
-              <div className="mt-2 flex items-start gap-2 rounded-[10px] bg-[#F8FAFC] px-3 py-2.5 text-[11px] text-[#64748B]">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#94A3B8]" />
-                Saisissez les montants des sous-bons pour voir l'impact sur votre solde.
-              </div>
-            )}
-            {totalBon > 0 && !isInsufficient && (
-              <div className="mt-2 flex items-start gap-2 rounded-[10px] bg-[#ECFDF5] px-3 py-2.5 text-[11px] text-[#047857]">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Le solde de votre portefeuille couvre ce bon.
-              </div>
-            )}
             {isInsufficient && (
-              <div className="mt-2 rounded-[10px] border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2.5 text-[11px] text-[#B42318]">
+              <div className="rounded-[10px] border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2.5 text-[11px] text-[#B42318]">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <div>
                     <div className="font-semibold">Solde insuffisant</div>
                     <div className="mt-0.5 text-[#7F1D1D]">
-                      Manque {formatMontant(Math.abs(reste))} sur le portefeuille.
+                      Dépassement total : {formatMontant(depassementTotal)}.
                     </div>
                     <div className="mt-1.5 text-[10px] text-[#7F1D1D]">
                       Une demande d'extension de budget vous sera proposée à la validation.
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+            {simulation.length > 0 && !isInsufficient && (
+              <div className="flex items-start gap-2 rounded-[10px] bg-[#ECFDF5] px-3 py-2.5 text-[11px] text-[#047857]">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Chaque portefeuille couvre les montants demandés.
               </div>
             )}
           </div>
@@ -532,23 +729,17 @@ export function BonCreatePage() {
             </div>
 
             <div className="space-y-3 p-5">
-              <div className="grid grid-cols-3 gap-2 rounded-[10px] bg-[#F8FAFC] px-3 py-2.5 text-[11px]">
+              <div className="grid grid-cols-2 gap-2 rounded-[10px] bg-[#F8FAFC] px-3 py-2.5 text-[11px]">
                 <div>
-                  <div className="text-[#64748B]">Solde</div>
-                  <div className="font-display font-semibold tabular-nums text-[#0F172A]">
-                    {formatMontant(solde)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[#64748B]">Demandé</div>
+                  <div className="text-[#64748B]">Montant du bon</div>
                   <div className="font-display font-semibold tabular-nums text-[#0F172A]">
                     {formatMontant(totalBon)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[#64748B]">Dépassement</div>
+                  <div className="text-[#64748B]">Dépassement total</div>
                   <div className="font-display font-semibold tabular-nums text-[#B42318]">
-                    {formatMontant(Math.abs(reste))}
+                    {formatMontant(depassementTotal)}
                   </div>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import type { TransfertCompteType } from '../entities/demande-transfert.entity';
 
@@ -40,6 +40,7 @@ export class CreateDemandeTransfertDto {
 
 export class DecisionDemandeTransfertDto {
   @ApiProperty({ description: 'true = approuver, false = rejeter' })
+  @IsBoolean()
   approuve!: boolean;
 
   @ApiProperty({ required: false })

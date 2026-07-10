@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Calendar, Repeat, TrendingUp } from 'lucide-react';
+import { ArrowRight, Calendar, Landmark, Repeat, TrendingUp, Wallet } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useRecharge } from '@/api/recharge';
-import { apiErrorMessage, formatMontant } from '@/lib/utils';
+import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
+import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { CharCounter } from '@/components/ui/char-counter';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
@@ -24,8 +26,16 @@ export function RechargePage() {
   const [montant, setMontant] = useState('');
   const [reference, setReference] = useState('');
   const [done, setDone] = useState(false);
+  const [sens, setSens] = useState<RechargeSens>('CAISSE_VERS_PORTEFEUILLE');
+  const inverse = sens === 'PORTEFEUILLE_VERS_CAISSE';
 
-  const { data: portefeuilles } = usePortefeuilles(caisseId || undefined);
+  // Tous les portefeuilles du périmètre (chacun porte sa caisse source).
+  const { data: allPortefeuilles } = usePortefeuilles();
+  // caisse → portefeuille : on liste tous les portefeuilles (la caisse est déduite du choix).
+  // portefeuille → caisse : on garde le filtrage par la caisse destination sélectionnée.
+  const portefeuilles = inverse
+    ? (allPortefeuilles ?? []).filter((p) => !caisseId || String(p.caisseSourceId) === String(caisseId))
+    : (allPortefeuilles ?? []);
   const { data: devises } = useDevises();
   const recharge = useRecharge();
 
@@ -54,7 +64,7 @@ export function RechargePage() {
     if (!valid) return;
     setDone(false);
     recharge.mutate(
-      { caisseId, portefeuilleId, montant, reference: reference || undefined },
+      { caisseId, portefeuilleId, montant, reference: reference || undefined, sens },
       {
         onSuccess: () => {
           setDone(true);
@@ -64,6 +74,66 @@ export function RechargePage() {
       },
     );
   };
+
+  const caisseField = (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="caisse" className={labelClass}>
+        {inverse ? 'Caisse destination (ouverte)' : 'Caisse source (ouverte)'}
+      </label>
+      <select
+        id="caisse"
+        className={selectClass}
+        value={caisseId}
+        onChange={(e) => {
+          setCaisseId(e.target.value);
+          setPortefeuilleId('');
+        }}
+      >
+        <option value="">— Choisir —</option>
+        {openCaisses.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.code} — {c.libelle}
+          </option>
+        ))}
+      </select>
+      {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+    </div>
+  );
+
+  const portefeuilleField = (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="portefeuille" className={labelClass}>
+        {inverse ? 'Portefeuille source' : 'Portefeuille cible'}
+      </label>
+      <select
+        id="portefeuille"
+        className={selectClass}
+        value={portefeuilleId}
+        disabled={inverse && !caisseId}
+        onChange={(e) => {
+          const pid = e.target.value;
+          setPortefeuilleId(pid);
+          // caisse → portefeuille : la caisse source est déduite du portefeuille choisi.
+          if (!inverse) {
+            const p = (allPortefeuilles ?? []).find((x) => String(x.id) === String(pid));
+            setCaisseId(p ? String(p.caisseSourceId) : '');
+          }
+        }}
+      >
+        <option value="">— Choisir —</option>
+        {portefeuilles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.code} — {p.libelle}
+          </option>
+        ))}
+      </select>
+      {!inverse && caisseId && (
+        <p className="text-[11px] text-[#64748B]">
+          Caisse source : {(caisses ?? []).find((c) => String(c.id) === String(caisseId))?.code ?? '—'}
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -101,48 +171,58 @@ export function RechargePage() {
       <Panel>
         <PanelHeader title="Nouvelle recharge" />
         <form onSubmit={submit} className="grid gap-4 p-[18px] sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="caisse" className={labelClass}>
-              Caisse source (ouverte)
-            </label>
-            <select
-              id="caisse"
-              className={selectClass}
-              value={caisseId}
-              onChange={(e) => {
-                setCaisseId(e.target.value);
-                setPortefeuilleId('');
-              }}
-            >
-              <option value="">— Choisir —</option>
-              {openCaisses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.libelle}
-                </option>
-              ))}
-            </select>
-            {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+          {/* Sens du mouvement : caisse → portefeuille (recharge) ou portefeuille → caisse */}
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className={labelClass}>Sens du mouvement</span>
+            <div className="inline-flex w-full max-w-md rounded-[9px] border border-[rgba(15,76,129,0.12)] p-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setSens('CAISSE_VERS_PORTEFEUILLE');
+                  setCaisseId('');
+                  setPortefeuilleId('');
+                }}
+                className={cn(
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-medium transition',
+                  !inverse ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+                )}
+              >
+                <Landmark className="h-3.5 w-3.5" /> Caisse <ArrowRight className="h-3.5 w-3.5" />
+                <Wallet className="h-3.5 w-3.5" /> Portefeuille
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSens('PORTEFEUILLE_VERS_CAISSE');
+                  setCaisseId('');
+                  setPortefeuilleId('');
+                }}
+                className={cn(
+                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 py-1.5 text-xs font-medium transition',
+                  inverse ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+                )}
+              >
+                <Wallet className="h-3.5 w-3.5" /> Portefeuille <ArrowRight className="h-3.5 w-3.5" />
+                <Landmark className="h-3.5 w-3.5" /> Caisse
+              </button>
+            </div>
+            <p className="text-[11px] text-[#64748B]">
+              {inverse
+                ? 'Renvoi : l’argent repart du portefeuille vers sa caisse source (limité au solde du portefeuille).'
+                : 'Recharge : l’argent va de la caisse vers le portefeuille.'}
+            </p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="portefeuille" className={labelClass}>
-              Portefeuille cible
-            </label>
-            <select
-              id="portefeuille"
-              className={selectClass}
-              value={portefeuilleId}
-              disabled={!caisseId}
-              onChange={(e) => setPortefeuilleId(e.target.value)}
-            >
-              <option value="">— Choisir —</option>
-              {portefeuilles?.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.libelle}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* portefeuille → caisse : source (portefeuille) puis destination (caisse).
+              caisse → portefeuille : on ne demande que le portefeuille, la caisse est déduite. */}
+          {inverse ? (
+            <>
+              {portefeuilleField}
+              {caisseField}
+            </>
+          ) : (
+            portefeuilleField
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="montant" className={labelClass}>
@@ -168,7 +248,9 @@ export function RechargePage() {
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder="Motif de la recharge…"
+              maxLength={500}
             />
+            <CharCounter value={reference} max={500} />
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-[rgba(15,76,129,0.07)] pt-4 sm:col-span-2">

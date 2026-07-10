@@ -59,7 +59,9 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
     () =>
       monthBons
         .filter((b) => b.statut === 'DECAISSE' || b.statut === 'COMPTABILISE')
-        .reduce((acc, b) => acc + Number(b.montantTotal || 0), 0),
+        // Montant RÉELLEMENT décaissé (ajustements caissier inclus), pas le montant
+        // demandé — sinon écart avec le montant décaissé réel (remarque de test #10).
+        .reduce((acc, b) => acc + Number(b.montantDecaisse ?? b.montantTotal ?? 0), 0),
     [monthBons],
   );
 

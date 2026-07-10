@@ -2,45 +2,68 @@ import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Search, Trash2 } from 'lucide-react';
-import { useDirections, useCreateDirection, useDeleteDirection } from '@/api/directions';
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  useDirections,
+  useCreateDirection,
+  useUpdateDirection,
+  useDeleteDirection,
+} from '@/api/directions';
 import { apiErrorMessage } from '@/lib/utils';
+import type { Direction } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const schema = z.object({
-  code: z.string().min(1, 'Requis'),
-  libelle: z.string().min(1, 'Requis'),
+  code: z.string().trim().min(1, 'Requis'),
+  libelle: z.string().trim().min(1, 'Requis'),
   description: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
-function CreateDirectionForm({ onDone }: { onDone: () => void }) {
+function DirectionForm({ direction, onDone }: { direction?: Direction; onDone: () => void }) {
+  const isEdit = !!direction;
   const create = useCreateDirection();
+  const update = useUpdateDirection();
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: direction
+      ? { code: direction.code, libelle: direction.libelle, description: direction.description ?? '' }
+      : undefined,
+  });
+
+  const pending = create.isPending || update.isPending;
+  const mutError = create.error || update.error;
+  const hasError = create.isError || update.isError;
 
   const onSubmit = handleSubmit((values) => {
-    create.mutate(
-      { code: values.code, libelle: values.libelle, description: values.description || undefined },
-      {
-        onSuccess: () => {
-          reset();
-          onDone();
-        },
-      },
-    );
+    const payload = {
+      code: values.code,
+      libelle: values.libelle,
+      description: values.description || undefined,
+    };
+    const done = () => {
+      reset();
+      onDone();
+    };
+    if (isEdit) {
+      update.mutate({ id: direction!.id, payload }, { onSuccess: done });
+    } else {
+      create.mutate(payload, { onSuccess: done });
+    }
   });
 
   return (
     <Panel>
-      <PanelHeader title="Nouvelle direction" />
+      <PanelHeader title={isEdit ? `Modifier la direction ${direction!.code}` : 'Nouvelle direction'} />
       <form onSubmit={onSubmit} className="grid gap-4 p-[18px] sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="code">Code</Label>
@@ -57,14 +80,16 @@ function CreateDirectionForm({ onDone }: { onDone: () => void }) {
           <Input id="description" {...register('description')} />
         </div>
         <div className="flex items-center gap-2 sm:col-span-2">
-          <Button type="submit" disabled={create.isPending}>
-            {create.isPending ? 'Création…' : 'Créer'}
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Créer'}
           </Button>
           <Button type="button" variant="ghost" onClick={onDone}>
             Annuler
           </Button>
-          {create.isError && (
-            <p className="text-sm text-destructive">{apiErrorMessage(create.error, 'Création impossible')}</p>
+          {hasError && (
+            <p className="text-sm text-destructive">
+              {apiErrorMessage(mutError, isEdit ? 'Modification impossible' : 'Création impossible')}
+            </p>
           )}
         </div>
       </form>
@@ -76,7 +101,22 @@ export function DirectionsPage() {
   const { data: directions, isLoading, isError } = useDirections();
   const remove = useDeleteDirection();
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Direction | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Direction | null>(null);
   const [search, setSearch] = useState('');
+
+  const openCreate = () => {
+    setEditing(null);
+    setShowForm(true);
+  };
+  const openEdit = (d: Direction) => {
+    setEditing(d);
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -87,14 +127,16 @@ export function DirectionsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreateDirectionForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <DirectionForm key={editing?.id ?? 'new'} direction={editing ?? undefined} onDone={closeForm} />
+      )}
 
       <Panel>
         <PanelHeader title="Directions" badge={`${directions?.length ?? 0}`}>
           {!showForm && (
             <button
               type="button"
-              onClick={() => setShowForm(true)}
+              onClick={openCreate}
               className="ml-auto flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5]"
             >
               <Plus className="h-4 w-4" /> Nouvelle direction
@@ -141,17 +183,24 @@ export function DirectionsPage() {
                   <td className="px-4 py-3">{d.libelle}</td>
                   <td className="px-4 py-3 text-[#64748B]">{d.description ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      aria-label="Supprimer"
-                      disabled={remove.isPending}
-                      onClick={() => {
-                        if (confirm(`Supprimer la direction ${d.code} ?`)) remove.mutate(d.id);
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        aria-label="Modifier"
+                        onClick={() => openEdit(d)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Supprimer"
+                        onClick={() => setPendingDelete(d)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -159,6 +208,28 @@ export function DirectionsPage() {
           </table>
         )}
       </Panel>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="danger"
+        title={pendingDelete ? `Supprimer la direction ${pendingDelete.code} ?` : ''}
+        description={
+          pendingDelete
+            ? `« ${pendingDelete.libelle} » sera retirée de la liste. Vérifiez qu'aucun utilisateur ni centre de coût n'y est rattaché.`
+            : undefined
+        }
+        confirmLabel="Supprimer"
+        busy={remove.isPending}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Suppression impossible') : undefined}
+        onCancel={() => {
+          setPendingDelete(null);
+          remove.reset();
+        }}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) });
+        }}
+      />
     </div>
   );
 }
