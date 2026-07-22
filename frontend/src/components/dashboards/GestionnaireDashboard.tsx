@@ -16,6 +16,7 @@ import { useUsers } from '@/api/users';
 import { ageLabel, cn, formatMontant } from '@/lib/utils';
 import type { Portefeuille, User } from '@/types/api';
 import { Hero, Kpi, BudgetCard, usePortefeuillesBudget } from './_shared';
+import { FondCaissePanel } from './FondCaissePanel';
 
 interface Props {
   user: User;
@@ -137,6 +138,11 @@ export function GestionnaireDashboard({ user }: Props) {
     0,
   );
   const budget = usePortefeuillesBudget(myPortefeuilles.map((p) => p.id));
+  // Caisses concernées par le gestionnaire = celles qui alimentent ses portefeuilles.
+  const mesCaisseIds = useMemo(
+    () => [...new Set(myPortefeuilles.map((p) => String(p.caisseSourceId)).filter(Boolean))],
+    [myPortefeuilles],
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -155,6 +161,8 @@ export function GestionnaireDashboard({ user }: Props) {
           </Link>
         }
       />
+
+      <FondCaissePanel caisseIds={mesCaisseIds} />
 
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi

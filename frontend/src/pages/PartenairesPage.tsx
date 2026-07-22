@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Pill, type PillTone } from '@/components/ui/pill';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const PART_SORT_COLUMNS = ['code', 'raisonSociale'] as const;
+type PartSortCol = (typeof PART_SORT_COLUMNS)[number];
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -125,26 +130,32 @@ function CreatePartenaireForm({ onDone }: { onDone: () => void }) {
 }
 
 export function PartenairesPage() {
-  const { data: partenaires, isLoading, isError } = usePartenaires();
+  const sort = useTableSort<PartSortCol>('/partenaires', PART_SORT_COLUMNS, { by: 'raisonSociale', dir: 'asc' });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: partenaires, isLoading, isError } = usePartenaires({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
   const remove = useDeletePartenaire();
   const [showForm, setShowForm] = useState(false);
-  const [search, setSearch] = useState('');
   const [pendingDelete, setPendingDelete] = useState<Partenaire | null>(null);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (partenaires ?? []).filter(
-      (p) =>
-        !q ||
-        p.raisonSociale.toLowerCase().includes(q) ||
-        p.code.toLowerCase().includes(q) ||
-        (p.numeroClient ?? '').toLowerCase().includes(q),
-    );
-  }, [partenaires, search]);
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreatePartenaireForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <CreatePartenaireForm onDone={() => setShowForm(false)} />
+          </div>
+        </div>
+      )}
 
       <Panel>
         <PanelHeader title="Partenaires" badge={`${partenaires?.length ?? 0}`}>
@@ -176,8 +187,8 @@ export function PartenairesPage() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">Code</th>
-                <th className="px-4 py-2.5 font-semibold">Raison sociale</th>
+                <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
+                <SortableHeader column="raisonSociale" state={sort.state} onSort={sort.setSort}>Raison sociale</SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Type</th>
                 <th className="px-4 py-2.5 font-semibold">Contact</th>
                 <th className="px-4 py-2.5 font-semibold">Ville</th>
@@ -187,14 +198,14 @@ export function PartenairesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
+              {partenaires && partenaires.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-[#64748B]">
                     Aucun partenaire.
                   </td>
                 </tr>
               )}
-              {filtered.map((p) => {
+              {(partenaires ?? []).map((p) => {
                 const t = TYPE_TONE[p.typePartenaire];
                 return (
                   <tr key={p.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">

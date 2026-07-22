@@ -8,6 +8,8 @@ export interface AuditFilters {
   entite?: string;
   dateFrom?: string;
   dateTo?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }
 
 export async function listAudit(filters: AuditFilters = {}): Promise<AuditEntry[]> {
@@ -17,6 +19,8 @@ export async function listAudit(filters: AuditFilters = {}): Promise<AuditEntry[
   if (filters.entite) params.entite = filters.entite;
   if (filters.dateFrom) params.dateFrom = filters.dateFrom;
   if (filters.dateTo) params.dateTo = filters.dateTo;
+  if (filters.sortBy) params.sortBy = filters.sortBy;
+  if (filters.sortDir) params.sortDir = filters.sortDir;
   const { data } = await api.get<AuditEntry[]>('/audit', { params });
   return data;
 }

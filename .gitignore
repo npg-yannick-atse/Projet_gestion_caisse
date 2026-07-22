@@ -3,6 +3,10 @@
 *.pem
 *.key
 
+# Scripts / config de test SAP (contiennent la config de connexion — à garder en local)
+test-sap.ps1
+sap.env
+
 # Node
 node_modules/
 dist/

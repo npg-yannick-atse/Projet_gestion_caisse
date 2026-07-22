@@ -440,7 +440,7 @@ export interface UpdatePortefeuillePayload {
   estActif?: boolean;
 }
 
-export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT';
+export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT' | 'ENCAISSEMENT' | 'CREDIT';
 
 export type TransfertCompteType = 'CAISSE' | 'PORTEFEUILLE';
 export type DemandeTransfertStatut =
@@ -497,6 +497,57 @@ export interface Operation {
   dateOperation: string;
   userId: string;
   reference?: string | null;
+  clientNom?: string | null;
+  clientNumero?: string | null;
+  motif?: string | null;
+}
+
+export type CreditStatut = 'EN_COURS' | 'SOLDE';
+export type CreditSource = 'CAISSE' | 'PORTEFEUILLE';
+
+export interface Credit {
+  id: string;
+  employeId: string;
+  montant: string;
+  nbMois: number;
+  sourceType: CreditSource;
+  sourceId: string;
+  deviseId: string;
+  statut: CreditStatut;
+  dateDebut: string;
+  commentaire?: string | null;
+  createdAt: string;
+}
+
+export interface CreateCreditPayload {
+  employeId: string;
+  montant: string;
+  nbMois: number;
+  sourceType: CreditSource;
+  sourceId: string;
+  commentaire?: string;
+}
+
+export interface UpdateCreditPayload {
+  montant?: string;
+  nbMois?: number;
+  commentaire?: string;
+}
+
+export interface Parametre {
+  cle: string;
+  valeur?: string | null;
+  libelle?: string | null;
+  updatedAt?: string;
+}
+
+export interface EncaissementPayload {
+  caisseId: string;
+  montant: string;
+  clientNom?: string;
+  clientNumero?: string;
+  motif?: string;
+  reference?: string;
 }
 
 export interface LdapUser {
@@ -700,4 +751,73 @@ export interface CreateBonManuelPayload {
   donneurOrdreNom?: string;
   beneficiaireNom: string;
   motif?: string;
+}
+
+/* ---------------------------------------------------------------- Employés -- */
+
+export interface Employe {
+  id: string;
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  directionId?: string | null;
+  /** DECIMAL(19,4) en string. null si l'appelant n'a pas EMPLOYE_VOIR_SALAIRE. */
+  salaire?: string | null;
+  estActif: boolean;
+}
+
+export interface TypeBenefice {
+  id: string;
+  code: string;
+  libelle: string;
+  estActif: boolean;
+}
+
+export interface EmployeBenefice {
+  id: string;
+  employeId: string;
+  typeBeneficeId: string;
+  montant: string;
+  dateDebut: string;
+  dateFin: string;
+  /** Interrupteur manuel : un seul bénéfice valide par type et par employé. */
+  estValide: boolean;
+  commentaire?: string | null;
+}
+
+export interface CreateEmployePayload {
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  directionId?: string;
+  salaire?: string;
+}
+
+export interface UpdateEmployePayload {
+  nom?: string;
+  prenoms?: string;
+  directionId?: string;
+  salaire?: string;
+  estActif?: boolean;
+}
+
+export interface CreateTypeBeneficePayload {
+  code: string;
+  libelle: string;
+}
+
+export interface CreateEmployeBeneficePayload {
+  typeBeneficeId: string;
+  montant: string;
+  dateDebut: string;
+  dateFin: string;
+  commentaire?: string;
+}
+
+export interface UpdateEmployeBeneficePayload {
+  montant?: string;
+  dateDebut?: string;
+  dateFin?: string;
+  estValide?: boolean;
+  commentaire?: string;
 }

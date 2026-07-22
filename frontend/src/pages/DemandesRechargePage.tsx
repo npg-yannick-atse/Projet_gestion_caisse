@@ -18,6 +18,11 @@ import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CharCounter } from '@/components/ui/char-counter';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const DR_SORT_COLUMNS = ['numero', 'createdAt', 'montant', 'statut'] as const;
+type DrSortCol = (typeof DR_SORT_COLUMNS)[number];
 
 const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
@@ -334,7 +339,18 @@ function DemandesRechargePageInner() {
   const peutDemander =
     isAdmin || roleCodes.has('VALIDATEUR') || roleCodes.has('GESTIONNAIRE_PORTEFEUILLE');
 
-  const { data: demandes, isLoading } = useDemandesRecharge();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const sort = useTableSort<DrSortCol>('/demandes-recharge', DR_SORT_COLUMNS);
+  const { data: demandes, isLoading } = useDemandesRecharge({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
   const { data: portefeuilles } = usePortefeuilles();
   const ptfById = useMemo(() => new Map((portefeuilles ?? []).map((p) => [p.id, p])), [portefeuilles]);
   const { data: users } = useUsers();
@@ -348,28 +364,16 @@ function DemandesRechargePageInner() {
   const [confirmReject, setConfirmReject] = useState<DemandeRecharge | null>(null);
   const [confirmAnnuler, setConfirmAnnuler] = useState<DemandeRecharge | null>(null);
   const [showRequest, setShowRequest] = useState(false);
-  const [search, setSearch] = useState('');
   // Par défaut, on n'affiche que les demandes du JOUR (comme Opérations / Audit).
   const today = todayLocal();
   const [dateFrom, setDateFrom] = useState(() => todayLocal());
   const [dateTo, setDateTo] = useState(() => todayLocal());
 
+  // Recherche faite en BD ; le filtre par dates reste client-side.
   const filtered = (demandes ?? []).filter((d) => {
     if (dateFrom && new Date(d.createdAt) < new Date(`${dateFrom}T00:00:00`)) return false;
     if (dateTo && new Date(d.createdAt) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    const u = userById.get(d.demandeurId);
-    const demandeur = u ? `${u.prenom} ${u.nom}`.toLowerCase() : '';
-    const ptf = ptfById.get(d.portefeuilleId);
-    const ptfLabel = ptf ? `${ptf.code} ${ptf.libelle}`.toLowerCase() : '';
-    return (
-      d.numero.toLowerCase().includes(q) ||
-      demandeur.includes(q) ||
-      ptfLabel.includes(q) ||
-      String(d.montant).includes(q) ||
-      (d.motif ?? '').toLowerCase().includes(q)
-    );
+    return true;
   });
   const isDefaultView = !search && dateFrom === today && dateTo === today;
   const resetFilters = () => {
@@ -450,12 +454,12 @@ function DemandesRechargePageInner() {
             <table className="w-full text-xs">
               <thead className="bg-[#F8FAFC]">
                 <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                  <th className="px-4 py-2.5 font-semibold">N°</th>
-                  <th className="px-4 py-2.5 font-semibold">Date &amp; heure</th>
+                  <SortableHeader column="numero" state={sort.state} onSort={sort.setSort}>N°</SortableHeader>
+                  <SortableHeader column="createdAt" state={sort.state} onSort={sort.setSort}>Date &amp; heure</SortableHeader>
                   <th className="px-4 py-2.5 font-semibold">Demandeur</th>
                   <th className="px-4 py-2.5 font-semibold">Portefeuille</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Montant</th>
-                  <th className="px-4 py-2.5 font-semibold">Statut</th>
+                  <SortableHeader column="montant" state={sort.state} onSort={sort.setSort} align="right">Montant</SortableHeader>
+                  <SortableHeader column="statut" state={sort.state} onSort={sort.setSort}>Statut</SortableHeader>
                   <th className="px-4 py-2.5 font-semibold">Motif</th>
                   <th className="px-4 py-2.5">
                     <span className="sr-only">Actions</span>

@@ -96,11 +96,20 @@ export class DemandesTransfertService {
 
   findAll(opts: {
     statut?: DemandeTransfertStatut;
+    search?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
   } = {}): Promise<DemandeTransfert[]> {
     const qb = this.repo.createQueryBuilder('dt').where('dt.deleted_at IS NULL');
     if (opts.statut) qb.andWhere('dt.statut = :statut', { statut: opts.statut });
+    if (opts.search) {
+      // Recherche BD : numéro / motif / montant + nom du demandeur (join sec_user).
+      qb.leftJoin('sec_user', 'u', 'u.id = dt.demandeur_id').andWhere(
+        "(dt.numero LIKE :q OR dt.motif LIKE :q OR CAST(dt.montant AS nvarchar(50)) LIKE :q " +
+          "OR (u.prenom + ' ' + u.nom) LIKE :q OR (u.nom + ' ' + u.prenom) LIKE :q)",
+        { q: `%${opts.search}%` },
+      );
+    }
     const column = DemandesTransfertService.DT_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
     if (column) qb.orderBy(column, direction);

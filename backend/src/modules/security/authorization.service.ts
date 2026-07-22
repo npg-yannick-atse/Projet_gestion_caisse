@@ -12,6 +12,7 @@ import { Interim } from './entities/interim.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UserCaisseAccess } from './entities/user-caisse-access.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
+import { UserNatureOperation } from './entities/user-nature-operation.entity';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRATEUR'];
 
@@ -345,6 +346,28 @@ export class AuthorizationService {
     if (perim === null) return; // admin : accès total
     if (!perim.has(String(divisionId))) {
       throw new ForbiddenException("Cette division est hors de votre périmètre d'autorisation.");
+    }
+  }
+
+  /**
+   * Natures d'opération autorisées pour l'utilisateur (liste blanche stricte).
+   * null = administrateur (aucune restriction). Sinon un Set, éventuellement
+   * VIDE : sans attribution, l'utilisateur ne peut utiliser aucune nature.
+   */
+  async getNatureOperationPerimeter(userId: string): Promise<Set<string> | null> {
+    if (await this.isAdmin(userId)) return null;
+    const rows = await this.dataSource
+      .getRepository(UserNatureOperation)
+      .find({ where: { userId: userId as any } });
+    return new Set(rows.map((r) => String(r.natureOperationId)));
+  }
+
+  /** Vérifie que l'utilisateur a le droit d'utiliser cette nature (sinon Forbidden). */
+  async assertNatureInPerimeter(userId: string, natureOperationId: string): Promise<void> {
+    const perim = await this.getNatureOperationPerimeter(userId);
+    if (perim === null) return; // admin : accès total
+    if (!perim.has(String(natureOperationId))) {
+      throw new ForbiddenException("Cette nature d'opération ne vous est pas autorisée.");
     }
   }
 }

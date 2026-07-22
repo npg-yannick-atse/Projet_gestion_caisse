@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BookText, CalendarRange, Plus, Search, Wallet, X } from 'lucide-react';
 import {
   useBonsManuels,
@@ -17,7 +17,12 @@ import { Panel, PanelHeader } from '@/components/ui/panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
 import type { Carnet } from '@/types/api';
+
+const BM_SORT_COLUMNS = ['numero', 'numeroManuel', 'montant', 'beneficiaireNom', 'dateDecaissement'] as const;
+type BmSortCol = (typeof BM_SORT_COLUMNS)[number];
 
 const selectClass =
   'h-10 w-full rounded-md border border-input bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-primary focus:ring-2 focus:ring-primary/15';
@@ -41,33 +46,36 @@ export function BonsManuelsPage() {
   const isAdmin = (roles ?? []).some((r) => r.code === 'ADMINISTRATEUR' || r.code === 'SUPER_ADMIN');
 
   const { data: carnets } = useCarnets();
-  const { data: bonsManuels } = useBonsManuels();
   const { data: caisses } = useCaisses();
   const { data: users } = useUsers();
 
   const userById = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
   const caisseById = useMemo(() => new Map((caisses ?? []).map((c) => [c.id, c])), [caisses]);
 
-  // Recherche + filtre par dates sur la liste des bons manuels.
+  // Recherche (BD, débounce) + filtre par dates (client) sur la liste des bons manuels.
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   // Modal de gestion des carnets (voir les carnets configurés / en créer un).
   const [carnetsOpen, setCarnetsOpen] = useState(false);
+
+  const sort = useTableSort<BmSortCol>('/bons-manuels', BM_SORT_COLUMNS);
+  const { data: bonsManuels } = useBonsManuels({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
+
+  // Le filtre par dates reste client-side (la recherche texte est faite en BD).
   const filteredBons = (bonsManuels ?? []).filter((b) => {
     if (dateFrom && new Date(b.dateDecaissement) < new Date(`${dateFrom}T00:00:00`)) return false;
     if (dateTo && new Date(b.dateDecaissement) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    const u = b.donneurOrdreUserId ? userById.get(b.donneurOrdreUserId) : undefined;
-    const donneur = (u ? `${u.prenom} ${u.nom}` : (b.donneurOrdreNom ?? '')).toLowerCase();
-    return (
-      String(b.numero).toLowerCase().includes(q) ||
-      String(b.numeroManuel).includes(q) ||
-      donneur.includes(q) ||
-      (b.beneficiaireNom ?? '').toLowerCase().includes(q) ||
-      String(b.montant).includes(q)
-    );
+    return true;
   });
   const isDefaultView = !search && !dateFrom && !dateTo;
   const resetFilters = () => {
@@ -144,12 +152,12 @@ export function BonsManuelsPage() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC] text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
               <tr>
-                <th className="px-4 py-2 font-medium">N°</th>
-                <th className="px-4 py-2 font-medium">N° carnet</th>
-                <th className="px-4 py-2 text-right font-medium">Montant</th>
+                <SortableHeader column="numero" state={sort.state} onSort={sort.setSort}>N°</SortableHeader>
+                <SortableHeader column="numeroManuel" state={sort.state} onSort={sort.setSort}>N° carnet</SortableHeader>
+                <SortableHeader column="montant" state={sort.state} onSort={sort.setSort} align="right">Montant</SortableHeader>
                 <th className="px-4 py-2 font-medium">Donneur d'ordre</th>
-                <th className="px-4 py-2 font-medium">Bénéficiaire</th>
-                <th className="px-4 py-2 font-medium">Date</th>
+                <SortableHeader column="beneficiaireNom" state={sort.state} onSort={sort.setSort}>Bénéficiaire</SortableHeader>
+                <SortableHeader column="dateDecaissement" state={sort.state} onSort={sort.setSort}>Date</SortableHeader>
               </tr>
             </thead>
             <tbody>

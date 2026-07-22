@@ -52,6 +52,8 @@ const TYPE_BADGE: Record<TypeOperation, { label: string; cls: string; dot: strin
   DECAISSEMENT: { label: 'Décaissement', cls: 'bg-[#FEF3F2] text-[#B42318]', dot: '#F04438', icon: ArrowDownCircle },
   TRANSFERT: { label: 'Transfert', cls: 'bg-[#EFF6FF] text-[#1A6DB5]', dot: '#1A6DB5', icon: ArrowLeftRight },
   AJUSTEMENT: { label: 'Ajustement', cls: 'bg-[#FFFBEB] text-[#92400E]', dot: '#F59E0B', icon: SlidersHorizontal },
+  ENCAISSEMENT: { label: 'Encaissement', cls: 'bg-[#ECFDF5] text-[#047857]', dot: '#10B981', icon: ArrowUpCircle },
+  CREDIT: { label: 'Crédit', cls: 'bg-[#F5F3FF] text-[#6D28D9]', dot: '#7C3AED', icon: ArrowDownCircle },
 };
 
 const ADV_SELECT_CLASS =

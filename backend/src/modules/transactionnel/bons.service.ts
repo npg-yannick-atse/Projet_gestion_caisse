@@ -23,6 +23,7 @@ import { User } from '@modules/security/entities/user.entity';
 import { UserCostCenter } from '@modules/security/entities/user-cost-center.entity';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
+import { NatureOperation } from '@modules/referentiel/entities/nature-operation.entity';
 import { TypeBon } from '@modules/referentiel/entities/type-bon.entity';
 import { Caisse } from '@modules/financier/entities/caisse.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
@@ -133,10 +134,14 @@ export class BonsService {
 
     // Nature d'opération obligatoire sur chaque sous-bon (contrôle serveur, vaut aussi
     // pour l'API et le mobile ; le formulaire web l'impose déjà côté client).
+    // Puis cloisonnement : l'utilisateur doit avoir la nature dans sa liste blanche
+    // (sec_user_nature_operation). Les admins passent ; un non-admin sans nature
+    // attribuée est bloqué (sémantique stricte).
     for (const sb of input.soubons) {
       if (!sb.natureOperationId) {
         throw new BadRequestException("La nature d'opération est requise pour chaque sous-bon.");
       }
+      await this.authz.assertNatureInPerimeter(currentUserId, String(sb.natureOperationId));
     }
 
     const montantTotal = input.soubons.reduce((sum, sb) => {
@@ -489,6 +494,7 @@ export class BonsService {
     costCenters: CostCenter[];
     caisses: Caisse[];
     portefeuilles: Portefeuille[];
+    naturesOperation: NatureOperation[];
     hasMultiCc: boolean;
     isAdmin: boolean;
   }> {
@@ -497,6 +503,7 @@ export class BonsService {
     const ccRepo = this.dataSource.getRepository(CostCenter);
     const caisseRepo = this.dataSource.getRepository(Caisse);
     const ptfRepo = this.dataSource.getRepository(Portefeuille);
+    const natureRepo = this.dataSource.getRepository(NatureOperation);
 
     const costCenters = perimeter.allowedCcIds
       ? await ccRepo.find({ where: { id: In([...perimeter.allowedCcIds]) as any, estActif: true }, order: { libelle: 'ASC' } })
@@ -510,7 +517,29 @@ export class BonsService {
       ? await ptfRepo.find({ where: { id: In([...perimeter.allowedPortefeuilleIds]) as any, estActif: true }, order: { code: 'ASC' } })
       : await ptfRepo.find({ where: { estActif: true }, order: { code: 'ASC' } });
 
-    return { costCenters, caisses, portefeuilles, hasMultiCc: perimeter.hasMultiCc, isAdmin: perimeter.isAdmin };
+    // Natures d'opération autorisées : admin = toutes ; non-admin = liste blanche
+    // (éventuellement vide → aucune, donc le formulaire ne propose rien).
+    const naturePerim = await this.authz.getNatureOperationPerimeter(userId);
+    let naturesOperation: NatureOperation[];
+    if (naturePerim === null) {
+      naturesOperation = await natureRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+    } else if (naturePerim.size === 0) {
+      naturesOperation = [];
+    } else {
+      naturesOperation = await natureRepo.find({
+        where: { id: In([...naturePerim]) as any, estActif: true },
+        order: { libelle: 'ASC' },
+      });
+    }
+
+    return {
+      costCenters,
+      caisses,
+      portefeuilles,
+      naturesOperation,
+      hasMultiCc: perimeter.hasMultiCc,
+      isAdmin: perimeter.isAdmin,
+    };
   }
 
   /**

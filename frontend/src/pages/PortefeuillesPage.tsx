@@ -46,6 +46,8 @@ const OP_PILL: Record<TypeOperation, { tone: PillTone; label: string }> = {
   DECAISSEMENT: { tone: 'red', label: 'Débit' },
   TRANSFERT: { tone: 'amber', label: 'Transfert' },
   AJUSTEMENT: { tone: 'gray', label: 'Ajustement' },
+  ENCAISSEMENT: { tone: 'blue', label: 'Crédit' },
+  CREDIT: { tone: 'red', label: 'Débit' },
 };
 
 function WalletCard({ pf, deviseCode, color }: { pf: Portefeuille; deviseCode: string; color: string }) {
@@ -203,7 +205,13 @@ export function PortefeuillesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreatePortefeuilleForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <CreatePortefeuilleForm onDone={() => setShowForm(false)} />
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <h2 className="font-display text-sm font-semibold text-[#0F172A]">Soldes des portefeuilles</h2>

@@ -1,7 +1,16 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
 import { decimalToString } from '@common/transformers/decimal.transformer';
 
-export type TypeCompte = 'CAISSE' | 'PORTEFEUILLE' | 'GAIN_CHANGE' | 'PERTE_CHANGE' | 'CHARGE';
+export type TypeCompte =
+  | 'CAISSE'
+  | 'PORTEFEUILLE'
+  | 'GAIN_CHANGE'
+  | 'PERTE_CHANGE'
+  | 'CHARGE'
+  /** Contrepartie d'un encaissement (recette qui entre dans une caisse). */
+  | 'RECETTE'
+  /** Contrepartie d'un crédit employé (créance sur l'employé). */
+  | 'CREDIT_EMPLOYE';
 
 /**
  * Ecriture comptable en partie double (cf. Partie IV Niveau 1.1).

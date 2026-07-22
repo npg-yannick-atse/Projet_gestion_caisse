@@ -22,8 +22,17 @@ export class ReferentielController {
 
   @Get('partenaires')
   @ApiOperation({ summary: 'Lister les partenaires (clients/fournisseurs) actifs' })
-  listPartenaires(@Query('type') type?: TypePartenaire) {
-    return this.referentiel.listPartenaires(type);
+  listPartenaires(
+    @Query('type') type?: TypePartenaire,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
+    return this.referentiel.listPartenaires(type, {
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Post('partenaires')
@@ -49,8 +58,12 @@ export class ReferentielController {
 
   @Get('cost-centers')
   @ApiOperation({ summary: 'Lister les centres de coût actifs' })
-  listCostCenters() {
-    return this.referentiel.listCostCenters();
+  listCostCenters(@Query('search') search?: string, @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+    return this.referentiel.listCostCenters({
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Post('cost-centers')
@@ -87,8 +100,12 @@ export class ReferentielController {
 
   @Get('natures-operation')
   @ApiOperation({ summary: 'Lister les natures d\'opération actives' })
-  listNaturesOperation() {
-    return this.referentiel.listNaturesOperation();
+  listNaturesOperation(@Query('search') search?: string, @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+    return this.referentiel.listNaturesOperation({
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Post('natures-operation')
@@ -153,8 +170,12 @@ export class ReferentielController {
   // ---------- Pays ----------
   @Get('pays')
   @ApiOperation({ summary: 'Lister les pays actifs' })
-  listPays() {
-    return this.referentiel.listPays();
+  listPays(@Query('search') search?: string, @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+    return this.referentiel.listPays({
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Post('pays')

@@ -43,8 +43,11 @@ export class ReferentielService {
   ) {}
 
   // ---------- Pays ----------
-  listPays(): Promise<Pays[]> {
-    return this.paysRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+  listPays(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<Pays[]> {
+    return this.applyRefList(
+      this.paysRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
+      'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+    );
   }
 
   async createPays(dto: CreatePaysDto, userId: string): Promise<Pays> {
@@ -111,11 +114,16 @@ export class ReferentielService {
     await this.divisionRepo.save(d);
   }
 
-  listPartenaires(type?: TypePartenaire): Promise<Partenaire[]> {
-    return this.partenaireRepo.find({
-      where: { estActif: true, ...(type ? { typePartenaire: type } : {}) },
-      order: { raisonSociale: 'ASC' },
-    });
+  listPartenaires(
+    type?: TypePartenaire,
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+  ): Promise<Partenaire[]> {
+    const qb = this.partenaireRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true });
+    if (type) qb.andWhere('x.typePartenaire = :t', { t: type });
+    return this.applyRefList(
+      qb, 'x', opts, ['raisonSociale', 'code', 'sigle'],
+      { code: 'code', raisonSociale: 'raisonSociale' }, 'raisonSociale',
+    );
   }
 
   async findPartenaire(id: string): Promise<Partenaire> {
@@ -154,8 +162,34 @@ export class ReferentielService {
     await this.partenaireRepo.save(p);
   }
 
-  listCostCenters(): Promise<CostCenter[]> {
-    return this.costCenterRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+  /**
+   * Applique recherche (LIKE sur `searchCols`) et tri (whitelist `sortMap`) EN BASE
+   * à un QueryBuilder déjà filtré sur estActif. `opts.search`/`sortBy`/`sortDir`.
+   */
+  private applyRefList(
+    qb: any,
+    alias: string,
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' },
+    searchCols: string[],
+    sortMap: Record<string, string>,
+    defaultCol: string,
+  ) {
+    if (opts.search && opts.search.trim()) {
+      const s = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
+      const cond = searchCols.map((c) => `${alias}.${c} LIKE :s ESCAPE :e`).join(' OR ');
+      qb.andWhere(`(${cond})`, { s, e: '\\' });
+    }
+    const col = sortMap[opts.sortBy ?? ''];
+    const dir: 'ASC' | 'DESC' = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
+    qb.orderBy(col ? `${alias}.${col}` : `${alias}.${defaultCol}`, col ? dir : 'ASC');
+    return qb.getMany();
+  }
+
+  listCostCenters(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<CostCenter[]> {
+    return this.applyRefList(
+      this.costCenterRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
+      'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+    );
   }
 
   async findCostCenter(id: string): Promise<CostCenter> {
@@ -219,8 +253,11 @@ export class ReferentielService {
     return this.typeBonRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
   }
 
-  listNaturesOperation(): Promise<NatureOperation[]> {
-    return this.natureOperationRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+  listNaturesOperation(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<NatureOperation[]> {
+    return this.applyRefList(
+      this.natureOperationRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
+      'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+    );
   }
 
   async findNatureOperation(id: string): Promise<NatureOperation> {

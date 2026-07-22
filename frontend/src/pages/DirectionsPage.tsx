@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,6 +16,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const DIR_SORT_COLUMNS = ['code', 'libelle'] as const;
+type DirSortCol = (typeof DIR_SORT_COLUMNS)[number];
 
 const schema = z.object({
   code: z.string().trim().min(1, 'Requis'),
@@ -98,12 +103,23 @@ function DirectionForm({ direction, onDone }: { direction?: Direction; onDone: (
 }
 
 export function DirectionsPage() {
-  const { data: directions, isLoading, isError } = useDirections();
+  const sort = useTableSort<DirSortCol>('/directions', DIR_SORT_COLUMNS, { by: 'libelle', dir: 'asc' });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: directions, isLoading, isError } = useDirections({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
   const remove = useDeleteDirection();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Direction | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Direction | null>(null);
-  const [search, setSearch] = useState('');
 
   const openCreate = () => {
     setEditing(null);
@@ -118,17 +134,14 @@ export function DirectionsPage() {
     setEditing(null);
   };
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (directions ?? []).filter(
-      (d) => !q || d.libelle.toLowerCase().includes(q) || d.code.toLowerCase().includes(q),
-    );
-  }, [directions, search]);
-
   return (
     <div className="flex flex-col gap-4">
       {showForm && (
-        <DirectionForm key={editing?.id ?? 'new'} direction={editing ?? undefined} onDone={closeForm} />
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={closeForm}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <DirectionForm key={editing?.id ?? 'new'} direction={editing ?? undefined} onDone={closeForm} />
+          </div>
+        </div>
       )}
 
       <Panel>
@@ -161,8 +174,8 @@ export function DirectionsPage() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">Code</th>
-                <th className="px-4 py-2.5 font-semibold">Libellé</th>
+                <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Description</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
@@ -170,14 +183,14 @@ export function DirectionsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
+              {directions && directions.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
                     Aucune direction. Créez-en une pour pouvoir la lier aux utilisateurs et centres de coût.
                   </td>
                 </tr>
               )}
-              {filtered.map((d) => (
+              {(directions ?? []).map((d) => (
                 <tr key={d.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{d.code}</td>
                   <td className="px-4 py-3">{d.libelle}</td>

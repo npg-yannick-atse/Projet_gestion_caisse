@@ -42,13 +42,26 @@ export function useCloturerCarnet() {
 
 // ---------- Bons manuels ----------
 
-export async function listBonsManuels(): Promise<BonManuel[]> {
-  const { data } = await api.get<BonManuel[]>('/bons-manuels');
+export interface BonsManuelsFilters {
+  search?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}
+
+export async function listBonsManuels(filters: BonsManuelsFilters = {}): Promise<BonManuel[]> {
+  const params: Record<string, string> = {};
+  if (filters.search) params.search = filters.search;
+  if (filters.sortBy) params.sortBy = filters.sortBy;
+  if (filters.sortDir) params.sortDir = filters.sortDir;
+  const { data } = await api.get<BonManuel[]>('/bons-manuels', { params });
   return data;
 }
 
-export function useBonsManuels() {
-  return useQuery({ queryKey: ['bons-manuels'], queryFn: listBonsManuels });
+export function useBonsManuels(filters: BonsManuelsFilters = {}) {
+  return useQuery({
+    queryKey: ['bons-manuels', filters],
+    queryFn: () => listBonsManuels(filters),
+  });
 }
 
 export async function createBonManuel(payload: CreateBonManuelPayload): Promise<BonManuel> {

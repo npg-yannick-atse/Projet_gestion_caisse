@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CaissesService } from './caisses.service';
 import { CreateCaisseDto } from './dto/create-caisse.dto';
@@ -69,6 +69,32 @@ export class CaissesController {
   async getSolde(@Param('id') id: string) {
     const solde = await this.caissesService.getSolde(id);
     return { caisseId: id, typeCompte: 'CAISSE', solde };
+  }
+
+  @Get(':id/solde-timeline')
+  @ApiOperation({ summary: 'Évolution du fond de caisse jour par jour (solde cumulé)' })
+  async getSoldeTimeline(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('days') days?: string,
+  ) {
+    // Périmètre : admins → toutes les caisses ; sinon caisse de son accès direct
+    // OU caisse qui alimente l'un de ses portefeuilles (cas du gestionnaire).
+    if (!(await this.authz.isAdmin(user.sub))) {
+      const caisses = await this.authz.getCaissePerimeter(user.sub);
+      let autorise = caisses?.has(String(id)) ?? false;
+      if (!autorise) {
+        const ptfs = await this.authz.getPortefeuillePerimeter(user.sub);
+        if (ptfs && ptfs.size > 0) {
+          const sources = await this.caissesService.sourceCaisseIds([...ptfs].map(String));
+          autorise = sources.includes(String(id));
+        }
+      }
+      if (!autorise) {
+        throw new ForbiddenException("Cette caisse est hors de votre périmètre.");
+      }
+    }
+    return this.caissesService.getSoldeTimeline(id, days ? parseInt(days, 10) : 30);
   }
 
   @Get(':id/sessions')

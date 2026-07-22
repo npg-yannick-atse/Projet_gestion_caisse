@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { SecurityModule } from '@modules/security/security.module';
 import { PlanComptable } from './entities/plan-comptable.entity';
 import { CostCenter } from './entities/cost-center.entity';
 import { NatureOperation } from './entities/nature-operation.entity';
@@ -10,11 +11,20 @@ import { Site } from './entities/site.entity';
 import { TypeBon } from './entities/type-bon.entity';
 import { Pays } from './entities/pays.entity';
 import { Division } from './entities/division.entity';
+import { Employe } from './entities/employe.entity';
+import { TypeBenefice } from './entities/type-benefice.entity';
+import { EmployeBenefice } from './entities/employe-benefice.entity';
+import { Parametre } from './entities/parametre.entity';
 import { ReferentielService } from './referentiel.service';
 import { ReferentielController } from './referentiel.controller';
+import { EmployesService } from './employes.service';
+import { EmployesController } from './employes.controller';
+import { ParametresService } from './parametres.service';
+import { ParametresController } from './parametres.controller';
 
 @Module({
   imports: [
+    SecurityModule,
     TypeOrmModule.forFeature([
       PlanComptable,
       CostCenter,
@@ -26,10 +36,14 @@ import { ReferentielController } from './referentiel.controller';
       TypeBon,
       Pays,
       Division,
+      Employe,
+      TypeBenefice,
+      EmployeBenefice,
+      Parametre,
     ]),
   ],
-  providers: [ReferentielService],
-  controllers: [ReferentielController],
-  exports: [ReferentielService, TypeOrmModule],
+  providers: [ReferentielService, EmployesService, ParametresService],
+  controllers: [ReferentielController, EmployesController, ParametresController],
+  exports: [ReferentielService, EmployesService, ParametresService, TypeOrmModule],
 })
 export class ReferentielModule {}

@@ -1,8 +1,9 @@
-import { ShieldCheck, Banknote } from 'lucide-react';
+import { ShieldCheck, Banknote, Landmark } from 'lucide-react';
 import type { User } from '@/types/api';
 import { Hero } from './_shared';
 import { AdminDashboard } from './AdminDashboard';
 import { CaissierDashboard } from './CaissierDashboard';
+import { FondCaissePanel } from './FondCaissePanel';
 
 interface Props {
   user: User;
@@ -47,6 +48,9 @@ export function DAFDashboard({ user }: Props) {
 
       <SectionTitle icon={Banknote}>Caisse &amp; décaissement</SectionTitle>
       <CaissierDashboard user={user} showHero={false} />
+
+      <SectionTitle icon={Landmark}>Fond de caisse</SectionTitle>
+      <FondCaissePanel />
     </div>
   );
 }

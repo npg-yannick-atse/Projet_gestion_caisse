@@ -13,6 +13,7 @@ import { UserCaisseAccess } from './entities/user-caisse-access.entity';
 import { UserCostCenter } from './entities/user-cost-center.entity';
 import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
+import { UserNatureOperation } from './entities/user-nature-operation.entity';
 import { Interim } from './entities/interim.entity';
 import { ChangementPermission } from '@modules/audit/entities/changement-permission.entity';
 import { AuditPermissionService } from './audit-permission.service';
@@ -46,6 +47,7 @@ import { AuthorizationService } from './authorization.service';
       UserCostCenter,
       UserPermissionExtra,
       UserDivisionAccess,
+      UserNatureOperation,
       Interim,
       ChangementPermission,
     ]),

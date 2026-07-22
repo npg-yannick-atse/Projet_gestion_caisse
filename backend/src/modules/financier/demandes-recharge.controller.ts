@@ -37,12 +37,21 @@ export class DemandesRechargeController {
 
   @Get()
   @ApiOperation({ summary: 'Lister les demandes de recharge (caissier/admin : toutes ; sinon : les siennes)' })
-  async findAll(@CurrentUser() user: JwtPayload, @Query('statut') statut?: string) {
+  async findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('statut') statut?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
     const codes = await this.authz.getUserRoleCodes(user.sub);
     const peutToutVoir = this.authz.isAdminCodes(codes) || codes.has('CAISSIER');
     return this.service.findAll({
       statut: statut as DemandeRechargeStatut,
       demandeurId: peutToutVoir ? undefined : user.sub,
+      search,
+      sortBy,
+      sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
   }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -17,6 +17,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const CC_SORT_COLUMNS = ['code', 'libelle'] as const;
+type CcSortCol = (typeof CC_SORT_COLUMNS)[number];
 import { PowerOff } from 'lucide-react';
 
 const selectClass =
@@ -139,13 +144,24 @@ function CostCenterForm({ costCenter, onDone }: { costCenter?: CostCenter; onDon
 }
 
 export function CostCentersPage() {
-  const { data: costCenters, isLoading, isError } = useCostCenters();
+  const sort = useTableSort<CcSortCol>('/cost-centers', CC_SORT_COLUMNS, { by: 'libelle', dir: 'asc' });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: costCenters, isLoading, isError } = useCostCenters({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
   const { data: directions } = useDirections();
   const remove = useDeleteCostCenter();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CostCenter | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CostCenter | null>(null);
-  const [search, setSearch] = useState('');
 
   const openCreate = () => {
     setEditing(null);
@@ -165,17 +181,14 @@ export function CostCentersPage() {
     [directions],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (costCenters ?? []).filter(
-      (c) => !q || c.libelle.toLowerCase().includes(q) || c.code.toLowerCase().includes(q),
-    );
-  }, [costCenters, search]);
-
   return (
     <div className="flex flex-col gap-4">
       {showForm && (
-        <CostCenterForm key={editing?.id ?? 'new'} costCenter={editing ?? undefined} onDone={closeForm} />
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={closeForm}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <CostCenterForm key={editing?.id ?? 'new'} costCenter={editing ?? undefined} onDone={closeForm} />
+          </div>
+        </div>
       )}
 
       <Panel>
@@ -208,8 +221,8 @@ export function CostCentersPage() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">Code</th>
-                <th className="px-4 py-2.5 font-semibold">Libellé</th>
+                <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Direction</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Budget mensuel</th>
                 <th className="px-4 py-2.5">
@@ -218,14 +231,14 @@ export function CostCentersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && (
+              {costCenters && costCenters.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
                     Aucun centre de coût.
                   </td>
                 </tr>
               )}
-              {filtered.map((c) => (
+              {(costCenters ?? []).map((c) => (
                 <tr key={c.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{c.code}</td>
                   <td className="px-4 py-3">{c.libelle}</td>

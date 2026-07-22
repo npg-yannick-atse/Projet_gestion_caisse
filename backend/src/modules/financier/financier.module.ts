@@ -9,10 +9,16 @@ import { CompteGainChange } from './entities/compte-gain-change.entity';
 import { ComptePerteChange } from './entities/compte-perte-change.entity';
 import { DemandeTransfert } from './entities/demande-transfert.entity';
 import { DemandeRecharge } from './entities/demande-recharge.entity';
+import { Credit } from './entities/credit.entity';
+import { Employe } from '@modules/referentiel/entities/employe.entity';
 import { CaissesService } from './caisses.service';
+import { CreditService } from './credit.service';
+import { CreditController } from './credit.controller';
 import { CaissesController } from './caisses.controller';
 import { RechargeService } from './recharge.service';
 import { RechargeController } from './recharge.controller';
+import { EncaissementService } from './encaissement.service';
+import { EncaissementController } from './encaissement.controller';
 import { DevisesService } from './devises.service';
 import { DevisesController } from './devises.controller';
 import { PortefeuillesService } from './portefeuilles.service';
@@ -37,6 +43,8 @@ import { SecurityModule } from '@modules/security/security.module';
       ComptePerteChange,
       DemandeTransfert,
       DemandeRecharge,
+      Credit,
+      Employe,
     ]),
     TransactionnelModule,
     SecurityModule,
@@ -44,6 +52,8 @@ import { SecurityModule } from '@modules/security/security.module';
   providers: [
     CaissesService,
     RechargeService,
+    EncaissementService,
+    CreditService,
     DevisesService,
     PortefeuillesService,
     DemandesTransfertService,
@@ -53,6 +63,8 @@ import { SecurityModule } from '@modules/security/security.module';
   controllers: [
     CaissesController,
     RechargeController,
+    EncaissementController,
+    CreditController,
     DevisesController,
     PortefeuillesController,
     DemandesTransfertController,

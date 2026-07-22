@@ -36,6 +36,8 @@ const OP_META: Record<TypeOperation, { label: string; cls: string; sign: string;
   DECAISSEMENT: { label: 'Décaissement', cls: 'text-[#B42318]', sign: '−', icon: ArrowDownCircle },
   TRANSFERT: { label: 'Transfert', cls: 'text-[#1A6DB5]', sign: '', icon: ArrowLeftRight },
   AJUSTEMENT: { label: 'Ajustement', cls: 'text-[#92400E]', sign: '', icon: SlidersHorizontal },
+  ENCAISSEMENT: { label: 'Encaissement', cls: 'text-[#047857]', sign: '+', icon: ArrowUpCircle },
+  CREDIT: { label: 'Crédit', cls: 'text-[#6D28D9]', sign: '−', icon: ArrowDownCircle },
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {

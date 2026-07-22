@@ -199,4 +199,32 @@ export class UsersController {
   async removeDivision(@Param('id') id: string, @Param('divisionId') divisionId: string) {
     await this.usersService.removeDivision(id, divisionId);
   }
+
+  // ---------- Natures d'opération autorisées (création de bons) ----------
+
+  @Get(':id/natures-operation')
+  @ApiOperation({ summary: "Lister les natures d'opération autorisées pour l'utilisateur" })
+  getNatureOperations(@Param('id') id: string) {
+    return this.usersService.getNatureOperationAccess(id);
+  }
+
+  @Post(':id/natures-operation/:natureId')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Autoriser une nature d'opération" })
+  async assignNatureOperation(
+    @Param('id') id: string,
+    @Param('natureId') natureId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.usersService.assignNatureOperation(id, natureId, user.sub);
+  }
+
+  @Delete(':id/natures-operation/:natureId')
+  @Roles('ADMINISTRATEUR')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Retirer une nature d'opération autorisée" })
+  async removeNatureOperation(@Param('id') id: string, @Param('natureId') natureId: string) {
+    await this.usersService.removeNatureOperation(id, natureId);
+  }
 }

@@ -95,11 +95,41 @@ export class BonsManuelsService {
 
   // ========================= BONS MANUELS =========================
 
-  async findBonsManuels(userId: string): Promise<BonManuel[]> {
+  /**
+   * Whitelist des colonnes triables côté BD (défaut : date_decaissement DESC).
+   * Le donneur d'ordre (user OU nom libre) n'est pas exposé au tri car mixte.
+   */
+  private static readonly BON_MANUEL_SORT_MAP: Record<string, string> = {
+    numero: 'bm.numero',
+    numeroManuel: 'bm.numero_manuel',
+    montant: 'bm.montant',
+    beneficiaireNom: 'bm.beneficiaire_nom',
+    dateDecaissement: 'bm.date_decaissement',
+  };
+
+  async findBonsManuels(
+    userId: string,
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+  ): Promise<BonManuel[]> {
     const isAdmin = await this.authz.isAdmin(userId);
-    const where: Record<string, unknown> = {};
-    if (!isAdmin) where.caissierId = userId;
-    return this.bonManuelRepo.find({ where: where as any, order: { dateDecaissement: 'DESC' } });
+    const qb = this.bonManuelRepo.createQueryBuilder('bm');
+    if (!isAdmin) qb.where('bm.caissier_id = :uid', { uid: userId });
+    if (opts.search) {
+      // Recherche BD : n° système / n° carnet / bénéficiaire / montant + donneur d'ordre
+      // (nom libre OU nom de l'utilisateur via join sec_user).
+      qb.leftJoin('sec_user', 'du', 'du.id = bm.donneur_ordre_user_id').andWhere(
+        "(bm.numero LIKE :q OR CAST(bm.numero_manuel AS nvarchar(20)) LIKE :q " +
+          "OR bm.beneficiaire_nom LIKE :q OR bm.donneur_ordre_nom LIKE :q " +
+          "OR CAST(bm.montant AS nvarchar(50)) LIKE :q " +
+          "OR (du.prenom + ' ' + du.nom) LIKE :q OR (du.nom + ' ' + du.prenom) LIKE :q)",
+        { q: `%${opts.search}%` },
+      );
+    }
+    const column = BonsManuelsService.BON_MANUEL_SORT_MAP[opts.sortBy ?? ''];
+    const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
+    if (column) qb.orderBy(column, direction);
+    else qb.orderBy('bm.date_decaissement', 'DESC');
+    return qb.getMany();
   }
 
   /**

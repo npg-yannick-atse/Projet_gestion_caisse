@@ -8,10 +8,26 @@ export interface CreateDemandeRechargePayload {
   portefeuilleId?: string;
 }
 
-export async function listDemandesRecharge(statut?: DemandeRechargeStatut): Promise<DemandeRecharge[]> {
-  const { data } = await api.get<DemandeRecharge[]>('/demandes-recharge', {
-    params: statut ? { statut } : undefined,
-  });
+export interface DemandesRechargeFilters {
+  statut?: DemandeRechargeStatut;
+  search?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}
+
+export async function listDemandesRecharge(
+  filters: DemandesRechargeFilters | DemandeRechargeStatut = {},
+): Promise<DemandeRecharge[]> {
+  const params: Record<string, string> = {};
+  if (typeof filters === 'string') {
+    params.statut = filters;
+  } else {
+    if (filters.statut) params.statut = filters.statut;
+    if (filters.search) params.search = filters.search;
+    if (filters.sortBy) params.sortBy = filters.sortBy;
+    if (filters.sortDir) params.sortDir = filters.sortDir;
+  }
+  const { data } = await api.get<DemandeRecharge[]>('/demandes-recharge', { params });
   return data;
 }
 
@@ -48,10 +64,18 @@ export function useMesPortefeuillesRechargeables(enabled = true) {
   });
 }
 
-export function useDemandesRecharge(statut?: DemandeRechargeStatut) {
+export function useDemandesRecharge(
+  filters: DemandesRechargeFilters | DemandeRechargeStatut = {},
+) {
+  const key =
+    typeof filters === 'string'
+      ? { statut: filters }
+      : filters && Object.keys(filters).length > 0
+        ? filters
+        : 'all';
   return useQuery({
-    queryKey: ['demandes-recharge', statut ?? 'all'],
-    queryFn: () => listDemandesRecharge(statut),
+    queryKey: ['demandes-recharge', key],
+    queryFn: () => listDemandesRecharge(filters),
   });
 }
 

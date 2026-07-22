@@ -87,6 +87,24 @@ export function useCaisseSolde(id: string) {
   return useQuery({ queryKey: ['caisse', id, 'solde'], queryFn: () => getCaisseSolde(id) });
 }
 
+export interface SoldePoint {
+  date: string;
+  solde: number;
+}
+
+export async function getCaisseSoldeTimeline(id: string, days = 30): Promise<SoldePoint[]> {
+  const { data } = await api.get<SoldePoint[]>(`/caisses/${id}/solde-timeline`, { params: { days } });
+  return data;
+}
+
+export function useCaisseSoldeTimeline(id: string | null, days = 30) {
+  return useQuery({
+    queryKey: ['caisse', id, 'solde-timeline', days],
+    queryFn: () => getCaisseSoldeTimeline(id as string, days),
+    enabled: !!id,
+  });
+}
+
 export function useOpenCaisse() {
   const qc = useQueryClient();
   return useMutation({

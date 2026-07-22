@@ -124,6 +124,8 @@ export interface BonPerimeter {
   costCenters: CostCenter[];
   caisses: Caisse[];
   portefeuilles: Portefeuille[];
+  /** Natures d'opération autorisées pour l'utilisateur (déjà filtrées côté serveur). */
+  naturesOperation: NatureOperation[];
   hasMultiCc: boolean;
   isAdmin: boolean;
 }

@@ -9,6 +9,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { Profil } from '../entities/profil.entity';
 import { UserProfil } from '../entities/user-profil.entity';
 import { UserDivisionAccess } from '../entities/user-division-access.entity';
+import { UserNatureOperation } from '../entities/user-nature-operation.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditPermissionService } from '../audit-permission.service';
@@ -30,6 +31,8 @@ export class UsersService {
     private readonly profilRepo: Repository<Profil>,
     @InjectRepository(UserDivisionAccess)
     private readonly userDivisionRepo: Repository<UserDivisionAccess>,
+    @InjectRepository(UserNatureOperation)
+    private readonly userNatureRepo: Repository<UserNatureOperation>,
     private readonly auditPerm: AuditPermissionService,
   ) {}
 
@@ -53,6 +56,29 @@ export class UsersService {
     const result = await this.userDivisionRepo.delete({ userId, divisionId });
     if (result.affected === 0) {
       throw new NotFoundException('Accès division introuvable');
+    }
+  }
+
+  // ---------- Natures d'opération autorisées (création de bons) ----------
+  async getNatureOperationAccess(userId: string): Promise<string[]> {
+    await this.findOne(userId);
+    const rows = await this.userNatureRepo.find({ where: { userId } });
+    return rows.map((r) => String(r.natureOperationId));
+  }
+
+  async assignNatureOperation(userId: string, natureOperationId: string, actorId: string): Promise<void> {
+    await this.findOne(userId);
+    const existing = await this.userNatureRepo.findOne({ where: { userId, natureOperationId } });
+    if (existing) return;
+    await this.userNatureRepo.save(
+      this.userNatureRepo.create({ userId, natureOperationId, createdById: actorId }),
+    );
+  }
+
+  async removeNatureOperation(userId: string, natureOperationId: string): Promise<void> {
+    const result = await this.userNatureRepo.delete({ userId, natureOperationId });
+    if (result.affected === 0) {
+      throw new NotFoundException('Nature autorisée introuvable');
     }
   }
 

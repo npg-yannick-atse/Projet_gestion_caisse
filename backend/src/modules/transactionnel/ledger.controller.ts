@@ -76,8 +76,8 @@ export class LedgerController {
     }
     let allowedTypes: string[] | undefined;
     if (!isAdmin) {
-      if (isCaissier) allowedTypes = ['RECHARGE', 'DECAISSEMENT'];
-      else if (isValidateur) allowedTypes = ['DECAISSEMENT'];
+      if (isCaissier) allowedTypes = ['RECHARGE', 'DECAISSEMENT', 'ENCAISSEMENT'];
+      else if (isValidateur) allowedTypes = ['DECAISSEMENT', 'CREDIT'];
       // sinon (ex. gestionnaire de portefeuille) : pas de restriction de type, mais
       // le périmètre strict ci-dessous s'applique quand même.
     }

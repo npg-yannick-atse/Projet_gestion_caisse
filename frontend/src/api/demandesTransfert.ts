@@ -9,6 +9,7 @@ import type {
 
 export interface DemandesTransfertFilters {
   statut?: DemandeTransfertStatut;
+  search?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
@@ -21,6 +22,7 @@ export async function listDemandesTransfert(
     params.statut = filters;
   } else {
     if (filters.statut) params.statut = filters.statut;
+    if (filters.search) params.search = filters.search;
     if (filters.sortBy) params.sortBy = filters.sortBy;
     if (filters.sortDir) params.sortDir = filters.sortDir;
   }

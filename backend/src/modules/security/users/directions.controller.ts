@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -31,9 +32,13 @@ export class DirectionsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lister les directions actives' })
-  findAll() {
-    return this.directionsService.findAll();
+  @ApiOperation({ summary: 'Lister les directions (recherche + tri en base)' })
+  findAll(@Query('search') search?: string, @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+    return this.directionsService.findAll({
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Get(':id')

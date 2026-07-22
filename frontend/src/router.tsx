@@ -19,13 +19,18 @@ import { ProfilsPage } from '@/pages/ProfilsPage';
 import { InterimsPage } from '@/pages/InterimsPage';
 import { AuditPage } from '@/pages/AuditPage';
 import { RechargePage } from '@/pages/RechargePage';
+import { EncaissementPage } from '@/pages/EncaissementPage';
+import { ReleveAgentPage } from '@/pages/ReleveAgentPage';
+import { ParametresPage } from '@/pages/ParametresPage';
+import { CreditsPage } from '@/pages/CreditsPage';
 import { BonCreatePage } from '@/pages/BonCreatePage';
 import { PartenairesPage } from '@/pages/PartenairesPage';
 import { CostCentersPage } from '@/pages/CostCentersPage';
 import { DirectionsPage } from '@/pages/DirectionsPage';
 import { PaysDivisionsPage } from '@/pages/PaysDivisionsPage';
+import { EmployesPage } from '@/pages/EmployesPage';
+import { TypesBeneficePage } from '@/pages/TypesBeneficePage';
 import { OperationsPage } from '@/pages/OperationsPage';
-import { PlanComptablePage } from '@/pages/PlanComptablePage';
 import { NaturesOperationPage } from '@/pages/NaturesOperationPage';
 import { DemandesExtensionPage } from '@/pages/DemandesExtensionPage';
 import { DemandesTransfertPage } from '@/pages/DemandesTransfertPage';
@@ -89,6 +94,46 @@ const rechargeRoute = createRoute({
   component: () => (
     <RoleGuard allow={['CAISSIER', 'ADMINISTRATEUR', 'SUPER_ADMIN']}>
       <RechargePage />
+    </RoleGuard>
+  ),
+});
+
+const encaissementRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/encaissement',
+  component: () => (
+    <RoleGuard allow={['CAISSIER', 'ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <EncaissementPage />
+    </RoleGuard>
+  ),
+});
+
+const releveAgentRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/releve-agent',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']}>
+      <ReleveAgentPage />
+    </RoleGuard>
+  ),
+});
+
+const parametresRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/parametres',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <ParametresPage />
+    </RoleGuard>
+  ),
+});
+
+const creditsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/credits',
+  component: () => (
+    <RoleGuard allow={['VALIDATEUR', 'ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']}>
+      <CreditsPage />
     </RoleGuard>
   ),
 });
@@ -169,10 +214,24 @@ const operationsRoute = createRoute({
   component: OperationsPage,
 });
 
-const planComptableRoute = createRoute({
+const employesRoute = createRoute({
   getParentRoute: () => protectedRoute,
-  path: '/plan-comptable',
-  component: PlanComptablePage,
+  path: '/employes',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <EmployesPage />
+    </RoleGuard>
+  ),
+});
+
+const typesBeneficeRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/types-benefice',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <TypesBeneficePage />
+    </RoleGuard>
+  ),
 });
 
 const naturesOperationRoute = createRoute({
@@ -216,6 +275,10 @@ const routeTree = rootRoute.addChildren([
     bonCreateRoute,
     bonDetailRoute,
     rechargeRoute,
+    encaissementRoute,
+    releveAgentRoute,
+    parametresRoute,
+    creditsRoute,
     demandesRechargeRoute,
     portefeuillesRoute,
     usersRoute,
@@ -228,11 +291,12 @@ const routeTree = rootRoute.addChildren([
     directionsRoute,
     paysDivisionsRoute,
     operationsRoute,
-    planComptableRoute,
     naturesOperationRoute,
     extensionsRoute,
     transfertsRoute,
     bonsManuelsRoute,
+    employesRoute,
+    typesBeneficeRoute,
   ]),
 ]);
 

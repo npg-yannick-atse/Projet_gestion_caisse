@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Globe, Plus, Search, Settings2, ShieldCheck, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
   useCreateUser,
@@ -11,10 +11,12 @@ import {
   useToggleUserProfil,
   useUserDivisions,
   useToggleUserDivision,
+  useUserNaturesOperation,
+  useToggleUserNatureOperation,
 } from '@/api/users';
 import { useProfils } from '@/api/profils';
 import { useDirections } from '@/api/directions';
-import { usePays, useDivisions } from '@/api/referentiel';
+import { usePays, useDivisions, useNaturesOperation } from '@/api/referentiel';
 import { useTableSort } from '@/hooks/useTableSort';
 import type { SortDir } from '@/components/SortableHeader';
 
@@ -143,7 +145,7 @@ function LdapPicker({ existingMatricules }: { existingMatricules: Set<string> })
   );
 }
 
-type EditorTab = 'general' | 'roles' | 'profils' | 'divisions';
+type EditorTab = 'general' | 'roles' | 'profils' | 'divisions' | 'natures';
 
 function TabBtn({
   active,
@@ -198,6 +200,11 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userDivisions } = useUserDivisions(user.id);
   const toggleDivision = useToggleUserDivision(user.id);
   const divisionAccess = useMemo(() => new Set(userDivisions ?? []), [userDivisions]);
+  // Natures d'opération autorisées (création de bons)
+  const { data: allNatures } = useNaturesOperation();
+  const { data: userNatures } = useUserNaturesOperation(user.id);
+  const toggleNature = useToggleUserNatureOperation(user.id);
+  const natureAccess = useMemo(() => new Set(userNatures ?? []), [userNatures]);
   const { data: directions } = useDirections();
   const updateUser = useUpdateUser();
   const currentUser = useAuthStore((s) => s.user);
@@ -258,6 +265,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           <TabBtn active={tab === 'roles'} onClick={() => setTab('roles')} icon={ShieldCheck} label="Rôles" count={assigned.size} />
           <TabBtn active={tab === 'profils'} onClick={() => setTab('profils')} icon={BadgeCheck} label="Profils" count={assignedProfils.size} />
           <TabBtn active={tab === 'divisions'} onClick={() => setTab('divisions')} icon={Globe} label="Divisions" count={divisionAccess.size} />
+          <TabBtn active={tab === 'natures'} onClick={() => setTab('natures')} icon={Tags} label="Natures" count={natureAccess.size} />
         </div>
 
         {/* Verrou anti-lockout (toujours visible s'il s'agit de soi) */}
@@ -451,6 +459,41 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
               })}
               {(allDivisions ?? []).length === 0 && (
                 <p className="text-sm text-[#64748B]">Aucune division. Créez-en depuis « Pays &amp; Divisions ».</p>
+              )}
+            </div>
+          )}
+
+          {/* -------- Natures d'opération autorisées (création de bons) -------- */}
+          {tab === 'natures' && (
+            <div className="space-y-2">
+              <p className="mb-1 text-[11px] text-[#94A3B8]">
+                Limite les natures d'opération utilisables à la création d'un bon.{' '}
+                <strong>Sans aucune coche, l'utilisateur ne peut créer aucun bon</strong> (les administrateurs ne sont pas concernés).
+              </p>
+              <div className="grid grid-cols-2 gap-1">
+                {(allNatures ?? []).map((n) => {
+                  const has = natureAccess.has(n.id);
+                  return (
+                    <label
+                      key={n.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={has}
+                        disabled={toggleNature.isPending}
+                        onChange={() => toggleNature.mutate({ natureId: n.id, has })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-xs text-[#0F172A]">
+                        {n.code} — {n.libelle}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {(allNatures ?? []).length === 0 && (
+                <p className="text-sm text-[#64748B]">Aucune nature d'opération. Créez-en depuis « Natures d'opération ».</p>
               )}
             </div>
           )}

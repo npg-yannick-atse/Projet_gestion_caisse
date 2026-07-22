@@ -39,6 +39,17 @@ export class AuditService {
     }
   }
 
+  /**
+   * Whitelist des colonnes triables côté BD (défaut : date_action DESC).
+   * L'utilisateur est affiché en nom côté front mais stocké en id : on ne l'expose
+   * pas au tri (tri sur un id n'a pas de sens lisible).
+   */
+  private static readonly AUDIT_SORT_MAP: Record<string, string> = {
+    dateAction: 'j.date_action',
+    action: 'j.action',
+    entite: 'j.entite_concernee',
+  };
+
   /** Journal d'audit filtrable (append-only) — réservé au Super Admin via le contrôleur. */
   async findAll(opts: {
     userId?: string;
@@ -46,6 +57,8 @@ export class AuditService {
     entite?: string;
     dateFrom?: string;
     dateTo?: string;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
     limit?: number;
   } = {}): Promise<JournalAudit[]> {
     const qb = this.journalRepo.createQueryBuilder('j').where('1=1');
@@ -58,8 +71,11 @@ export class AuditService {
       dt.setHours(23, 59, 59, 999);
       qb.andWhere('j.date_action <= :dt', { dt });
     }
+    const column = AuditService.AUDIT_SORT_MAP[opts.sortBy ?? ''];
+    const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
+    if (column) qb.orderBy(column, direction);
+    else qb.orderBy('j.date_action', 'DESC');
     return qb
-      .orderBy('j.date_action', 'DESC')
       .limit(Math.min(Math.max(opts.limit ?? 500, 1), 2000))
       .getMany();
   }

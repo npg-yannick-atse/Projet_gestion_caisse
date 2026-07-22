@@ -190,3 +190,29 @@ export function useToggleUserDivision(userId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'divisions'] }),
   });
 }
+
+// ---------- Natures d'opération autorisées (création de bons) ----------
+
+export async function listUserNaturesOperation(userId: string): Promise<string[]> {
+  const { data } = await api.get<string[]>(`/users/${userId}/natures-operation`);
+  return data;
+}
+
+export function useUserNaturesOperation(userId: string | null) {
+  return useQuery({
+    queryKey: ['user', userId, 'natures-operation'],
+    queryFn: () => listUserNaturesOperation(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useToggleUserNatureOperation(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ natureId, has }: { natureId: string; has: boolean }) =>
+      has
+        ? api.delete(`/users/${userId}/natures-operation/${natureId}`)
+        : api.post(`/users/${userId}/natures-operation/${natureId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'natures-operation'] }),
+  });
+}

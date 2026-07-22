@@ -6,6 +6,11 @@ import { cn } from '@/lib/utils';
 import type { AuditEntry } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const AUDIT_SORT_COLUMNS = ['dateAction', 'action', 'entite'] as const;
+type AuditSortCol = (typeof AUDIT_SORT_COLUMNS)[number];
 
 const inputClass =
   'h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]';
@@ -87,11 +92,14 @@ function AuditPageInner() {
     setDateTo(today);
   };
 
+  const sort = useTableSort<AuditSortCol>('/audit', AUDIT_SORT_COLUMNS);
   const { data: entries, isLoading } = useAudit({
     entite: entite || undefined,
     action: action || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
   });
   const { data: users } = useUsers();
   const userById = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
@@ -151,10 +159,10 @@ function AuditPageInner() {
             <table className="w-full text-xs">
               <thead className="bg-[#F8FAFC]">
                 <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                  <th className="px-4 py-2.5 font-semibold">Date &amp; heure</th>
+                  <SortableHeader column="dateAction" state={sort.state} onSort={sort.setSort}>Date &amp; heure</SortableHeader>
                   <th className="px-4 py-2.5 font-semibold">Utilisateur</th>
-                  <th className="px-4 py-2.5 font-semibold">Action</th>
-                  <th className="px-4 py-2.5 font-semibold">Entité</th>
+                  <SortableHeader column="action" state={sort.state} onSort={sort.setSort}>Action</SortableHeader>
+                  <SortableHeader column="entite" state={sort.state} onSort={sort.setSort}>Entité</SortableHeader>
                   <th className="px-4 py-2.5 font-semibold">Détail</th>
                   <th className="px-4 py-2.5 font-semibold">IP</th>
                 </tr>

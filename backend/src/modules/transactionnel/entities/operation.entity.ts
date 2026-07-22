@@ -1,7 +1,15 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 import { decimalToString } from '@common/transformers/decimal.transformer';
 
-export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT';
+export type TypeOperation =
+  | 'RECHARGE'
+  | 'DECAISSEMENT'
+  | 'TRANSFERT'
+  | 'AJUSTEMENT'
+  /** Entrée d'argent dans une caisse (client, dotation…). Miroir du décaissement. */
+  | 'ENCAISSEMENT'
+  /** Décaissement d'un crédit accordé à un employé. */
+  | 'CREDIT';
 
 @Entity({ name: 'trx_operation' })
 export class Operation {
@@ -34,6 +42,16 @@ export class Operation {
 
   @Column({ type: 'nvarchar', length: 100, nullable: true })
   reference?: string | null;
+
+  // Renseignés pour les encaissements (nullable pour les autres opérations).
+  @Column({ name: 'client_nom', type: 'nvarchar', length: 200, nullable: true })
+  clientNom?: string | null;
+
+  @Column({ name: 'client_numero', type: 'nvarchar', length: 50, nullable: true })
+  clientNumero?: string | null;
+
+  @Column({ type: 'nvarchar', length: 200, nullable: true })
+  motif?: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'datetime2', precision: 3 })
   createdAt!: Date;

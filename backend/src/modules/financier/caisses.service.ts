@@ -6,8 +6,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Caisse } from './entities/caisse.entity';
+import { Portefeuille } from './entities/portefeuille.entity';
 import { SessionCaisse, TypeCloture } from './entities/session-caisse.entity';
 import { CreateCaisseDto } from './dto/create-caisse.dto';
 import { UpdateCaisseDto } from './dto/update-caisse.dto';
@@ -97,6 +98,21 @@ export class CaissesService {
   async getSolde(id: string): Promise<string> {
     await this.findOne(id);
     return this.ledgerService.calculateBalance(id, 'CAISSE');
+  }
+
+  /** Évolution du fond de caisse jour par jour (solde cumulé) sur `days` jours. */
+  async getSoldeTimeline(id: string, days = 30): Promise<Array<{ date: string; solde: number }>> {
+    await this.findOne(id);
+    return this.ledgerService.getSoldeTimeline(id, 'CAISSE', days);
+  }
+
+  /** Caisses source (caisseSourceId) des portefeuilles fournis — pour le périmètre. */
+  async sourceCaisseIds(portefeuilleIds: string[]): Promise<string[]> {
+    if (portefeuilleIds.length === 0) return [];
+    const rows = await this.dataSource
+      .getRepository(Portefeuille)
+      .find({ where: { id: In(portefeuilleIds) as any }, select: ['id', 'caisseSourceId'] });
+    return [...new Set(rows.map((p) => String(p.caisseSourceId)).filter(Boolean))];
   }
 
   async getSessions(caisseId: string): Promise<SessionCaisse[]> {

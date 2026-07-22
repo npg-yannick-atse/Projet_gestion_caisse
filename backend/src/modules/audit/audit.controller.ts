@@ -24,11 +24,21 @@ export class AuditController {
     @Query('entite') entite?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
   ) {
     const codes = await this.authz.getUserRoleCodes(user.sub);
     if (!codes.has('SUPER_ADMIN')) {
       throw new ForbiddenException("Le journal d'audit est réservé au Super Admin.");
     }
-    return this.audit.findAll({ userId, action, entite, dateFrom, dateTo });
+    return this.audit.findAll({
+      userId,
+      action,
+      entite,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
+    });
   }
 }

@@ -18,6 +18,7 @@ import { useUsers } from '@/api/users';
 import { cn } from '@/lib/utils';
 import type { User } from '@/types/api';
 import { AdminDashboard } from './AdminDashboard';
+import { FondCaissePanel } from './FondCaissePanel';
 
 interface Props {
   user: User;
@@ -151,6 +152,8 @@ export function SuperAdminDashboard({ user }: Props) {
           </ul>
         </div>
       )}
+
+      <FondCaissePanel />
 
       {/* Héritage Admin (KPIs, bar par direction, anomalies, pipeline) */}
       <AdminDashboard user={user} isSuper />

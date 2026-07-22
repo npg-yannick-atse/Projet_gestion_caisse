@@ -14,8 +14,22 @@ import type {
   TypeBon,
 } from '@/types/api';
 
-export async function listPartenaires(): Promise<Partenaire[]> {
-  const { data } = await api.get<Partenaire[]>('/partenaires');
+export interface RefFilters {
+  search?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+}
+
+function refParams(filters: RefFilters = {}): Record<string, string> {
+  const p: Record<string, string> = {};
+  if (filters.search) p.search = filters.search;
+  if (filters.sortBy) p.sortBy = filters.sortBy;
+  if (filters.sortDir) p.sortDir = filters.sortDir;
+  return p;
+}
+
+export async function listPartenaires(filters: RefFilters = {}): Promise<Partenaire[]> {
+  const { data } = await api.get<Partenaire[]>('/partenaires', { params: refParams(filters) });
   return data;
 }
 
@@ -28,8 +42,8 @@ export async function deletePartenaire(id: string): Promise<void> {
   await api.delete(`/partenaires/${id}`);
 }
 
-export async function listCostCenters(): Promise<CostCenter[]> {
-  const { data } = await api.get<CostCenter[]>('/cost-centers');
+export async function listCostCenters(filters: RefFilters = {}): Promise<CostCenter[]> {
+  const { data } = await api.get<CostCenter[]>('/cost-centers', { params: refParams(filters) });
   return data;
 }
 
@@ -55,8 +69,8 @@ export async function listTypeBons(): Promise<TypeBon[]> {
   return data;
 }
 
-export function usePartenaires() {
-  return useQuery({ queryKey: ['partenaires'], queryFn: listPartenaires });
+export function usePartenaires(filters: RefFilters = {}) {
+  return useQuery({ queryKey: ['partenaires', filters], queryFn: () => listPartenaires(filters) });
 }
 
 export function useCreatePartenaire() {
@@ -75,8 +89,8 @@ export function useDeletePartenaire() {
   });
 }
 
-export function useCostCenters() {
-  return useQuery({ queryKey: ['cost-centers'], queryFn: listCostCenters });
+export function useCostCenters(filters: RefFilters = {}) {
+  return useQuery({ queryKey: ['cost-centers', filters], queryFn: () => listCostCenters(filters) });
 }
 
 export function useCreateCostCenter() {
@@ -119,8 +133,8 @@ export function useNaturesComptable() {
 
 // ---------- Pays / Division ----------
 
-export async function listPays(): Promise<Pays[]> {
-  const { data } = await api.get<Pays[]>('/pays');
+export async function listPays(filters: RefFilters = {}): Promise<Pays[]> {
+  const { data } = await api.get<Pays[]>('/pays', { params: refParams(filters) });
   return data;
 }
 export async function createPays(payload: { code: string; libelle: string }): Promise<Pays> {
@@ -130,8 +144,8 @@ export async function createPays(payload: { code: string; libelle: string }): Pr
 export async function deletePays(id: string): Promise<void> {
   await api.delete(`/pays/${id}`);
 }
-export function usePays() {
-  return useQuery({ queryKey: ['pays'], queryFn: listPays });
+export function usePays(filters: RefFilters = {}) {
+  return useQuery({ queryKey: ['pays', filters], queryFn: () => listPays(filters) });
 }
 export function useCreatePays() {
   const qc = useQueryClient();
@@ -175,8 +189,8 @@ export function useDeleteDivision() {
   });
 }
 
-export async function listNaturesOperation(): Promise<NatureOperation[]> {
-  const { data } = await api.get<NatureOperation[]>('/natures-operation');
+export async function listNaturesOperation(filters: RefFilters = {}): Promise<NatureOperation[]> {
+  const { data } = await api.get<NatureOperation[]>('/natures-operation', { params: refParams(filters) });
   return data;
 }
 
@@ -204,8 +218,8 @@ export async function deleteNatureOperation(id: string): Promise<void> {
   await api.delete(`/natures-operation/${id}`);
 }
 
-export function useNaturesOperation() {
-  return useQuery({ queryKey: ['natures-operation'], queryFn: listNaturesOperation });
+export function useNaturesOperation(filters: RefFilters = {}) {
+  return useQuery({ queryKey: ['natures-operation', filters], queryFn: () => listNaturesOperation(filters) });
 }
 
 export function useCreateNatureOperation() {

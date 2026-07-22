@@ -1,12 +1,7 @@
-import { Text } from 'react-native';
 import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useCanValidate } from '@/lib/roles';
 import { NotificationBell } from '@/components/NotificationBell';
-
-/** Icône d'onglet simple (emoji) — évite une dépendance d'icônes supplémentaire. */
-function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-  return <Text style={{ fontSize: 20, color }}>{emoji}</Text>;
-}
 
 export default function TabsLayout() {
   const canValidate = useCanValidate();
@@ -25,24 +20,41 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: 'Mes bons', tabBarIcon: ({ color }) => <TabIcon emoji="🧾" color={color} /> }}
+        options={{
+          title: 'Mes bons',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={22} color={color} />
+          ),
+        }}
       />
       <Tabs.Screen
         name="a-valider"
         options={{
           title: 'À valider',
-          tabBarIcon: ({ color }) => <TabIcon emoji="✅" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} size={22} color={color} />
+          ),
           // Onglet masqué pour les utilisateurs sans rôle de validation.
           href: canValidate ? undefined : null,
         }}
       />
       <Tabs.Screen
         name="nouveau"
-        options={{ title: 'Nouveau', tabBarIcon: ({ color }) => <TabIcon emoji="➕" color={color} /> }}
+        options={{
+          title: 'Nouveau',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'add-circle' : 'add-circle-outline'} size={22} color={color} />
+          ),
+        }}
       />
       <Tabs.Screen
         name="compte"
-        options={{ title: 'Compte', tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} /> }}
+        options={{
+          title: 'Compte',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />
+          ),
+        }}
       />
     </Tabs>
   );

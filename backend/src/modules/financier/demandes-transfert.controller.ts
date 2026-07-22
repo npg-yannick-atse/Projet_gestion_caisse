@@ -29,11 +29,13 @@ export class DemandesTransfertController {
   @ApiOperation({ summary: 'Lister les demandes de transfert (tri + filtres BD)' })
   findAll(
     @Query('statut') statut?: string,
+    @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
     return this.service.findAll({
       statut: statut as any,
+      search,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });

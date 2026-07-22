@@ -50,8 +50,17 @@ export class BonsManuelsController {
   }
 
   @Get('bons-manuels')
-  @ApiOperation({ summary: 'Lister les bons manuels (tous pour admin, sinon les siens)' })
-  findBonsManuels(@CurrentUser() user: JwtPayload) {
-    return this.service.findBonsManuels(user.sub);
+  @ApiOperation({ summary: 'Lister les bons manuels (recherche + tri BD ; tous pour admin, sinon les siens)' })
+  findBonsManuels(
+    @CurrentUser() user: JwtPayload,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
+    return this.service.findBonsManuels(user.sub, {
+      search,
+      sortBy,
+      sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
+    });
   }
 }

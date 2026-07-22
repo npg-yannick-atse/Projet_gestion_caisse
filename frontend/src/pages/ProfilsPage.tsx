@@ -269,7 +269,13 @@ function ProfilsPageInner() {
 
   return (
     <div className="flex flex-col gap-4">
-      {form && <ProfilForm profil={form.profil} onDone={() => setForm(null)} />}
+      {form && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setForm(null)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <ProfilForm profil={form.profil} onDone={() => setForm(null)} />
+          </div>
+        </div>
+      )}
 
       <Panel>
         <PanelHeader title="Gestion des profils" badge={`${profils?.length ?? 0}`}>

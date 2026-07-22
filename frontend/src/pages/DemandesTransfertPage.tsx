@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -415,6 +415,11 @@ export function DemandesTransfertPage() {
 
   const [statutFilter, setStatutFilter] = useState<'ALL' | DemandeTransfertStatut>('ALL');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   // Par défaut, on n'affiche que les demandes du JOUR (comme les autres pages).
   const today = todayLocal();
   const [dateFrom, setDateFrom] = useState(() => todayLocal());
@@ -431,6 +436,7 @@ export function DemandesTransfertPage() {
   const sort = useTableSort<DtSortCol>('/transferts', DT_SORT_COLUMNS);
   const { data: demandes, isLoading } = useDemandesTransfert({
     statut: statutFilter === 'ALL' ? undefined : statutFilter,
+    search: debouncedSearch || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
@@ -456,23 +462,11 @@ export function DemandesTransfertPage() {
     return p ? `${p.code} · ${p.libelle}` : id;
   };
 
-  // Recherche + filtre par dates (client-side, sur la liste déjà filtrée par statut).
+  // Filtre par dates (client-side, sur la liste déjà filtrée par statut + recherche BD).
   const filtered = (demandes ?? []).filter((d) => {
     if (dateFrom && new Date(d.createdAt) < new Date(`${dateFrom}T00:00:00`)) return false;
     if (dateTo && new Date(d.createdAt) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    const u = userById.get(d.demandeurId);
-    const demandeur = u ? `${u.prenom} ${u.nom}`.toLowerCase() : '';
-    const src = compteLabel(d.sourceType, d.sourceId).toLowerCase();
-    const dst = compteLabel(d.destinationType, d.destinationId).toLowerCase();
-    return (
-      d.numero.toLowerCase().includes(q) ||
-      demandeur.includes(q) ||
-      src.includes(q) ||
-      dst.includes(q) ||
-      String(d.montant).includes(q)
-    );
+    return true;
   });
   const isDefaultView = !search && dateFrom === today && dateTo === today;
   const resetFilters = () => {
@@ -500,7 +494,13 @@ export function DemandesTransfertPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreateTransfertForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <CreateTransfertForm onDone={() => setShowForm(false)} />
+          </div>
+        </div>
+      )}
 
       <Panel>
         <PanelHeader

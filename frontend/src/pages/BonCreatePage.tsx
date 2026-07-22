@@ -6,7 +6,7 @@ import { useQueries } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
-import { useTypeBons, usePartenaires, useNaturesOperation, usePays, useDivisions } from '@/api/referentiel';
+import { useTypeBons, usePartenaires, usePays, useDivisions } from '@/api/referentiel';
 import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
@@ -79,11 +79,12 @@ export function BonCreatePage() {
 
   const { data: typeBons } = useTypeBons();
   const { data: partenaires } = usePartenaires();
-  const { data: naturesOperation } = useNaturesOperation();
   const { data: paysList } = usePays();
   const { data: allDivisions } = useDivisions();
   // Tout le périmètre de création (CC, caisses, portefeuilles autorisés) vient du serveur.
   const { data: perimeter } = useMyBonPerimeter();
+  // Natures d'opération = celles autorisées à l'utilisateur (déjà filtrées côté serveur).
+  const naturesOperation = perimeter?.naturesOperation;
   const costCenters = perimeter?.costCenters;
   const portefeuilles = perimeter?.portefeuilles;
   const { data: devises } = useDevises();
@@ -524,6 +525,11 @@ export function BonCreatePage() {
                     </option>
                   ))}
                 </select>
+                {perimeter && naturesOperation && naturesOperation.length === 0 && (
+                  <p className="text-sm text-destructive">
+                    Aucune nature d'opération ne vous est autorisée. Contactez un administrateur.
+                  </p>
+                )}
                 {errors.soubons?.[index]?.natureOperationId && (
                   <p className="text-sm text-destructive">
                     {errors.soubons[index]?.natureOperationId?.message}

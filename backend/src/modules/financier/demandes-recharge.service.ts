@@ -121,11 +121,42 @@ export class DemandesRechargeService {
     return dr;
   }
 
-  findAll(opts: { statut?: DemandeRechargeStatut; demandeurId?: string } = {}): Promise<DemandeRecharge[]> {
+  /** Whitelist des colonnes triables côté BD (défaut : created_at DESC). */
+  private static readonly DR_SORT_MAP: Record<string, string> = {
+    numero: 'dr.numero',
+    montant: 'dr.montant',
+    statut: 'dr.statut',
+    createdAt: 'dr.created_at',
+  };
+
+  findAll(
+    opts: {
+      statut?: DemandeRechargeStatut;
+      demandeurId?: string;
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+    } = {},
+  ): Promise<DemandeRecharge[]> {
     const qb = this.repo.createQueryBuilder('dr').where('dr.deleted_at IS NULL');
     if (opts.statut) qb.andWhere('dr.statut = :statut', { statut: opts.statut });
     if (opts.demandeurId) qb.andWhere('dr.demandeur_id = :did', { did: opts.demandeurId });
-    return qb.orderBy('dr.created_at', 'DESC').getMany();
+    if (opts.search) {
+      // Recherche BD : n° / motif / montant + demandeur (join sec_user) + portefeuille (join fin_portefeuille).
+      qb.leftJoin('sec_user', 'u', 'u.id = dr.demandeur_id')
+        .leftJoin('fin_portefeuille', 'p', 'p.id = dr.portefeuille_id')
+        .andWhere(
+          "(dr.numero LIKE :q OR dr.motif LIKE :q OR CAST(dr.montant AS nvarchar(50)) LIKE :q " +
+            "OR (u.prenom + ' ' + u.nom) LIKE :q OR (u.nom + ' ' + u.prenom) LIKE :q " +
+            "OR p.code LIKE :q OR p.libelle LIKE :q)",
+          { q: `%${opts.search}%` },
+        );
+    }
+    const column = DemandesRechargeService.DR_SORT_MAP[opts.sortBy ?? ''];
+    const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
+    if (column) qb.orderBy(column, direction);
+    else qb.orderBy('dr.created_at', 'DESC');
+    return qb.getMany();
   }
 
   /** Le caissier traite la demande = effectue la recharge réelle (caisse source → portefeuille). */

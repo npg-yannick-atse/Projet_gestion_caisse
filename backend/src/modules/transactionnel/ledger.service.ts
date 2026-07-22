@@ -13,6 +13,8 @@ const TYPE_LABELS: Record<string, string> = {
   DECAISSEMENT: 'Décaissement',
   TRANSFERT: 'Transfert',
   AJUSTEMENT: 'Ajustement',
+  ENCAISSEMENT: 'Encaissement',
+  CREDIT: 'Crédit',
 };
 
 interface CreateOperationInput {
@@ -23,6 +25,9 @@ interface CreateOperationInput {
   deviseId: string;
   userId: string;
   reference?: string;
+  clientNom?: string;
+  clientNumero?: string;
+  motif?: string;
 }
 
 interface CreateEcritureInput {
@@ -116,6 +121,9 @@ export class LedgerService {
       dateOperation: new Date(),
       userId: input.userId as any,
       reference: input.reference ?? null,
+      clientNom: input.clientNom ?? null,
+      clientNumero: input.clientNumero ?? null,
+      motif: input.motif ?? null,
     });
 
     return repo.save(operation);
@@ -226,6 +234,63 @@ export class LedgerService {
     const balance = credit - debit;
 
     return balance.toFixed(4);
+  }
+
+  /**
+   * Évolution du solde d'un compte jour par jour sur les `days` derniers jours.
+   * Renvoie un point par jour (solde CUMULÉ en fin de journée), en partant du
+   * solde d'ouverture (toutes les écritures antérieures à la fenêtre) puis en
+   * ajoutant le delta de chaque jour. Les jours sans écriture reportent le solde.
+   */
+  async getSoldeTimeline(
+    compteId: string,
+    typeCompte: TypeCompte,
+    days = 30,
+  ): Promise<Array<{ date: string; solde: number }>> {
+    const nbJours = Math.max(1, Math.min(180, days));
+    const cutoff = new Date();
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCDate(cutoff.getUTCDate() - (nbJours - 1));
+
+    // Solde d'ouverture : tout ce qui précède la fenêtre.
+    const opening = await this.ecritureRepo
+      .createQueryBuilder('e')
+      .select('SUM(CAST(e.credit AS DECIMAL(19,4)))', 'c')
+      .addSelect('SUM(CAST(e.debit AS DECIMAL(19,4)))', 'd')
+      .where('e.compte_id = :compteId', { compteId })
+      .andWhere('e.type_compte = :typeCompte', { typeCompte })
+      .andWhere('e.date_ecriture < :cutoff', { cutoff })
+      .getRawOne();
+    let running = parseFloat(opening?.c || '0') - parseFloat(opening?.d || '0');
+
+    // Deltas quotidiens dans la fenêtre.
+    const rows: Array<{ date: Date | string; c: string | null; d: string | null }> =
+      await this.ecritureRepo
+        .createQueryBuilder('e')
+        .select('CAST(e.date_ecriture AS DATE)', 'date')
+        .addSelect('SUM(CAST(e.credit AS DECIMAL(19,4)))', 'c')
+        .addSelect('SUM(CAST(e.debit AS DECIMAL(19,4)))', 'd')
+        .where('e.compte_id = :compteId', { compteId })
+        .andWhere('e.type_compte = :typeCompte', { typeCompte })
+        .andWhere('e.date_ecriture >= :cutoff', { cutoff })
+        .groupBy('CAST(e.date_ecriture AS DATE)')
+        .getRawMany();
+
+    const deltaByDay = new Map<string, number>();
+    for (const r of rows) {
+      const key = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10);
+      deltaByDay.set(key, parseFloat(r.c || '0') - parseFloat(r.d || '0'));
+    }
+
+    const series: Array<{ date: string; solde: number }> = [];
+    for (let i = 0; i < nbJours; i++) {
+      const d = new Date(cutoff);
+      d.setUTCDate(d.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      running += deltaByDay.get(key) ?? 0;
+      series.push({ date: key, solde: Number(running.toFixed(4)) });
+    }
+    return series;
   }
 
   /**

@@ -21,11 +21,17 @@ export class DirectionsService {
     return this.directionRepo.save(direction);
   }
 
-  async findAll(): Promise<Direction[]> {
-    return this.directionRepo.find({
-      where: { estActif: true },
-      order: { libelle: 'ASC' },
-    });
+  async findAll(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<Direction[]> {
+    const qb = this.directionRepo.createQueryBuilder('d').where('d.estActif = :a', { a: true });
+    if (opts.search && opts.search.trim()) {
+      const s = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere('(d.code LIKE :s ESCAPE :e OR d.libelle LIKE :s ESCAPE :e)', { s, e: '\\' });
+    }
+    const map: Record<string, string> = { code: 'code', libelle: 'libelle' };
+    const col = map[opts.sortBy ?? ''];
+    const dir: 'ASC' | 'DESC' = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
+    qb.orderBy(col ? `d.${col}` : 'd.libelle', col ? dir : 'ASC');
+    return qb.getMany();
   }
 
   async findOne(id: string): Promise<Direction> {

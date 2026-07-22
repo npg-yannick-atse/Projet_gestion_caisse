@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Globe, MapPin, Plus, PowerOff, Search, Trash2 } from 'lucide-react';
 import {
   usePays,
@@ -17,7 +17,15 @@ const inputClass =
   'h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]';
 
 export function PaysDivisionsPage() {
-  const { data: pays } = usePays();
+  // Recherche des pays exécutée EN BASE (debounce) ; pagination client sur le résultat.
+  const [paysSearch, setPaysSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(paysSearch), 300);
+    return () => clearTimeout(t);
+  }, [paysSearch]);
+
+  const { data: pays } = usePays({ search: debouncedSearch || undefined });
   const createPays = useCreatePays();
   const deletePays = useDeletePays();
   const [selectedPays, setSelectedPays] = useState<string | null>(null);
@@ -32,23 +40,16 @@ export function PaysDivisionsPage() {
   const [confirmPays, setConfirmPays] = useState<Pays | null>(null);
   const [confirmDiv, setConfirmDiv] = useState<Division | null>(null);
 
-  // Recherche + pagination de la liste des pays (244 pays au total).
-  const [paysSearch, setPaysSearch] = useState('');
+  // Pagination client sur la liste déjà filtrée par le serveur.
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
-  const filteredPays = useMemo(() => {
-    const q = paysSearch.trim().toLowerCase();
-    const list = pays ?? [];
-    if (!q) return list;
-    return list.filter((p) => p.code.toLowerCase().includes(q) || p.libelle.toLowerCase().includes(q));
-  }, [pays, paysSearch]);
+  const filteredPays = pays ?? [];
   const totalPages = Math.max(1, Math.ceil(filteredPays.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagePays = filteredPays.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  // Revient à la page 1 quand la recherche ou la taille de page change.
   useEffect(() => {
     setPage(1);
-  }, [paysSearch, pageSize]);
+  }, [debouncedSearch, pageSize]);
 
   const addPays = () => {
     if (!pCode.trim() || !pLib.trim()) return;

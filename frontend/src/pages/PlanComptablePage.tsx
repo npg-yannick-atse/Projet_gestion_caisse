@@ -178,7 +178,13 @@ function PlanComptablePageInner() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && <CreatePlanComptableForm onDone={() => setShowForm(false)} />}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setShowForm(false)}>
+          <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <CreatePlanComptableForm onDone={() => setShowForm(false)} />
+          </div>
+        </div>
+      )}
 
       <Panel>
         <PanelHeader title="Plan comptable" badge={`${comptes?.length ?? 0}`}>
