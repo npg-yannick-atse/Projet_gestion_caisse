@@ -1,10 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Portefeuille } from './entities/portefeuille.entity';
 import { CreatePortefeuilleDto } from './dto/create-portefeuille.dto';
 import { UpdatePortefeuilleDto } from './dto/update-portefeuille.dto';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
+import { AuthorizationService } from '@modules/security/authorization.service';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
 
 @Injectable()
@@ -13,6 +19,7 @@ export class PortefeuillesService {
     @InjectRepository(Portefeuille)
     private readonly portefeuilleRepo: Repository<Portefeuille>,
     private readonly ledgerService: LedgerService,
+    private readonly authz: AuthorizationService,
   ) {}
 
   /**
@@ -68,7 +75,25 @@ export class PortefeuillesService {
     if (dto.proprietaireType !== undefined) pf.proprietaireType = dto.proprietaireType;
     if (dto.proprietaireId !== undefined) pf.proprietaireId = dto.proprietaireId as any;
     if (dto.gestionnaireId !== undefined) pf.gestionnaireId = dto.gestionnaireId ? (dto.gestionnaireId as any) : null;
-    if (dto.soldeInitial !== undefined) pf.soldeInitial = dto.soldeInitial;
+    // Solde initial : modification encadrée. On ne réagit que s'il CHANGE réellement.
+    //  1) Autorisation dédiée requise (les admins la bypassent).
+    //  2) Verrou d'intégrité : figé dès qu'une écriture existe sur le portefeuille —
+    //     changer l'amorce réécrirait rétroactivement tout l'historique de solde.
+    //     Pour corriger un solde après activité, passer par une opération d'ajustement.
+    if (dto.soldeInitial !== undefined && Number(dto.soldeInitial) !== Number(pf.soldeInitial || 0)) {
+      await this.authz.assertPermission(
+        userId,
+        'PORTEFEUILLE_SOLDE_INITIAL',
+        'modifier le solde initial d\'un portefeuille',
+      );
+      if (await this.ledgerService.hasEcritures(id, 'PORTEFEUILLE')) {
+        throw new BadRequestException(
+          'Solde initial verrouillé : des écritures existent déjà sur ce portefeuille. ' +
+            'Passez par une opération d\'ajustement pour corriger le solde.',
+        );
+      }
+      pf.soldeInitial = dto.soldeInitial;
+    }
     // Budget mensuel : hérité du centre de coût pour un portefeuille de DIRECTION
     // (non modifiable), saisi manuellement pour un portefeuille USER (chaîne vide => null).
     if (pf.proprietaireType === 'DIRECTION') {

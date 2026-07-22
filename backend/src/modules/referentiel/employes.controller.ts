@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EmployesService } from './employes.service';
 import {
@@ -59,12 +74,64 @@ export class EmployesController {
     return this.filtrerSalaire(list, user.sub);
   }
 
+  @Post('employes/import/apercu')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: "Aperçu (dry-run) d'un import : parse le fichier sans rien enregistrer" })
+  async apercuImport(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
+    return this.employes.apercuImport(body?.fileBase64 ?? '');
+  }
+
   @Post('employes/import')
   @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Importer des employés depuis un fichier Excel (base64)' })
   async importEmployes(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
     return this.employes.importEmployes(body?.fileBase64 ?? '', user.sub);
+  }
+
+  @Get('employes/import/modele')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: "Télécharger un modèle Excel d'import d'employés" })
+  async modeleImport(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) res: Response) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
+    const buf = await this.employes.modeleImport();
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="modele_import_employes.xlsx"',
+    });
+    return new StreamableFile(buf);
+  }
+
+  @Get('employes/export')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Exporter les employés au format Excel (respecte recherche/filtre/tri)' })
+  async exportEmployes(
+    @CurrentUser() user: JwtPayload,
+    @Res({ passthrough: true }) res: Response,
+    @Query('search') search?: string,
+    @Query('directionId') directionId?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'exporter les employés');
+    const voitSalaire =
+      (await this.authz.hasPermission(user.sub, 'EMPLOYE_VOIR_SALAIRE')) ||
+      (await this.authz.isAdmin(user.sub));
+    const buf = await this.employes.exportEmployes(
+      {
+        search,
+        directionId,
+        sortBy,
+        sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      },
+      !voitSalaire,
+    );
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="employes.xlsx"',
+    });
+    return new StreamableFile(buf);
   }
 
   @Get('employes/:id')

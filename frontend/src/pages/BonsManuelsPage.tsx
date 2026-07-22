@@ -63,6 +63,8 @@ export function BonsManuelsPage() {
   const [dateTo, setDateTo] = useState('');
   // Modal de gestion des carnets (voir les carnets configurés / en créer un).
   const [carnetsOpen, setCarnetsOpen] = useState(false);
+  // Modal de saisie d'un nouveau bon manuel (formulaire à la demande).
+  const [formOpen, setFormOpen] = useState(false);
 
   const sort = useTableSort<BmSortCol>('/bons-manuels', BM_SORT_COLUMNS);
   const { data: bonsManuels } = useBonsManuels({
@@ -91,13 +93,27 @@ export function BonsManuelsPage() {
           <BookText className="h-5 w-5 text-[#0F4C81]" />
           <h1 className="font-display text-base font-semibold text-[#0F172A]">Bons manuels</h1>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setCarnetsOpen(true)}>
-          <BookText className="h-4 w-4" /> Carnets
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCarnetsOpen(true)}>
+            <BookText className="h-4 w-4" /> Carnets
+          </Button>
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="h-4 w-4" /> Nouveau bon manuel
+          </Button>
+        </div>
       </div>
 
-      {/* Saisie d'un bon manuel — pleine largeur */}
-      <NouveauBonManuel />
+      {/* Saisie d'un bon manuel — en modale à la demande */}
+      {formOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={() => setFormOpen(false)}
+        >
+          <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <NouveauBonManuel onDone={() => setFormOpen(false)} onClose={() => setFormOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Bons manuels récents */}
       <Panel>
@@ -365,7 +381,7 @@ function NouveauCarnet() {
   );
 }
 
-function NouveauBonManuel() {
+function NouveauBonManuel({ onDone, onClose }: { onDone?: () => void; onClose?: () => void }) {
   const create = useCreateBonManuel();
   const { data: carnets } = useCarnets('ACTIF');
   const { data: portefeuilles } = usePortefeuilles();
@@ -461,6 +477,7 @@ function NouveauBonManuel() {
           setDonneurUserId('');
           // recharge le prochain numéro du carnet
           if (carnet) setNumeroManuel(String(carnet.prochainNumero + 1));
+          onDone?.();
         },
       },
     );
@@ -469,7 +486,19 @@ function NouveauBonManuel() {
   return (
     <Panel>
       <PanelHeader title="Nouveau bon manuel">
-        <Wallet className="ml-auto h-4 w-4 text-[#0F4C81]" />
+        <div className="ml-auto flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-[#0F4C81]" />
+          {onClose && (
+            <button
+              type="button"
+              aria-label="Fermer"
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </PanelHeader>
       <div className="p-[18px]">
         <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">

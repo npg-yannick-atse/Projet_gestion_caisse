@@ -4,7 +4,6 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import {
   ArrowLeftRight,
   ArrowRightLeft,
-  ArrowDownToLine,
   Banknote,
   Activity,
   BadgeCheck,
@@ -88,12 +87,10 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/', label: 'Tableau de bord', icon: LayoutDashboard, exact: true },
       { to: '/caisses', label: 'Caisses & Portefeuilles', icon: Landmark, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER'] },
-      { to: '/recharge', label: 'Recharge', icon: ArrowLeftRight, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER'] },
-      { to: '/encaissement', label: 'Encaissement', icon: ArrowDownToLine, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER'] },
+      { to: '/mouvements', label: 'Mouvements de caisse', icon: ArrowLeftRight, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER'] },
       { to: '/demandes-recharge', label: 'Demandes de recharge', icon: Coins, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'] },
       { to: '/transferts', label: 'Transferts', icon: ArrowRightLeft, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'GESTIONNAIRE_PORTEFEUILLE'] },
       { to: '/operations', label: 'Opérations', icon: Activity, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'VALIDATEUR'] },
-      { to: '/releve-agent', label: 'Relevé par agent', icon: Scale, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'] },
     ],
   },
   {
@@ -103,7 +100,6 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/bons-manuels', label: 'Bons manuels', icon: BookText, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'DAF'] },
       { to: '/extensions', label: "Demandes d'extension", icon: TrendingUp, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'], permission: 'EXTENSION_APPROUVER' },
       { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
     ],
   },
   {
@@ -112,6 +108,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/employes', label: 'Employés', icon: IdCard, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/types-benefice', label: 'Types de bénéfice', icon: Gift, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/credits', label: 'Crédits', icon: Banknote, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF', 'VALIDATEUR'] },
+      { to: '/releve-agent', label: 'Relevé par agent', icon: Scale, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'] },
     ],
   },
   {
@@ -121,6 +118,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/roles', label: 'Rôles', icon: ShieldCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/parametres', label: 'Paramètres', icon: Settings, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
     ],
   },
   {

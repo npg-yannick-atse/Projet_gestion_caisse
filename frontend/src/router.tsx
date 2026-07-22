@@ -18,8 +18,7 @@ import { RolesPage } from '@/pages/RolesPage';
 import { ProfilsPage } from '@/pages/ProfilsPage';
 import { InterimsPage } from '@/pages/InterimsPage';
 import { AuditPage } from '@/pages/AuditPage';
-import { RechargePage } from '@/pages/RechargePage';
-import { EncaissementPage } from '@/pages/EncaissementPage';
+import { MouvementsCaissePage } from '@/pages/MouvementsCaissePage';
 import { ReleveAgentPage } from '@/pages/ReleveAgentPage';
 import { ParametresPage } from '@/pages/ParametresPage';
 import { CreditsPage } from '@/pages/CreditsPage';
@@ -88,12 +87,23 @@ const bonDetailRoute = createRoute({
   component: BonDetailPage,
 });
 
+const mouvementsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/mouvements',
+  component: () => (
+    <RoleGuard allow={['CAISSIER', 'ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <MouvementsCaissePage />
+    </RoleGuard>
+  ),
+});
+
+// Anciennes routes conservées (liens/bookmarks) → page unifiée, mode présélectionné.
 const rechargeRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/recharge',
   component: () => (
     <RoleGuard allow={['CAISSIER', 'ADMINISTRATEUR', 'SUPER_ADMIN']}>
-      <RechargePage />
+      <MouvementsCaissePage initialMode="RECHARGE" />
     </RoleGuard>
   ),
 });
@@ -103,7 +113,7 @@ const encaissementRoute = createRoute({
   path: '/encaissement',
   component: () => (
     <RoleGuard allow={['CAISSIER', 'ADMINISTRATEUR', 'SUPER_ADMIN']}>
-      <EncaissementPage />
+      <MouvementsCaissePage initialMode="ENCAISSEMENT" />
     </RoleGuard>
   ),
 });
@@ -274,6 +284,7 @@ const routeTree = rootRoute.addChildren([
     bonsRoute,
     bonCreateRoute,
     bonDetailRoute,
+    mouvementsRoute,
     rechargeRoute,
     encaissementRoute,
     releveAgentRoute,

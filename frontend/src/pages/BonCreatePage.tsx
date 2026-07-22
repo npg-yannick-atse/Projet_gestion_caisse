@@ -301,6 +301,13 @@ export function BonCreatePage() {
 
       <h1 className="text-2xl font-semibold">Nouveau bon</h1>
 
+      {perimeter && (naturesOperation?.length ?? 0) === 0 && (
+        <div className="rounded-[10px] border border-[#FED7AA] bg-[#FFF7ED] px-4 py-3 text-sm text-[#9A3412]">
+          Aucune nature d'opération ne vous est autorisée — vous ne pouvez pas créer de bon.
+          Demandez à un administrateur de vous en affecter (page Utilisateurs).
+        </div>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <form onSubmit={onSubmit} className="space-y-4">
         <Card>

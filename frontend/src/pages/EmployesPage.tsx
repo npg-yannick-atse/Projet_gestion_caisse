@@ -2,17 +2,35 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Gift, Pencil, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  FileDown,
+  Gift,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react';
 import {
   useEmployes,
   useCreateEmploye,
   useUpdateEmploye,
   useDeleteEmploye,
   useImportEmployes,
+  useApercuImportEmployes,
+  exportEmployes,
+  telechargerModeleEmployes,
   useBenefices,
   useCreateBenefice,
   useUpdateBenefice,
 } from '@/api/employes';
+import type { ApercuImport, ApercuLigne } from '@/api/employes';
 import { useTypesBenefice } from '@/api/employes';
 import { useDirections } from '@/api/directions';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
@@ -27,6 +45,13 @@ import { useTableSort } from '@/hooks/useTableSort';
 
 const EMP_SORT_COLUMNS = ['matricule', 'nom', 'prenoms', 'salaire'] as const;
 type EmpSortCol = (typeof EMP_SORT_COLUMNS)[number];
+
+/** Style + libellé par statut de ligne d'aperçu d'import. */
+const STATUT_META: Record<ApercuLigne['statut'], { label: string; cls: string; Icon: typeof CheckCircle2 }> = {
+  OK: { label: 'À créer', cls: 'bg-[#ECFDF5] text-[#047857]', Icon: CheckCircle2 },
+  IGNORE: { label: 'Ignoré', cls: 'bg-[#FFFBEB] text-[#B45309]', Icon: AlertTriangle },
+  ERREUR: { label: 'Erreur', cls: 'bg-[#FEF3F2] text-[#B42318]', Icon: XCircle },
+};
 
 const schema = z.object({
   matricule: z.string().trim().min(1, 'Requis'),
@@ -354,8 +379,44 @@ export function EmployesPage() {
   const { data: directions } = useDirections();
   const remove = useDeleteEmploye();
   const importMut = useImportEmployes();
+  const apercuMut = useApercuImportEmployes();
   const fileRef = useRef<HTMLInputElement>(null);
   const [importResult, setImportResult] = useState<{ crees: number; ignores: number; erreurs: string[] } | null>(null);
+  const [aideOpen, setAideOpen] = useState(false);
+  const [apercu, setApercu] = useState<ApercuImport | null>(null);
+  const [apercuFile, setApercuFile] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [modeleLoading, setModeleLoading] = useState(false);
+  const [dlError, setDlError] = useState<string | null>(null);
+
+  const exportFilters = {
+    search: debouncedSearch || undefined,
+    directionId: directionId || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  };
+  const handleExport = async () => {
+    setDlError(null);
+    setExporting(true);
+    try {
+      await exportEmployes(exportFilters);
+    } catch (e) {
+      setDlError(apiErrorMessage(e, 'Export impossible'));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const handleModele = async () => {
+    setDlError(null);
+    setModeleLoading(true);
+    try {
+      await telechargerModeleEmployes();
+    } catch (e) {
+      setDlError(apiErrorMessage(e, 'Téléchargement du modèle impossible'));
+    } finally {
+      setModeleLoading(false);
+    }
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Employe | null>(null);
@@ -381,6 +442,8 @@ export function EmployesPage() {
     setEditing(null);
   };
 
+  // Choix d'un fichier → on ne l'importe PAS directement : on demande d'abord un
+  // aperçu (dry-run) au serveur, affiché dans une modale de confirmation.
   const onPickFile = (ev: React.ChangeEvent<HTMLInputElement>) => {
     const file = ev.target.files?.[0];
     if (!file) return;
@@ -388,10 +451,32 @@ export function EmployesPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result).replace(/^data:.*;base64,/, '');
-      importMut.mutate(base64, { onSuccess: (r) => setImportResult(r) });
+      apercuMut.mutate(base64, {
+        onSuccess: (r) => {
+          setApercuFile(base64);
+          setApercu(r);
+          setAideOpen(false);
+        },
+      });
     };
     reader.readAsDataURL(file);
-    ev.target.value = ''; // permet de réimporter le même fichier
+    ev.target.value = ''; // permet de re-sélectionner le même fichier
+  };
+
+  const closeApercu = () => {
+    setApercu(null);
+    setApercuFile(null);
+  };
+
+  // Confirmation depuis la modale d'aperçu → import réel du fichier déjà sélectionné.
+  const confirmImport = () => {
+    if (!apercuFile) return;
+    importMut.mutate(apercuFile, {
+      onSuccess: (r) => {
+        setImportResult(r);
+        closeApercu();
+      },
+    });
   };
 
   return (
@@ -407,17 +492,207 @@ export function EmployesPage() {
         </div>
       )}
 
+      {/* Modale d'aide : format attendu + exemple + modèle + choix du fichier */}
+      {aideOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={() => setAideOpen(false)}
+        >
+          <div className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <Panel>
+              <PanelHeader title="Importer des employés">
+                <button
+                  type="button"
+                  aria-label="Fermer"
+                  onClick={() => setAideOpen(false)}
+                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </PanelHeader>
+              <div className="space-y-3 p-[18px] text-xs text-[#475569]">
+                <p>
+                  Fichier Excel (.xlsx) avec les <strong>en-têtes en première ligne</strong>. Colonnes
+                  reconnues (casse et accents ignorés) :
+                </p>
+                <ul className="space-y-1">
+                  <li>
+                    <span className="font-semibold text-[#0F172A]">Matricule</span>,{' '}
+                    <span className="font-semibold text-[#0F172A]">Nom</span>,{' '}
+                    <span className="font-semibold text-[#0F172A]">Prénoms</span> —{' '}
+                    <span className="text-[#B42318]">requis</span>
+                  </li>
+                  <li>
+                    <span className="font-semibold text-[#0F172A]">Direction</span> (code ou libellé) et{' '}
+                    <span className="font-semibold text-[#0F172A]">Salaire</span> — optionnels
+                  </li>
+                </ul>
+                <div className="overflow-x-auto rounded-[9px] border border-[rgba(15,76,129,0.1)]">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-[#F8FAFC] text-left text-[10px] uppercase tracking-[0.5px] text-[#64748B]">
+                      <tr>
+                        <th className="px-2 py-1.5 font-semibold">Matricule</th>
+                        <th className="px-2 py-1.5 font-semibold">Nom</th>
+                        <th className="px-2 py-1.5 font-semibold">Prénoms</th>
+                        <th className="px-2 py-1.5 font-semibold">Direction</th>
+                        <th className="px-2 py-1.5 font-semibold">Salaire</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[#475569]">
+                      <tr className="border-t border-[rgba(15,76,129,0.06)]">
+                        <td className="px-2 py-1.5">MAT001</td>
+                        <td className="px-2 py-1.5">Diallo</td>
+                        <td className="px-2 py-1.5">Awa</td>
+                        <td className="px-2 py-1.5">DG</td>
+                        <td className="px-2 py-1.5">500000</td>
+                      </tr>
+                      <tr className="border-t border-[rgba(15,76,129,0.06)]">
+                        <td className="px-2 py-1.5">MAT002</td>
+                        <td className="px-2 py-1.5">Traoré</td>
+                        <td className="px-2 py-1.5">Ibrahim</td>
+                        <td className="px-2 py-1.5">DAF</td>
+                        <td className="px-2 py-1.5">350000</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleModele}
+                    disabled={modeleLoading}
+                    className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3 py-1.5 font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+                  >
+                    {modeleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />} Télécharger le modèle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={apercuMut.isPending}
+                    className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3 py-1.5 font-medium text-white transition hover:bg-[#1A6DB5] disabled:opacity-50"
+                  >
+                    {apercuMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Choisir un fichier
+                  </button>
+                </div>
+                {dlError && <p className="text-destructive">{dlError}</p>}
+                {apercuMut.isError && (
+                  <p className="text-destructive">{apiErrorMessage(apercuMut.error, 'Fichier illisible')}</p>
+                )}
+              </div>
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {/* Modale d'aperçu (dry-run) avant import réel */}
+      {apercu && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={closeApercu}
+        >
+          <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <Panel>
+              <PanelHeader title="Aperçu de l'import">
+                <button
+                  type="button"
+                  aria-label="Fermer"
+                  onClick={closeApercu}
+                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </PanelHeader>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-[18px] py-2.5 text-xs">
+                <span className="font-medium text-[#0F172A]">{apercu.resume.total} ligne(s)</span>
+                <span className="text-[#047857]">{apercu.resume.aCreer} à créer</span>
+                <span className="text-[#B45309]">{apercu.resume.ignores} ignorée(s)</span>
+                <span className="text-[#B42318]">{apercu.resume.erreurs} en erreur</span>
+              </div>
+              <div className="max-h-[50vh] overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[#F8FAFC] text-left text-[10px] uppercase tracking-[0.5px] text-[#64748B]">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Ligne</th>
+                      <th className="px-3 py-2 font-semibold">Matricule</th>
+                      <th className="px-3 py-2 font-semibold">Nom</th>
+                      <th className="px-3 py-2 font-semibold">Prénoms</th>
+                      <th className="px-3 py-2 font-semibold">Direction</th>
+                      <th className="px-3 py-2 font-semibold">Salaire</th>
+                      <th className="px-3 py-2 font-semibold">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apercu.lignes.map((l) => {
+                      const m = STATUT_META[l.statut];
+                      return (
+                        <tr key={l.ligne} className="border-t border-[rgba(15,76,129,0.05)] align-top">
+                          <td className="px-3 py-2 text-[#94A3B8]">{l.ligne}</td>
+                          <td className="px-3 py-2 font-medium text-[#0F172A]">{l.matricule || '—'}</td>
+                          <td className="px-3 py-2">{l.nom || '—'}</td>
+                          <td className="px-3 py-2">{l.prenoms || '—'}</td>
+                          <td className="px-3 py-2">{l.direction || '—'}</td>
+                          <td className="px-3 py-2 tabular-nums">{l.salaire || '—'}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${m.cls}`}>
+                              <m.Icon className="h-3 w-3" /> {m.label}
+                            </span>
+                            {l.message && <div className="mt-0.5 text-[10px] text-[#94A3B8]">{l.message}</div>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+                <button
+                  type="button"
+                  onClick={closeApercu}
+                  className="rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] transition hover:bg-[#F1F5F9]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmImport}
+                  disabled={importMut.isPending || apercu.resume.aCreer === 0}
+                  className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white transition hover:bg-[#1A6DB5] disabled:opacity-50"
+                >
+                  {importMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Confirmer l'import ({apercu.resume.aCreer})
+                </button>
+              </div>
+              {importMut.isError && (
+                <div className="px-[18px] pb-3 text-xs text-destructive">
+                  {apiErrorMessage(importMut.error, 'Import impossible')}
+                </div>
+              )}
+            </Panel>
+          </div>
+        </div>
+      )}
+
       <Panel>
         <PanelHeader title="Employés" badge={`${employes?.length ?? 0}`}>
           <div className="ml-auto flex items-center gap-2">
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={onPickFile} />
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={importMut.isPending}
+              onClick={handleExport}
+              disabled={exporting}
               className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
             >
-              <Upload className="h-4 w-4" /> {importMut.isPending ? 'Import…' : 'Importer (Excel)'}
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Exporter (Excel)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportResult(null);
+                setAideOpen(true);
+              }}
+              disabled={apercuMut.isPending || importMut.isPending}
+              className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+            >
+              {apercuMut.isPending || importMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Importer (Excel)
             </button>
             <button
               type="button"
@@ -429,8 +704,9 @@ export function EmployesPage() {
           </div>
         </PanelHeader>
 
-        {(importResult || importMut.isError) && (
+        {(importResult || importMut.isError || dlError) && (
           <div className="border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-[18px] py-3 text-xs">
+            {dlError && <div className="text-destructive">{dlError}</div>}
             {importMut.isError && (
               <span className="text-destructive">{apiErrorMessage(importMut.error, 'Import impossible')}</span>
             )}

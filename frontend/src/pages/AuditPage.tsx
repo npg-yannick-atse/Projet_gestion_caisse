@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { History, Search } from 'lucide-react';
+import { History, Loader2, Search } from 'lucide-react';
 import { useAudit } from '@/api/audit';
 import { useUsers } from '@/api/users';
 import { cn } from '@/lib/utils';
@@ -152,7 +152,12 @@ function AuditPageInner() {
           </div>
         )}
 
-        {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
+        {isLoading && (
+          <div className="flex items-center justify-center gap-2 px-[18px] py-10 text-sm text-[#64748B]">
+            <Loader2 className="h-4 w-4 animate-spin text-[#0F4C81]" />
+            Chargement…
+          </div>
+        )}
 
         {entries && (
           <div className="overflow-x-auto">

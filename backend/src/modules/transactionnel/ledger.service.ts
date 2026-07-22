@@ -216,6 +216,14 @@ export class LedgerService {
     return [debitEcriture, creditEcriture];
   }
 
+  /** Vrai si le compte (caisse/portefeuille) porte au moins une écriture comptable. */
+  async hasEcritures(compteId: string, typeCompte: TypeCompte): Promise<boolean> {
+    const n = await this.ecritureRepo.count({
+      where: { compteId: compteId as any, typeCompte },
+    });
+    return n > 0;
+  }
+
   /**
    * Calcule le solde d'un compte à partir des écritures
    * Formule : SUM(crédits) - SUM(débits)

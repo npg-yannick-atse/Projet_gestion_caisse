@@ -14,6 +14,21 @@ export interface EmployeQuery {
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
+
+export type ImportStatut = 'OK' | 'IGNORE' | 'ERREUR';
+
+/** Une ligne du fichier d'import, analysée (sert à l'aperçu ET à l'import réel). */
+export interface LigneImport {
+  ligne: number;
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  direction: string; // texte brut du fichier
+  salaire: string; // valeur affichée (normalisée si OK)
+  statut: ImportStatut; // OK = sera créé, IGNORE = doublon/déjà présent, ERREUR = requis manquant
+  message?: string;
+  directionId: string | null; // résolu — usage interne, non exposé dans l'aperçu
+}
 import {
   CreateEmployeBeneficeDto,
   CreateEmployeDto,
@@ -69,16 +84,23 @@ export class EmployesService {
     return qb.getMany();
   }
 
+  /** Colonnes Excel de l'import/export (ordre + largeur). */
+  private static readonly COLONNES_EXPORT = [
+    { header: 'Matricule', key: 'matricule', width: 16 },
+    { header: 'Nom', key: 'nom', width: 22 },
+    { header: 'Prénoms', key: 'prenoms', width: 24 },
+    { header: 'Direction', key: 'direction', width: 20 },
+    { header: 'Salaire', key: 'salaire', width: 14 },
+  ];
+
   /**
-   * Import d'employés depuis un fichier Excel (base64). En-têtes reconnus (1re
-   * ligne, insensible à la casse) : Matricule, Nom, Prénoms, Direction (code ou
-   * libellé), Salaire. Matricule/Nom/Prénoms requis ; direction et salaire
-   * optionnels. Renvoie un récapitulatif ligne par ligne.
+   * Analyse un fichier Excel d'import (base64) SANS rien enregistrer. En-têtes
+   * reconnus (1re ligne, insensible casse/accents) : Matricule, Nom, Prénoms,
+   * Direction (code ou libellé), Salaire. Matricule/Nom/Prénoms requis.
+   * Renvoie chaque ligne avec un statut : OK (sera créé), IGNORE (doublon /
+   * déjà présent), ERREUR (requis manquant). Sert à l'aperçu ET à l'import réel.
    */
-  async importEmployes(
-    fileBase64: string,
-    userId: string,
-  ): Promise<{ crees: number; ignores: number; erreurs: string[] }> {
+  private async analyserImport(fileBase64: string): Promise<LigneImport[]> {
     let buffer: Buffer;
     try {
       buffer = Buffer.from(fileBase64.replace(/^data:.*;base64,/, ''), 'base64');
@@ -124,52 +146,137 @@ export class EmployesService {
     const cellStr = (row: any, col?: number) =>
       col ? String(row.getCell(col).value ?? '').trim() : '';
 
-    let crees = 0;
-    let ignores = 0;
-    const erreurs: string[] = [];
+    const seen = new Set<string>();
+    const lignes: LigneImport[] = [];
 
     for (let r = 2; r <= ws.rowCount; r++) {
       const row = ws.getRow(r);
       const matricule = cellStr(row, idx.matricule);
       const nom = cellStr(row, idx.nom);
       const prenoms = cellStr(row, idx.prenoms);
+      const direction = cellStr(row, idx.direction);
+      const salaireBrut = cellStr(row, idx.salaire);
       if (!matricule && !nom && !prenoms) continue; // ligne vide
 
+      const base = { ligne: r, matricule, nom, prenoms, direction };
+
       if (!matricule || !nom || !prenoms) {
-        erreurs.push(`Ligne ${r} : matricule, nom et prénoms sont requis.`);
-        ignores++;
+        lignes.push({ ...base, salaire: salaireBrut, statut: 'ERREUR', message: 'Matricule, nom et prénoms sont requis.', directionId: null });
         continue;
       }
+      if (seen.has(matricule.toLowerCase())) {
+        lignes.push({ ...base, salaire: salaireBrut, statut: 'IGNORE', message: `Matricule ${matricule} en double dans le fichier.`, directionId: null });
+        continue;
+      }
+      seen.add(matricule.toLowerCase());
 
       const existing = await this.employeRepo.findOne({ where: { matricule }, withDeleted: true });
       if (existing) {
-        erreurs.push(`Ligne ${r} : matricule ${matricule} déjà présent — ignoré.`);
-        ignores++;
+        lignes.push({ ...base, salaire: salaireBrut, statut: 'IGNORE', message: `Matricule ${matricule} déjà présent.`, directionId: null });
         continue;
       }
 
       let directionId: string | null = null;
-      const dirRaw = cellStr(row, idx.direction);
-      if (dirRaw) {
-        const found = dirByKey.get(dirRaw.toLowerCase());
-        if (!found) {
-          erreurs.push(`Ligne ${r} : direction « ${dirRaw} » introuvable — employé créé sans direction.`);
-        } else {
-          directionId = found;
-        }
+      let message: string | undefined;
+      if (direction) {
+        const found = dirByKey.get(direction.toLowerCase());
+        if (!found) message = `Direction « ${direction} » introuvable — sera créé sans direction.`;
+        else directionId = found;
       }
 
-      let salaire: string | null = null;
-      const salRaw = cellStr(row, idx.salaire).replace(/\s/g, '').replace(',', '.');
-      if (salRaw && !Number.isNaN(Number(salRaw))) salaire = salRaw;
+      let salaire = '';
+      const salNorm = salaireBrut.replace(/\s/g, '').replace(',', '.');
+      if (salNorm && !Number.isNaN(Number(salNorm))) salaire = salNorm;
+      else if (salaireBrut) message = message ? `${message} Salaire ignoré (non numérique).` : 'Salaire ignoré (non numérique).';
 
-      await this.employeRepo.save(
-        this.employeRepo.create({ matricule, nom, prenoms, directionId, salaire, estActif: true, createdById: userId as any }),
-      );
-      crees++;
+      lignes.push({ ...base, salaire, statut: 'OK', message, directionId });
+    }
+
+    return lignes;
+  }
+
+  /** Aperçu (dry-run) de l'import : renvoie le détail ligne par ligne + un résumé, sans rien créer. */
+  async apercuImport(fileBase64: string) {
+    const lignes = await this.analyserImport(fileBase64);
+    const resume = {
+      total: lignes.length,
+      aCreer: lignes.filter((l) => l.statut === 'OK').length,
+      ignores: lignes.filter((l) => l.statut === 'IGNORE').length,
+      erreurs: lignes.filter((l) => l.statut === 'ERREUR').length,
+    };
+    // On n'expose pas directionId (interne).
+    const publiques = lignes.map(({ directionId: _directionId, ...l }) => l);
+    return { lignes: publiques, resume };
+  }
+
+  /** Import réel : enregistre les lignes valides (statut OK). Renvoie un récapitulatif. */
+  async importEmployes(
+    fileBase64: string,
+    userId: string,
+  ): Promise<{ crees: number; ignores: number; erreurs: string[] }> {
+    const lignes = await this.analyserImport(fileBase64);
+    let crees = 0;
+    let ignores = 0;
+    const erreurs: string[] = [];
+
+    for (const l of lignes) {
+      if (l.statut === 'OK') {
+        await this.employeRepo.save(
+          this.employeRepo.create({
+            matricule: l.matricule,
+            nom: l.nom,
+            prenoms: l.prenoms,
+            directionId: l.directionId,
+            salaire: l.salaire || null,
+            estActif: true,
+            createdById: userId as any,
+          }),
+        );
+        crees++;
+        if (l.message) erreurs.push(`Ligne ${l.ligne} : ${l.message}`);
+      } else {
+        ignores++;
+        if (l.message) erreurs.push(`Ligne ${l.ligne} : ${l.message}`);
+      }
     }
 
     return { crees, ignores, erreurs };
+  }
+
+  /** Export Excel des employés (mêmes colonnes que l'import). `masquerSalaire` vide la colonne Salaire. */
+  async exportEmployes(opts: EmployeQuery = {}, masquerSalaire = false): Promise<Buffer> {
+    const list = await this.listEmployes(opts);
+    const directions = await this.dataSource.getRepository(Direction).find();
+    const dirById = new Map(directions.map((d) => [String(d.id), d]));
+
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Employés');
+    ws.columns = EmployesService.COLONNES_EXPORT;
+    ws.getRow(1).font = { bold: true };
+
+    for (const e of list) {
+      const d = e.directionId ? dirById.get(String(e.directionId)) : undefined;
+      ws.addRow({
+        matricule: e.matricule,
+        nom: e.nom,
+        prenoms: e.prenoms,
+        direction: d ? d.code : '',
+        salaire: !masquerSalaire && e.salaire != null ? Number(e.salaire) : '',
+      });
+    }
+
+    return Buffer.from((await wb.xlsx.writeBuffer()) as any);
+  }
+
+  /** Modèle Excel d'import : en-têtes + deux lignes d'exemple. */
+  async modeleImport(): Promise<Buffer> {
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Employés');
+    ws.columns = EmployesService.COLONNES_EXPORT;
+    ws.getRow(1).font = { bold: true };
+    ws.addRow({ matricule: 'MAT001', nom: 'Diallo', prenoms: 'Awa', direction: 'DG', salaire: 500000 });
+    ws.addRow({ matricule: 'MAT002', nom: 'Traoré', prenoms: 'Ibrahim', direction: 'DAF', salaire: 350000 });
+    return Buffer.from((await wb.xlsx.writeBuffer()) as any);
   }
 
   async findEmploye(id: string): Promise<Employe> {

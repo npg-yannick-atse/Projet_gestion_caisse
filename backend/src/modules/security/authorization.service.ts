@@ -355,7 +355,9 @@ export class AuthorizationService {
    * VIDE : sans attribution, l'utilisateur ne peut utiliser aucune nature.
    */
   async getNatureOperationPerimeter(userId: string): Promise<Set<string> | null> {
-    if (await this.isAdmin(userId)) return null;
+    // Volontairement AUCUN bypass admin : le périmètre des natures d'opération
+    // s'applique à TOUS, y compris SUPER_ADMIN / ADMINISTRATEUR / DAF. Un
+    // utilisateur sans nature affectée (ensemble vide) ne peut en utiliser aucune.
     const rows = await this.dataSource
       .getRepository(UserNatureOperation)
       .find({ where: { userId: userId as any } });

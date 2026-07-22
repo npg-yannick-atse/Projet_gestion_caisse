@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -42,6 +43,7 @@ function useFinancePerms() {
     canDeleteCaisse: isAdmin || p.has('CAISSE_SUPPRIMER'),
     canManagePf: isAdmin || p.has('PORTEFEUILLE_MODIFIER'),
     canDeletePf: isAdmin || p.has('PORTEFEUILLE_SUPPRIMER'),
+    canEditSoldeInitial: isAdmin || p.has('PORTEFEUILLE_SOLDE_INITIAL'),
     canOpenClose: isAdmin || codes.has('CAISSIER'),
   };
 }
@@ -256,6 +258,13 @@ function GestionnaireRoleWarning({ userId }: { userId: string }) {
 function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portefeuille; onClose: () => void }) {
   const update = useUpdatePortefeuille();
   const { data: users } = useUsers();
+  const fp = useFinancePerms();
+  // Le solde initial est verrouillé si : (a) l'utilisateur n'a pas la permission
+  // dédiée, ou (b) le portefeuille a déjà de l'activité (solde ≠ solde initial),
+  // auquel cas le backend refuse la modification (intégrité de l'historique).
+  const { data: soldeDetail } = usePortefeuilleSolde(portefeuille.id);
+  const aDesEcritures = !!soldeDetail && Number(soldeDetail.solde) !== Number(soldeDetail.soldeInitial);
+  const soldeLocked = !fp.canEditSoldeInitial || aDesEcritures;
   const {
     register,
     handleSubmit,
@@ -309,7 +318,20 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
 
         <div className="space-y-1.5">
           <Label htmlFor="pf-edit-solde">Solde initial</Label>
-          <Input id="pf-edit-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
+          <Input
+            id="pf-edit-solde"
+            inputMode="decimal"
+            placeholder="0"
+            disabled={soldeLocked}
+            {...register('soldeInitial')}
+          />
+          {soldeLocked && (
+            <p className="text-[11px] text-[#B45309]">
+              {!fp.canEditSoldeInitial
+                ? 'Modification réservée aux administrateurs (permission dédiée).'
+                : 'Verrouillé : des écritures existent sur ce portefeuille — passez par un ajustement.'}
+            </p>
+          )}
           {errors.soldeInitial && (
             <p className="text-sm text-destructive">{errors.soldeInitial.message}</p>
           )}
@@ -948,6 +970,23 @@ export function CaissesPage() {
   const fp = useFinancePerms();
   const [showCreate, setShowCreate] = useState(false);
   const [editCaisse, setEditCaisse] = useState<Caisse | null>(null);
+
+  // Rafraîchissement « live » : tant qu'on est sur la page (et que l'onglet est
+  // visible), on ré-interroge caisses, portefeuilles et leurs soldes toutes les
+  // 10 s pour refléter en quasi temps réel les opérations faites ailleurs.
+  const qc = useQueryClient();
+  useEffect(() => {
+    const LIVE_MS = 10_000;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      qc.invalidateQueries({ queryKey: ['caisses'] });
+      qc.invalidateQueries({ queryKey: ['portefeuilles'] });
+      qc.invalidateQueries({ queryKey: ['caisse'] }); // soldes de caisse : ['caisse', id, 'solde']
+      qc.invalidateQueries({ queryKey: ['portefeuille'] }); // soldes de portefeuille : ['portefeuille', id, 'solde']
+    };
+    const t = setInterval(tick, LIVE_MS);
+    return () => clearInterval(t);
+  }, [qc]);
 
   const openCount = caisses?.filter((c) => c.statut === 'OUVERTE').length ?? 0;
 

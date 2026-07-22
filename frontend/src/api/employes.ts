@@ -36,9 +36,68 @@ export interface ImportResult {
   erreurs: string[];
 }
 
+export type ImportStatut = 'OK' | 'IGNORE' | 'ERREUR';
+
+export interface ApercuLigne {
+  ligne: number;
+  matricule: string;
+  nom: string;
+  prenoms: string;
+  direction: string;
+  salaire: string;
+  statut: ImportStatut;
+  message?: string;
+}
+
+export interface ApercuImport {
+  lignes: ApercuLigne[];
+  resume: { total: number; aCreer: number; ignores: number; erreurs: number };
+}
+
 export async function importEmployes(fileBase64: string): Promise<ImportResult> {
   const { data } = await api.post<ImportResult>('/employes/import', { fileBase64 });
   return data;
+}
+
+/** Aperçu (dry-run) : parse le fichier côté serveur sans rien enregistrer. */
+export async function apercuImportEmployes(fileBase64: string): Promise<ApercuImport> {
+  const { data } = await api.post<ApercuImport>('/employes/import/apercu', { fileBase64 });
+  return data;
+}
+
+/** Déclenche le téléchargement d'un blob dans le navigateur. */
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Révocation différée : révoquer immédiatement après click() peut annuler le
+  // téléchargement dans certains navigateurs.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Télécharge un modèle Excel d'import (en-têtes + exemples). */
+export async function telechargerModeleEmployes(): Promise<void> {
+  const { data } = await api.get('/employes/import/modele', { responseType: 'blob' });
+  triggerDownload(data as Blob, 'modele_import_employes.xlsx');
+}
+
+/** Exporte les employés au format Excel (respecte recherche / filtre / tri). */
+export async function exportEmployes(filters: EmployesFilters = {}): Promise<void> {
+  const params: Record<string, string> = {};
+  if (filters.search) params.search = filters.search;
+  if (filters.directionId) params.directionId = filters.directionId;
+  if (filters.sortBy) params.sortBy = filters.sortBy;
+  if (filters.sortDir) params.sortDir = filters.sortDir;
+  const { data } = await api.get('/employes/export', { params, responseType: 'blob' });
+  triggerDownload(data as Blob, 'employes.xlsx');
+}
+
+export function useApercuImportEmployes() {
+  return useMutation({ mutationFn: apercuImportEmployes });
 }
 
 export async function createEmploye(payload: CreateEmployePayload): Promise<Employe> {
