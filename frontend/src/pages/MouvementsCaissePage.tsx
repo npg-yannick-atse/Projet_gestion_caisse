@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowRight, Calendar, Landmark, Repeat, TrendingUp, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, Calendar, CalendarRange, Landmark, Plus, Repeat, TrendingUp, Wallet, X } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
@@ -10,6 +10,17 @@ import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { CharCounter } from '@/components/ui/char-counter';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+
+const MVT_SORT_COLUMNS = ['dateOperation', 'montant'] as const;
+type MvtSortCol = (typeof MVT_SORT_COLUMNS)[number];
+
+/** Date du jour au format YYYY-MM-DD (heure locale). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
@@ -33,10 +44,26 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   const openCaisses = (caisses ?? []).filter((c) => c.statut === 'OUVERTE');
   const { data: allPortefeuilles } = usePortefeuilles();
   const { data: devises } = useDevises();
-  const { data: ops } = useOperations(mode);
+
+  // Historique : filtre par date + tri exécutés côté serveur (comme les autres pages).
+  // Par défaut, on n'affiche que la journée du JOUR.
+  const today = todayLocal();
+  const [dateFrom, setDateFrom] = useState(() => todayLocal());
+  const [dateTo, setDateTo] = useState(() => todayLocal());
+  const sort = useTableSort<MvtSortCol>('/mouvements', MVT_SORT_COLUMNS);
+  const { data: ops } = useOperations({
+    type: mode,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
 
   const encaissement = useEncaissement();
   const recharge = useRecharge();
+
+  // Formulaire de saisie en modale (déclenché par un bouton).
+  const [formOpen, setFormOpen] = useState(false);
 
   // Champs communs.
   const [montant, setMontant] = useState('');
@@ -111,6 +138,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             setClientNom('');
             setClientNumero('');
             setEncMotif('');
+            setFormOpen(false);
           },
         },
       );
@@ -122,6 +150,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             setDone(true);
             setMontant('');
             setRechMotif('');
+            setFormOpen(false);
           },
         },
       );
@@ -132,28 +161,47 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Bascule de mode */}
-      <div className="inline-flex w-full max-w-md rounded-[10px] border border-[rgba(15,76,129,0.12)] bg-white p-0.5">
-        <button
-          type="button"
-          onClick={() => setMode('ENCAISSEMENT')}
-          className={cn(
-            'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold transition',
-            isEnc ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+      {/* Bascule de mode + bouton d'ajout */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex w-full max-w-md rounded-[10px] border border-[rgba(15,76,129,0.12)] bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => setMode('ENCAISSEMENT')}
+            className={cn(
+              'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold transition',
+              isEnc ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+            )}
+          >
+            <ArrowDownToLine className="h-4 w-4" /> Encaissement
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('RECHARGE')}
+            className={cn(
+              'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold transition',
+              !isEnc ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+            )}
+          >
+            <Repeat className="h-4 w-4" /> Recharge
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          {done && (
+            <span className="text-sm font-medium text-[#059669]">
+              {isEnc ? 'Encaissement enregistré.' : 'Recharge effectuée.'}
+            </span>
           )}
-        >
-          <ArrowDownToLine className="h-4 w-4" /> Encaissement
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('RECHARGE')}
-          className={cn(
-            'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold transition',
-            !isEnc ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
-          )}
-        >
-          <Repeat className="h-4 w-4" /> Recharge
-        </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDone(false);
+              setFormOpen(true);
+            }}
+            className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5]"
+          >
+            <Plus className="h-4 w-4" /> {isEnc ? 'Nouvel encaissement' : 'Nouvelle recharge'}
+          </button>
+        </div>
       </div>
 
       {/* Statistiques du mode courant */}
@@ -194,9 +242,24 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
         />
       </div>
 
-      {/* Formulaire adaptatif */}
-      <Panel>
-        <PanelHeader title={isEnc ? 'Nouvel encaissement' : 'Nouvelle recharge'} />
+      {/* Formulaire adaptatif — en modale, ouvert via le bouton */}
+      {formOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={() => setFormOpen(false)}
+        >
+          <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <Panel>
+              <PanelHeader title={isEnc ? 'Nouvel encaissement' : 'Nouvelle recharge'}>
+                <button
+                  type="button"
+                  aria-label="Fermer"
+                  onClick={() => setFormOpen(false)}
+                  className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </PanelHeader>
         <form onSubmit={submit} className="grid gap-4 p-[18px] sm:grid-cols-2">
           {isEnc ? (
             <>
@@ -437,16 +500,60 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             </button>
           </div>
         </form>
-      </Panel>
+            </Panel>
+          </div>
+        </div>
+      )}
 
       {/* Derniers mouvements du mode courant */}
       <Panel>
         <PanelHeader title={isEnc ? 'Derniers encaissements' : 'Dernières recharges'} badge={`${stats.count}`} />
+
+        {/* Filtre par date (serveur) */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-xs">
+            <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
+            <input
+              type="date"
+              aria-label="Du"
+              title="Du"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+            <span className="text-[#64748B]">au</span>
+            <input
+              type="date"
+              aria-label="Au"
+              title="Au"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+          </div>
+          {(dateFrom !== today || dateTo !== today) && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom(today);
+                setDateTo(today);
+              }}
+              title="Revenir aux mouvements du jour"
+              className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
+            >
+              Aujourd'hui
+            </button>
+          )}
+          <span className="ml-auto text-[11px] text-[#64748B]">
+            {stats.count} résultat{stats.count > 1 ? 's' : ''}
+          </span>
+        </div>
+
         <table className="w-full text-xs">
           <thead className="bg-[#F8FAFC]">
             <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-              <th className="px-4 py-2.5 font-semibold">Date</th>
-              <th className="px-4 py-2.5 font-semibold">Montant</th>
+              <SortableHeader column="dateOperation" state={sort.state} onSort={sort.setSort}>Date</SortableHeader>
+              <SortableHeader column="montant" state={sort.state} onSort={sort.setSort}>Montant</SortableHeader>
               <th className="px-4 py-2.5 font-semibold">{isEnc ? 'Client' : 'Référence'}</th>
               <th className="px-4 py-2.5 font-semibold">Motif</th>
             </tr>
@@ -455,11 +562,15 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             {(ops ?? []).length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
-                  {isEnc ? 'Aucun encaissement pour le moment.' : 'Aucune recharge pour le moment.'}
+                  {dateFrom || dateTo
+                    ? 'Aucun mouvement pour ces dates.'
+                    : isEnc
+                      ? 'Aucun encaissement pour le moment.'
+                      : 'Aucune recharge pour le moment.'}
                 </td>
               </tr>
             )}
-            {(ops ?? []).slice(0, 20).map((o) => (
+            {(ops ?? []).map((o) => (
               <tr key={o.id} className="border-t border-[rgba(15,76,129,0.07)]">
                 <td className="px-4 py-3 text-[#64748B]">{new Date(o.dateOperation).toLocaleDateString('fr-FR')}</td>
                 <td className="px-4 py-3 font-medium">

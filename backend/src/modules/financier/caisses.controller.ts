@@ -97,6 +97,31 @@ export class CaissesController {
     return this.caissesService.getSoldeTimeline(id, days ? parseInt(days, 10) : 30);
   }
 
+  @Get(':id/flux-timeline')
+  @ApiOperation({ summary: 'Flux entrées / sorties du fond de caisse, jour par jour' })
+  async getFluxTimeline(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('days') days?: string,
+  ) {
+    // Même périmètre que le solde-timeline : accès direct OU caisse-source d'un portefeuille géré.
+    if (!(await this.authz.isAdmin(user.sub))) {
+      const caisses = await this.authz.getCaissePerimeter(user.sub);
+      let autorise = caisses?.has(String(id)) ?? false;
+      if (!autorise) {
+        const ptfs = await this.authz.getPortefeuillePerimeter(user.sub);
+        if (ptfs && ptfs.size > 0) {
+          const sources = await this.caissesService.sourceCaisseIds([...ptfs].map(String));
+          autorise = sources.includes(String(id));
+        }
+      }
+      if (!autorise) {
+        throw new ForbiddenException("Cette caisse est hors de votre périmètre.");
+      }
+    }
+    return this.caissesService.getFluxTimeline(id, days ? parseInt(days, 10) : 30);
+  }
+
   @Get(':id/sessions')
   @ApiOperation({ summary: 'Historique des sessions d\'une caisse' })
   getSessions(@Param('id') id: string) {

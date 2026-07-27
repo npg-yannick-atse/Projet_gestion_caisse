@@ -50,6 +50,13 @@ export class LedgerController {
     private readonly authz: AuthorizationService,
   ) {}
 
+  @Get('integrite')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: "Vérifier la chaîne d'intégrité des écritures (recalcul + chaînage des hash) — Super Admin" })
+  async verifierIntegrite(@Query('transactionUuid') transactionUuid?: string) {
+    return this.ledgerService.verifyEcrituresChain(transactionUuid);
+  }
+
   // Opérations
   @Post('operations')
   @Roles('ADMINISTRATEUR')

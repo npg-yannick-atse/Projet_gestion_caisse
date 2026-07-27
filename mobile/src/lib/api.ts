@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL } from './config';
 import { useAuthStore } from '../store/auth';
 
@@ -14,12 +14,49 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Déconnexion automatique si le token est rejeté.
+// Un seul refresh en vol à la fois : les requêtes concurrentes le partagent.
+let refreshing: Promise<string> | null = null;
+
+async function runRefresh(): Promise<string> {
+  const refreshToken = useAuthStore.getState().refreshToken;
+  if (!refreshToken) throw new Error('No refresh token');
+  // Appel « brut » (sans l'instance `api`) pour ne pas repasser par cet intercepteur.
+  const { data } = await axios.post<{ accessToken: string; refreshToken: string }>(
+    `${API_URL}/auth/refresh`,
+    { refreshToken },
+  );
+  await useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
+  return data.accessToken;
+}
+
+function sharedRefresh(): Promise<string> {
+  refreshing =
+    refreshing ??
+    runRefresh().finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+// Sur 401 : on tente UN refresh puis on rejoue la requête. `signOut` seulement si
+// le refresh échoue (token révoqué / expiré) — plus de déconnexion à chaque cycle.
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (error?.response?.status === 401) {
-      void useAuthStore.getState().signOut();
+  async (error: AxiosError) => {
+    const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    const isAuthRoute = original?.url?.includes('/auth/');
+
+    if (error.response?.status === 401 && original && !original._retry && !isAuthRoute) {
+      original._retry = true;
+      try {
+        const newToken = await sharedRefresh();
+        original.headers = original.headers ?? {};
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      } catch (e) {
+        await useAuthStore.getState().signOut();
+        return Promise.reject(e);
+      }
     }
     return Promise.reject(error);
   },

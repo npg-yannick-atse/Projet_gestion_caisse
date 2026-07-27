@@ -239,7 +239,11 @@ export function useCreateBenefice(employeId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateEmployeBeneficePayload) => createBenefice(employeId, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['benefices', employeId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['benefices', employeId] });
+      // Met à jour l'indicateur (compteur) sur la liste des employés.
+      qc.invalidateQueries({ queryKey: ['employes'] });
+    },
   });
 }
 
@@ -248,6 +252,9 @@ export function useUpdateBenefice(employeId: string) {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateEmployeBeneficePayload }) =>
       updateBenefice(id, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['benefices', employeId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['benefices', employeId] });
+      qc.invalidateQueries({ queryKey: ['employes'] });
+    },
   });
 }

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Landmark } from 'lucide-react';
-import { useCaisses, useCaisseSoldeTimeline, type SoldePoint } from '@/api/caisses';
+import { useCaisses, useCaisseFluxTimeline, type FluxPoint } from '@/api/caisses';
+import { useDevises } from '@/api/financierRef';
 import { formatMontant } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 
@@ -10,74 +11,150 @@ const RANGES = [
   { days: 90, label: '90 j' },
 ];
 
-/** Graphe d'aire (SVG) de l'évolution d'un solde. viewBox fixe, rendu responsive. */
-function SoldeChart({ points }: { points: SoldePoint[] }) {
-  const W = 640;
-  const H = 180;
-  const padX = 8;
+// Paire validée (guide dataviz) : entrées teal / sorties orange (CVD ΔE 13.8).
+const C_ENTREE = '#0D9488';
+const C_SORTIE = '#EA580C';
+
+/** Format compact pour l'axe (1 240 500 → 1.2M). */
+function compact(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'Md';
+  if (a >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (a >= 1e3) return Math.round(n / 1e3) + 'k';
+  return String(Math.round(n));
+}
+
+/** Graphe entrées/sorties d'une caisse en DEUX COURBES (même axe monétaire). */
+function FluxChart({ points, deviseCode }: { points: FluxPoint[]; deviseCode: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(600);
+  const [hover, setHover] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const cw = entries[0]?.contentRect.width;
+      if (cw) setW(cw);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const H = 210;
+  const padL = 42;
+  const padR = 8;
   const padTop = 14;
   const padBottom = 22;
+  const plotH = H - padTop - padBottom;
+  const innerW = Math.max(1, w - padL - padR);
+  const n = points.length;
 
   const geo = useMemo(() => {
-    if (points.length === 0) return null;
-    const vals = points.map((p) => p.solde);
-    const max = Math.max(...vals);
-    const min = Math.min(...vals, 0);
-    const range = Math.max(1, max - min);
-    const innerW = W - padX * 2;
-    const innerH = H - padTop - padBottom;
-    const stepX = points.length > 1 ? innerW / (points.length - 1) : innerW;
-    const pts = points.map((p, i) => ({
-      x: padX + i * stepX,
-      y: padTop + innerH - ((p.solde - min) / range) * innerH,
-      p,
-    }));
-    const line = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
-    const area = `${line} L ${pts[pts.length - 1].x.toFixed(1)} ${H - padBottom} L ${padX} ${H - padBottom} Z`;
-    const zeroY = padTop + innerH - ((0 - min) / range) * innerH;
-    return { pts, line, area, max, min, zeroY };
-  }, [points]);
+    const maxV = Math.max(1, ...points.map((p) => Math.max(p.entrees, p.sorties)));
+    const x = (i: number) => (n <= 1 ? padL + innerW / 2 : padL + (i / (n - 1)) * innerW);
+    const y = (v: number) => padTop + plotH - (v / maxV) * plotH;
+    const lineOf = (key: 'entrees' | 'sorties') =>
+      points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(' ');
+    const areaOf = (key: 'entrees' | 'sorties') =>
+      n === 0 ? '' : `${lineOf(key)} L${x(n - 1).toFixed(1)},${padTop + plotH} L${x(0).toFixed(1)},${padTop + plotH} Z`;
+    return { maxV, x, y, lineE: lineOf('entrees'), lineS: lineOf('sorties'), areaE: areaOf('entrees'), areaS: areaOf('sorties') };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, w]);
 
-  if (!geo) {
-    return <div className="flex h-[180px] items-center justify-center text-sm text-[#94A3B8]">Aucune donnée.</div>;
+  if (n === 0) {
+    return <div className="flex h-[210px] items-center justify-center text-sm text-[#94A3B8]">Aucune donnée.</div>;
   }
 
-  const last = geo.pts[geo.pts.length - 1];
-  const first = points[0];
-  const lastP = points[points.length - 1];
+  const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => ({ y: padTop + plotH - f * plotH, val: f * geo.maxV }));
+  const hv = hover != null ? points[hover] : null;
+  const hoverX = hover != null ? geo.x(hover) : 0;
+  const step = n <= 1 ? innerW : innerW / (n - 1);
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+
+  const onMove = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const rx = e.clientX - el.getBoundingClientRect().left;
+    setHover(Math.max(0, Math.min(n - 1, Math.round((rx - padL) / step))));
+  };
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img">
-      {/* Ligne du zéro si le solde passe en négatif */}
-      {geo.min < 0 && (
-        <line x1={padX} x2={W - padX} y1={geo.zeroY} y2={geo.zeroY} stroke="#E2E8F0" strokeWidth="1" strokeDasharray="3 3" />
+    <div ref={ref} className="relative" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg width={w} height={H} role="img" aria-label="Entrées et sorties par jour">
+        {/* Grille + axe Y */}
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} x2={w - padR} y1={t.y} y2={t.y} stroke={i === ticks.length - 1 ? '#CBD5E1' : '#EEF2F6'} strokeWidth={1} />
+            <text x={padL - 6} y={t.y + 3} textAnchor="end" fontSize="9" fill="#94A3B8">
+              {compact(t.val)}
+            </text>
+          </g>
+        ))}
+
+        {/* Aires légères sous chaque courbe */}
+        <path d={geo.areaE} fill={C_ENTREE} fillOpacity={0.08} />
+        <path d={geo.areaS} fill={C_SORTIE} fillOpacity={0.08} />
+
+        {/* Courbes */}
+        <path d={geo.lineS} fill="none" stroke={C_SORTIE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={geo.lineE} fill="none" stroke={C_ENTREE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Repère de survol */}
+        {hover != null && hv && (
+          <g>
+            <line x1={hoverX} x2={hoverX} y1={padTop} y2={padTop + plotH} stroke="#94A3B8" strokeWidth={1} strokeDasharray="3 3" />
+            <circle cx={hoverX} cy={geo.y(hv.sorties)} r={3.5} fill={C_SORTIE} stroke="#fff" strokeWidth={1.5} />
+            <circle cx={hoverX} cy={geo.y(hv.entrees)} r={3.5} fill={C_ENTREE} stroke="#fff" strokeWidth={1.5} />
+          </g>
+        )}
+
+        {/* Dates (premier / dernier) */}
+        <text x={padL} y={H - 6} fontSize="9" fill="#94A3B8">
+          {fmtDate(points[0].date)}
+        </text>
+        <text x={w - padR} y={H - 6} fontSize="9" fill="#94A3B8" textAnchor="end">
+          {fmtDate(points[n - 1].date)}
+        </text>
+      </svg>
+
+      {/* Tooltip */}
+      {hv && (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-[8px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-[11px] shadow-md"
+          style={{ left: Math.min(Math.max(hoverX, 62), w - 62), top: 2 }}
+        >
+          <div className="mb-0.5 font-semibold text-[#0F172A]">{new Date(hv.date).toLocaleDateString('fr-FR')}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: C_ENTREE }} />
+            Entrées <span className="ml-auto font-medium tabular-nums">{formatMontant(hv.entrees)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: C_SORTIE }} />
+            Sorties <span className="ml-auto font-medium tabular-nums">{formatMontant(hv.sorties)}</span>
+          </div>
+          <div className="mt-0.5 border-t border-[rgba(15,76,129,0.08)] pt-0.5 text-[#475569]">
+            Net{' '}
+            <span className="ml-auto font-semibold tabular-nums">
+              {(hv.entrees - hv.sorties >= 0 ? '+' : '') + formatMontant(hv.entrees - hv.sorties)} {deviseCode}
+            </span>
+          </div>
+        </div>
       )}
-      <path d={geo.area} fill="rgba(26,109,181,0.10)" />
-      <path d={geo.line} fill="none" stroke="#1A6DB5" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last.x} cy={last.y} r="3.5" fill="#0F4C81" />
-      {/* Repères min / max */}
-      <text x={padX} y={padTop - 3} fontSize="10" fill="#94A3B8">
-        max {formatMontant(geo.max)}
-      </text>
-      <text x={padX} y={H - 6} fontSize="10" fill="#94A3B8">
-        {first?.date}
-      </text>
-      <text x={W - padX} y={H - 6} fontSize="10" fill="#94A3B8" textAnchor="end">
-        {lastP?.date}
-      </text>
-    </svg>
+    </div>
   );
 }
 
 /**
- * Panneau « Fond de caisse » : liste des caisses (clic = filtre) + graphe
- * d'évolution du solde dans le temps de la caisse sélectionnée.
+ * Panneau « Fond de caisse » : liste des caisses (clic = filtre) + graphe des
+ * FLUX (entrées vs sorties) de la caisse sélectionnée, en deux courbes.
  *
  * `caisseIds` restreint l'affichage à ces caisses (ex. gestionnaire = caisses
  * qui alimentent ses portefeuilles). Absent = toutes les caisses (DAF, admin).
  */
 export function FondCaissePanel({ caisseIds }: { caisseIds?: string[] }) {
   const { data: caisses } = useCaisses();
+  const { data: devises } = useDevises();
   const [caisseId, setCaisseId] = useState<string | null>(null);
   const [days, setDays] = useState(30);
 
@@ -90,18 +167,23 @@ export function FondCaissePanel({ caisseIds }: { caisseIds?: string[] }) {
     return l;
   }, [caisses, caisseIds]);
 
-  // Sélection par défaut : la première caisse disponible.
   useEffect(() => {
     if (!caisseId && liste.length > 0) setCaisseId(liste[0].id);
   }, [liste, caisseId]);
 
-  const { data: timeline, isLoading } = useCaisseSoldeTimeline(caisseId, days);
+  const { data: flux, isLoading } = useCaisseFluxTimeline(caisseId, days);
   const selected = liste.find((c) => c.id === caisseId);
-  const soldeCourant = timeline && timeline.length > 0 ? timeline[timeline.length - 1].solde : null;
+  const deviseCode = (devises ?? []).find((d) => d.id === selected?.deviseId)?.code ?? '';
+
+  const totals = useMemo(() => {
+    const e = (flux ?? []).reduce((s, p) => s + p.entrees, 0);
+    const s = (flux ?? []).reduce((a, p) => a + p.sorties, 0);
+    return { entrees: e, sorties: s, net: e - s };
+  }, [flux]);
 
   return (
     <Panel>
-      <PanelHeader title="Fond de caisse">
+      <PanelHeader title="Fond de caisse — flux">
         <div className="ml-auto flex items-center gap-1 rounded-[9px] border border-[rgba(15,76,129,0.12)] p-0.5">
           {RANGES.map((r) => (
             <button
@@ -119,9 +201,7 @@ export function FondCaissePanel({ caisseIds }: { caisseIds?: string[] }) {
       </PanelHeader>
 
       {liste.length === 0 ? (
-        <div className="px-[18px] py-10 text-center text-sm text-[#64748B]">
-          Aucune caisse accessible.
-        </div>
+        <div className="px-[18px] py-10 text-center text-sm text-[#64748B]">Aucune caisse accessible.</div>
       ) : (
         <div className="p-[18px]">
           {/* Caisses : clic = filtre */}
@@ -143,21 +223,32 @@ export function FondCaissePanel({ caisseIds }: { caisseIds?: string[] }) {
             ))}
           </div>
 
-          {/* Solde courant */}
-          <div className="mb-2 flex items-baseline gap-2">
+          {/* Légende + totaux de la période */}
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
               {selected ? `${selected.code} — ${selected.libelle}` : ''}
             </span>
-            {soldeCourant !== null && (
-              <span className="font-display text-lg font-bold text-[#0F172A]">{formatMontant(soldeCourant)}</span>
-            )}
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0.5 w-3 rounded" style={{ background: C_ENTREE }} />
+              Entrées <span className="font-medium tabular-nums text-[#0F172A]">{formatMontant(totals.entrees)}</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0.5 w-3 rounded" style={{ background: C_SORTIE }} />
+              Sorties <span className="font-medium tabular-nums text-[#0F172A]">{formatMontant(totals.sorties)}</span>
+            </span>
+            <span className="ml-auto text-[#475569]">
+              Net{' '}
+              <span className={`font-semibold tabular-nums ${totals.net >= 0 ? 'text-[#047857]' : 'text-[#B42318]'}`}>
+                {(totals.net >= 0 ? '+' : '') + formatMontant(totals.net)} {deviseCode}
+              </span>
+            </span>
           </div>
 
           {/* Graphe */}
           {isLoading ? (
-            <div className="flex h-[180px] items-center justify-center text-sm text-[#64748B]">Chargement…</div>
+            <div className="flex h-[210px] items-center justify-center text-sm text-[#64748B]">Chargement…</div>
           ) : (
-            <SoldeChart points={timeline ?? []} />
+            <FluxChart points={flux ?? []} deviseCode={deviseCode} />
           )}
         </div>
       )}

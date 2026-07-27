@@ -115,8 +115,24 @@ export interface TypeBon {
   code: string;
   libelle: string;
   requiertNumeroClient: boolean;
+  requiertNomClient: boolean;
   requiertPartenaire: boolean;
   requiertBl: boolean;
+  estActif: boolean;
+}
+
+export interface Pays {
+  id: string;
+  code: string;
+  libelle: string;
+  estActif: boolean;
+}
+
+export interface Division {
+  id: string;
+  code: string;
+  libelle: string;
+  paysId: string;
   estActif: boolean;
 }
 
@@ -142,6 +158,9 @@ export interface SousBonInput {
   portefeuilleId: string;
   deviseId: string;
   numeroClient?: string;
+  nomClient?: string;
+  paysId?: string;
+  divisionId?: string;
   description?: string;
 }
 

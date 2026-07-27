@@ -13,11 +13,11 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useCreateBon } from '@/api/bons';
-import { useMyBonPerimeter, usePartenaires, useTypeBons } from '@/api/referentiel';
+import { useMyBonPerimeter, usePartenaires, useTypeBons, usePays, useDivisions } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
 import { useAuthStore } from '@/store/auth';
-import type { CostCenter, NatureOperation, Partenaire, Portefeuille, TypeBon } from '@/types';
+import type { CostCenter, Division, NatureOperation, Partenaire, Pays, Portefeuille, TypeBon } from '@/types';
 
 const montantRegex = /^\d+(\.\d{1,4})?$/;
 
@@ -39,6 +39,10 @@ export default function NouvelleDemandeScreen() {
   const [montant, setMontant] = useState('');
   const [numeroBl, setNumeroBl] = useState('');
   const [codeManutention, setCodeManutention] = useState('');
+  const [numeroClient, setNumeroClient] = useState('');
+  const [nomClient, setNomClient] = useState('');
+  const [paysId, setPaysId] = useState('');
+  const [divisionId, setDivisionId] = useState('');
   const [porteur, setPorteur] = useState('');
   const [estRecurrent, setEstRecurrent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +75,21 @@ export default function NouvelleDemandeScreen() {
 
   const selectedPf = portefeuilles.find((p) => p.id === portefeuilleId);
 
+  // Champs conditionnels selon le type de bon (comme le web).
+  const selectedType = typeBonsList.find((t) => t.id === typeBonId);
+  const reqNumeroClient = selectedType?.requiertNumeroClient ?? false;
+  const reqNomClient = selectedType?.requiertNomClient ?? false;
+  const reqPartenaire = selectedType?.requiertPartenaire ?? false;
+  const reqBl = selectedType?.requiertBl ?? false;
+
+  const { data: paysData } = usePays();
+  const { data: divisionsData } = useDivisions(reqNomClient ? paysId : undefined);
+  const paysOptions: SelectOption[] = (paysData ?? []).map((p: Pays) => ({ value: p.id, label: `${p.code} — ${p.libelle}` }));
+  const divisionOptions: SelectOption[] = (divisionsData ?? []).map((d: Division) => ({
+    value: d.id,
+    label: `${d.code} — ${d.libelle}`,
+  }));
+
   const typeBonOptions: SelectOption[] = typeBonsList.map((t) => ({ value: t.id, label: t.libelle, sublabel: t.code }));
   const pfOptions: SelectOption[] = portefeuilles.map((p) => ({
     value: p.id,
@@ -96,6 +115,10 @@ export default function NouvelleDemandeScreen() {
     !!natureOperationId &&
     libelle.trim().length > 0 &&
     montantValid &&
+    (!reqPartenaire || !!partenaireId) &&
+    (!reqBl || numeroBl.trim().length > 0) &&
+    (!reqNumeroClient || numeroClient.trim().length > 0) &&
+    (!reqNomClient || (nomClient.trim().length > 0 && !!paysId && !!divisionId)) &&
     !create.isPending;
 
   const total = useMemo(() => (montantValid ? Number(montant) : 0), [montant, montantValid]);
@@ -105,6 +128,10 @@ export default function NouvelleDemandeScreen() {
     setMontant('');
     setNumeroBl('');
     setCodeManutention('');
+    setNumeroClient('');
+    setNomClient('');
+    setPaysId('');
+    setDivisionId('');
     setPorteur('');
     setPartenaireId('');
     setNatureOperationId('');
@@ -131,6 +158,10 @@ export default function NouvelleDemandeScreen() {
             caisseId: selectedPf.caisseSourceId,
             portefeuilleId: selectedPf.id,
             deviseId: selectedPf.deviseId,
+            numeroClient: reqNumeroClient ? numeroClient.trim() || undefined : undefined,
+            nomClient: reqNomClient ? nomClient.trim() || undefined : undefined,
+            paysId: reqNomClient ? paysId || undefined : undefined,
+            divisionId: reqNomClient ? divisionId || undefined : undefined,
           },
         ],
       });
@@ -152,6 +183,11 @@ export default function NouvelleDemandeScreen() {
           <>
             <Select label="Type de bon" required value={typeBonId} options={typeBonOptions} onChange={setTypeBonId} />
             <Select label="Portefeuille" required value={portefeuilleId} options={pfOptions} onChange={setPortefeuilleId} />
+            {perimeter && portefeuilles.length === 0 && (
+              <Text style={{ color: '#DC2626', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
+                Aucun portefeuille ne vous est rattaché. Contactez un administrateur.
+              </Text>
+            )}
             <Select label="Centre de coût" required value={costCenterId} options={ccOptions} onChange={setCostCenterId} />
             <Select
               label="Nature d'opération"
@@ -214,6 +250,51 @@ export default function NouvelleDemandeScreen() {
                 </Field>
               </View>
             </View>
+
+            {reqNumeroClient && (
+              <Field label="N° client" required>
+                <TextInput
+                  style={styles.input}
+                  value={numeroClient}
+                  onChangeText={setNumeroClient}
+                  placeholder="N° client…"
+                  placeholderTextColor="#94A3B8"
+                />
+              </Field>
+            )}
+
+            {reqNomClient && (
+              <>
+                <Field label="Nom du client" required>
+                  <TextInput
+                    style={styles.input}
+                    value={nomClient}
+                    onChangeText={setNomClient}
+                    placeholder="Nom du client…"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </Field>
+                <Select
+                  label="Pays"
+                  required
+                  value={paysId}
+                  options={paysOptions}
+                  onChange={(v) => {
+                    setPaysId(v);
+                    setDivisionId('');
+                  }}
+                  placeholder="— Choisir —"
+                />
+                <Select
+                  label="Division"
+                  required
+                  value={divisionId}
+                  options={divisionOptions}
+                  onChange={setDivisionId}
+                  placeholder={paysId ? '— Choisir —' : "Choisissez d'abord un pays"}
+                />
+              </>
+            )}
 
             <Field label="Porteur (optionnel)">
               <TextInput

@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpCircle,
   BadgeCheck,
   Banknote,
   Building2,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useBons, useBonsByDirection, useBonsSummary, useBonsTimeline } from '@/api/bons';
 import { useCaisses } from '@/api/caisses';
+import { useOperations } from '@/api/ledger';
 import { useUsers } from '@/api/users';
 import { ageLabel, cn, formatMontant } from '@/lib/utils';
 import type { Bon, User } from '@/types/api';
@@ -36,6 +38,7 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
   const { data: bons } = useBons();
   const { data: caisses } = useCaisses();
   const { data: users } = useUsers();
+  const { data: allOperations } = useOperations();
   const { data: timelineCreated } = useBonsTimeline({ days: 14 });
   const { data: timelineDecaisse } = useBonsTimeline({ days: 14, statut: 'DECAISSE' });
   const { data: timelineValide } = useBonsTimeline({ days: 14, statut: 'VALIDE' });
@@ -51,19 +54,18 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
     return d.getTime();
   }, []);
 
-  const monthBons = useMemo(
-    () => allBons.filter((b) => new Date(b.createdAt).getTime() >= thisMonthStart),
-    [allBons, thisMonthStart],
-  );
-  const monthDecaisseSum = useMemo(
-    () =>
-      monthBons
-        .filter((b) => b.statut === 'DECAISSE' || b.statut === 'COMPTABILISE')
-        // Montant RÉELLEMENT décaissé (ajustements caissier inclus), pas le montant
-        // demandé — sinon écart avec le montant décaissé réel (remarque de test #10).
-        .reduce((acc, b) => acc + Number(b.montantDecaisse ?? b.montantTotal ?? 0), 0),
-    [monthBons],
-  );
+  // Flux de caisse du mois — couple ENTRÉES / SORTIES sur la MÊME source
+  // (opérations de caisse) et la même période, pour un appariement cohérent.
+  // On somme les mouvements réels (ENCAISSEMENT / DECAISSEMENT), pas les bons :
+  // un bon décaissé ce mois compte même s'il a été créé le mois précédent.
+  const { monthEncaisseSum, monthDecaisseSum } = useMemo(() => {
+    const ops = (allOperations ?? []).filter(
+      (op) => new Date(op.dateOperation).getTime() >= thisMonthStart,
+    );
+    const sum = (type: string) =>
+      ops.filter((op) => op.typeOperation === type).reduce((acc, op) => acc + Number(op.montant || 0), 0);
+    return { monthEncaisseSum: sum('ENCAISSEMENT'), monthDecaisseSum: sum('DECAISSEMENT') };
+  }, [allOperations, thisMonthStart]);
 
   // Taux d'approbation : VALIDE+DECAISSE / (CREE traités = VALIDE+DECAISSE+REFUSE)
   const tauxApprobation = useMemo(() => {
@@ -137,16 +139,23 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
       )}
 
       {/* KPIs globaux */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
+        <Kpi
+          icon={ArrowUpCircle}
+          label="Encaissé ce mois"
+          value={formatMontant(monthEncaisseSum)}
+          sub="Entrées de caisse"
+          tone="green"
+          to="/encaissement"
+        />
         <Kpi
           icon={Banknote}
           label="Décaissé ce mois"
           value={formatMontant(monthDecaisseSum)}
-          sub={`${monthBons.length} bons sur le mois`}
-          tone="green"
+          sub="Sorties de caisse"
+          tone="red"
           sparkValues={timelineDecaisse?.map((p) => Number(p.montant || 0))}
-          to="/bons"
-          searchObj={{ statut: 'DECAISSE' }}
+          to="/operations"
         />
         <Kpi
           icon={BadgeCheck}

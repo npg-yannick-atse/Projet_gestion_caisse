@@ -106,6 +106,12 @@ export class CaissesService {
     return this.ledgerService.getSoldeTimeline(id, 'CAISSE', days);
   }
 
+  /** Flux entrées / sorties de la caisse jour par jour (crédits vs débits). */
+  async getFluxTimeline(id: string, days = 30): Promise<Array<{ date: string; entrees: number; sorties: number }>> {
+    await this.findOne(id);
+    return this.ledgerService.getFluxTimeline(id, 'CAISSE', days);
+  }
+
   /** Caisses source (caisseSourceId) des portefeuilles fournis — pour le périmètre. */
   async sourceCaisseIds(portefeuilleIds: string[]): Promise<string[]> {
     if (portefeuilleIds.length === 0) return [];

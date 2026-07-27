@@ -160,16 +160,20 @@ export class LedgerService {
 
     const hashPrecedent = lastEcriture?.hashIntegrite ?? null;
 
-    const hashData = {
-      compte_id: input.compteId,
-      type_compte: input.typeCompte,
-      debit: debit || '0',
-      credit: credit || '0',
-      devise_id: input.deviseId,
-      date_ecriture: new Date().toISOString(),
-    };
-
-    const hashIntegrite = this.hashEcriture(hashData, hashPrecedent);
+    // Un SEUL horodatage : il est haché ET stocké, pour que le hash soit
+    // reproductible à partir des champs enregistrés (chaîne d'intégrité vérifiable).
+    const now = new Date();
+    const hashIntegrite = this.hashEcriture(
+      {
+        compteId: input.compteId,
+        typeCompte: input.typeCompte,
+        debit,
+        credit,
+        deviseId: input.deviseId,
+        dateEcritureIso: now.toISOString(),
+      },
+      hashPrecedent,
+    );
 
     const ecriture = this.ecritureRepo.create({
       transactionUuid,
@@ -182,7 +186,7 @@ export class LedgerService {
       costCenterId: input.costCenterId ? (input.costCenterId as any) : null,
       referenceBonId: input.referenceBonId ? (input.referenceBonId as any) : null,
       referenceSousBonId: input.referenceSousBonId ? (input.referenceSousBonId as any) : null,
-      dateEcriture: new Date(),
+      dateEcriture: now,
       hashIntegrite,
       hashPrecedent,
     });
@@ -302,6 +306,55 @@ export class LedgerService {
   }
 
   /**
+   * Flux quotidiens d'un compte sur `days` jours : entrées (Σ crédits) et sorties
+   * (Σ débits) par jour, SANS cumul. Sert au graphe entrées/sorties (barres
+   * divergentes). Pour une CAISSE : entrées = encaissements ; sorties = recharges
+   * de portefeuilles, décaissements, crédits, transferts sortants.
+   */
+  async getFluxTimeline(
+    compteId: string,
+    typeCompte: TypeCompte,
+    days = 30,
+  ): Promise<Array<{ date: string; entrees: number; sorties: number }>> {
+    const nbJours = Math.max(1, Math.min(180, days));
+    const cutoff = new Date();
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCDate(cutoff.getUTCDate() - (nbJours - 1));
+
+    const rows: Array<{ date: Date | string; c: string | null; d: string | null }> =
+      await this.ecritureRepo
+        .createQueryBuilder('e')
+        .select('CAST(e.date_ecriture AS DATE)', 'date')
+        .addSelect('SUM(CAST(e.credit AS DECIMAL(19,4)))', 'c')
+        .addSelect('SUM(CAST(e.debit AS DECIMAL(19,4)))', 'd')
+        .where('e.compte_id = :compteId', { compteId })
+        .andWhere('e.type_compte = :typeCompte', { typeCompte })
+        .andWhere('e.date_ecriture >= :cutoff', { cutoff })
+        .groupBy('CAST(e.date_ecriture AS DATE)')
+        .getRawMany();
+
+    const byDay = new Map<string, { entrees: number; sorties: number }>();
+    for (const r of rows) {
+      const key = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10);
+      byDay.set(key, { entrees: parseFloat(r.c || '0'), sorties: parseFloat(r.d || '0') });
+    }
+
+    const series: Array<{ date: string; entrees: number; sorties: number }> = [];
+    for (let i = 0; i < nbJours; i++) {
+      const d = new Date(cutoff);
+      d.setUTCDate(d.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const v = byDay.get(key);
+      series.push({
+        date: key,
+        entrees: Number((v?.entrees ?? 0).toFixed(4)),
+        sorties: Number((v?.sorties ?? 0).toFixed(4)),
+      });
+    }
+    return series;
+  }
+
+  /**
    * Garde budgétaire par centre de coût : refuse un décaissement qui ferait dépasser
    * le BUDGET MENSUEL du centre de coût (cumul des charges du mois en cours + `montant`
    * > budget). Sans budget défini sur le centre de coût, aucune limite n'est appliquée.
@@ -377,14 +430,84 @@ export class LedgerService {
   }
 
   /**
-   * Génère le hash SHA-256 pour l'intégrité
+   * Hash SHA-256 CANONIQUE d'une écriture, chaîné au hash précédent.
+   * Les montants sont normalisés en DECIMAL(19,4) et la date en ISO (ms), afin que
+   * le hash soit REPRODUCTIBLE à l'identique depuis les champs stockés → la chaîne
+   * d'intégrité est réellement vérifiable (cf. verifyEcrituresChain).
    */
-  private hashEcriture(data: any, hashPrecedent?: string | null): string {
+  private hashEcriture(
+    fields: {
+      compteId: string;
+      typeCompte: string;
+      debit?: string | null;
+      credit?: string | null;
+      deviseId: string;
+      dateEcritureIso: string;
+    },
+    hashPrecedent?: string | null,
+  ): string {
+    const num = (v?: string | null) => (v == null || v === '' ? '0.0000' : Number(v).toFixed(4));
     const json = JSON.stringify({
-      ...data,
+      compte_id: String(fields.compteId),
+      type_compte: fields.typeCompte,
+      debit: num(fields.debit),
+      credit: num(fields.credit),
+      devise_id: String(fields.deviseId),
+      date_ecriture: fields.dateEcritureIso,
       hash_precedent: hashPrecedent || '',
     });
     return crypto.createHash('sha256').update(json).digest('hex');
+  }
+
+  /**
+   * Vérifie la CHAÎNE D'INTÉGRITÉ des écritures : pour chaque écriture (triée par
+   * transaction puis id), (a) recalcule le hash depuis les champs stockés et le
+   * compare à hash_integrite, et (b) contrôle que hash_precedent chaîne bien
+   * l'écriture précédente de la même transaction. Détecte toute falsification,
+   * insertion, suppression ou réordonnancement.
+   */
+  async verifyEcrituresChain(
+    transactionUuid?: string,
+  ): Promise<{
+    ok: boolean;
+    total: number;
+    invalides: Array<{ id: string; transactionUuid: string; raison: string }>;
+  }> {
+    const qb = this.ecritureRepo
+      .createQueryBuilder('e')
+      .orderBy('e.transaction_uuid', 'ASC')
+      .addOrderBy('e.id', 'ASC');
+    if (transactionUuid) qb.where('e.transaction_uuid = :u', { u: transactionUuid });
+    const rows = await qb.getMany();
+
+    const invalides: Array<{ id: string; transactionUuid: string; raison: string }> = [];
+    const lastHashByTx = new Map<string, string | null>();
+
+    for (const e of rows) {
+      const prev = lastHashByTx.get(e.transactionUuid) ?? null;
+      // (b) Chaînage : hash_precedent doit pointer sur le hash de l'écriture d'avant.
+      if ((e.hashPrecedent ?? null) !== (prev ?? null)) {
+        invalides.push({ id: String(e.id), transactionUuid: e.transactionUuid, raison: 'chaînage rompu' });
+      }
+      // (a) Hash reproductible depuis les champs stockés.
+      const attendu = this.hashEcriture(
+        {
+          compteId: e.compteId,
+          typeCompte: e.typeCompte,
+          debit: e.debit ?? null,
+          credit: e.credit ?? null,
+          deviseId: e.deviseId,
+          dateEcritureIso: new Date(e.dateEcriture).toISOString(),
+        },
+        e.hashPrecedent ?? null,
+      );
+      if (attendu !== e.hashIntegrite) {
+        invalides.push({ id: String(e.id), transactionUuid: e.transactionUuid, raison: 'hash falsifié' });
+      }
+      lastHashByTx.set(e.transactionUuid, e.hashIntegrite);
+    }
+
+    return { ok: invalides.length === 0, total: rows.length, invalides };
   }
 
   /**

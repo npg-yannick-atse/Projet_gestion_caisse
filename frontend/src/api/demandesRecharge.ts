@@ -87,7 +87,7 @@ function useDemandeRechargeMutation<TVars>(fn: (vars: TVars) => Promise<unknown>
       qc.invalidateQueries({ queryKey: ['demandes-recharge'] });
       // La recharge modifie aussi opérations et soldes.
       qc.invalidateQueries({ queryKey: ['operations'] });
-      qc.invalidateQueries({ queryKey: ['portefeuille-solde'] });
+      qc.invalidateQueries({ queryKey: ['portefeuille'] });
     },
   });
 }

@@ -22,11 +22,49 @@ import { useTableSort } from '@/hooks/useTableSort';
 const TB_SORT_COLUMNS = ['code', 'libelle'] as const;
 type TbSortCol = (typeof TB_SORT_COLUMNS)[number];
 
-const schema = z.object({
-  code: z.string().trim().min(1, 'Requis'),
-  libelle: z.string().trim().min(1, 'Requis'),
-});
+const schema = z
+  .object({
+    code: z.string().trim().min(1, 'Requis'),
+    libelle: z.string().trim().min(1, 'Requis'),
+    modeMontant: z.enum(['SAISI', 'FIXE', 'POURCENTAGE_SALAIRE']),
+    montantFixe: z.string().trim().optional(),
+    pourcentageSalaire: z.string().trim().optional(),
+    plafondPourcentageSalaire: z.string().trim().optional(),
+    jourMinMois: z.string().trim().optional(),
+    requiertPeriode: z.boolean(),
+    recurrent: z.boolean(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.modeMontant === 'FIXE' && (!v.montantFixe || Number(v.montantFixe) <= 0)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['montantFixe'], message: 'Montant fixe requis (> 0)' });
+    }
+    if (v.modeMontant === 'POURCENTAGE_SALAIRE' && (!v.pourcentageSalaire || Number(v.pourcentageSalaire) <= 0)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pourcentageSalaire'], message: 'Pourcentage requis (> 0)' });
+    }
+    if (v.jourMinMois && (Number(v.jourMinMois) < 1 || Number(v.jourMinMois) > 31)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['jourMinMois'], message: 'Entre 1 et 31' });
+    }
+  });
 type FormValues = z.infer<typeof schema>;
+
+const MODE_OPTIONS: { value: FormValues['modeMontant']; label: string; hint: string }[] = [
+  { value: 'SAISI', label: 'Saisi librement', hint: 'L’utilisateur saisit le montant à l’attribution.' },
+  { value: 'FIXE', label: 'Montant fixe', hint: 'Montant imposé, identique pour tous.' },
+  { value: 'POURCENTAGE_SALAIRE', label: '% du salaire', hint: 'Montant calculé = pourcentage du salaire de l’employé.' },
+];
+
+/** Résumé lisible du mode d'attribution d'un type (colonne du tableau). */
+function describeAttribution(t: TypeBenefice): string {
+  const parts: string[] = [];
+  if (t.modeMontant === 'FIXE') parts.push(`Fixe : ${t.montantFixe ?? '?'}`);
+  else if (t.modeMontant === 'POURCENTAGE_SALAIRE') parts.push(`${t.pourcentageSalaire ?? '?'} % du salaire`);
+  else parts.push('Montant saisi');
+  if (t.plafondPourcentageSalaire) parts.push(`plafond ${t.plafondPourcentageSalaire} %`);
+  if (t.jourMinMois) parts.push(`dès le ${t.jourMinMois}`);
+  parts.push(t.requiertPeriode ? 'avec période' : 'ponctuel');
+  if (t.recurrent) parts.push('récurrent');
+  return parts.join(' · ');
+}
 
 function TypeBeneficeForm({ type, onDone }: { type?: TypeBenefice; onDone: () => void }) {
   const isEdit = !!type;
@@ -36,12 +74,36 @@ function TypeBeneficeForm({ type, onDone }: { type?: TypeBenefice; onDone: () =>
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: type ? { code: type.code, libelle: type.libelle } : undefined,
+    defaultValues: type
+      ? {
+          code: type.code,
+          libelle: type.libelle,
+          modeMontant: type.modeMontant,
+          montantFixe: type.montantFixe ?? '',
+          pourcentageSalaire: type.pourcentageSalaire ?? '',
+          plafondPourcentageSalaire: type.plafondPourcentageSalaire ?? '',
+          jourMinMois: type.jourMinMois != null ? String(type.jourMinMois) : '',
+          requiertPeriode: type.requiertPeriode,
+          recurrent: type.recurrent,
+        }
+      : {
+          code: '',
+          libelle: '',
+          modeMontant: 'SAISI',
+          montantFixe: '',
+          pourcentageSalaire: '',
+          plafondPourcentageSalaire: '',
+          jourMinMois: '',
+          requiertPeriode: true,
+          recurrent: false,
+        },
   });
 
+  const mode = watch('modeMontant');
   const pending = create.isPending || update.isPending;
   const mutError = create.error || update.error;
   const hasError = create.isError || update.isError;
@@ -51,11 +113,22 @@ function TypeBeneficeForm({ type, onDone }: { type?: TypeBenefice; onDone: () =>
       reset();
       onDone();
     };
+    // Réglages communs création/mise à jour. Les champs non pertinents pour le
+    // mode choisi sont neutralisés (null) pour ne pas laisser de valeur fantôme.
+    const config = {
+      modeMontant: values.modeMontant,
+      montantFixe: values.modeMontant === 'FIXE' ? values.montantFixe || null : null,
+      pourcentageSalaire: values.modeMontant === 'POURCENTAGE_SALAIRE' ? values.pourcentageSalaire || null : null,
+      plafondPourcentageSalaire: values.plafondPourcentageSalaire || null,
+      jourMinMois: values.jourMinMois ? Number(values.jourMinMois) : null,
+      requiertPeriode: values.requiertPeriode,
+      recurrent: values.recurrent,
+    };
     if (isEdit) {
-      // Le code n'est pas modifiable côté serveur : on n'envoie que le libellé.
-      update.mutate({ id: type!.id, payload: { libelle: values.libelle } }, { onSuccess: done });
+      // Le code n'est pas modifiable côté serveur : on n'envoie que le libellé + la config.
+      update.mutate({ id: type!.id, payload: { libelle: values.libelle, ...config } }, { onSuccess: done });
     } else {
-      create.mutate({ code: values.code, libelle: values.libelle }, { onSuccess: done });
+      create.mutate({ code: values.code, libelle: values.libelle, ...config }, { onSuccess: done });
     }
   });
 
@@ -73,6 +146,78 @@ function TypeBeneficeForm({ type, onDone }: { type?: TypeBenefice; onDone: () =>
           <Input id="libelle" placeholder="Ex : Billet d'avion" {...register('libelle')} />
           {errors.libelle && <p className="text-sm text-destructive">{errors.libelle.message}</p>}
         </div>
+
+        {/* --------------------------------------------- Mode d'attribution -- */}
+        <div className="sm:col-span-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#FBFCFE] p-3.5">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+            Mode d’attribution
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="modeMontant">Montant</Label>
+              <select
+                id="modeMontant"
+                className="flex h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+                {...register('modeMontant')}
+              >
+                {MODE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-[#94A3B8]">{MODE_OPTIONS.find((o) => o.value === mode)?.hint}</p>
+            </div>
+
+            {mode === 'FIXE' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="montantFixe">Montant fixe</Label>
+                <Input id="montantFixe" type="number" min="0" step="1" placeholder="Ex : 100000" {...register('montantFixe')} />
+                {errors.montantFixe && <p className="text-sm text-destructive">{errors.montantFixe.message}</p>}
+              </div>
+            )}
+            {mode === 'POURCENTAGE_SALAIRE' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="pourcentageSalaire">Pourcentage du salaire (%)</Label>
+                <Input id="pourcentageSalaire" type="number" min="0" max="100" step="0.01" placeholder="Ex : 50" {...register('pourcentageSalaire')} />
+                {errors.pourcentageSalaire && <p className="text-sm text-destructive">{errors.pourcentageSalaire.message}</p>}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="plafondPourcentageSalaire">Plafond (% du salaire) — optionnel</Label>
+              <Input
+                id="plafondPourcentageSalaire"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="Ex : 50"
+                {...register('plafondPourcentageSalaire')}
+              />
+              <p className="text-[11px] text-[#94A3B8]">Empêche d’accorder plus de X % du salaire.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="jourMinMois">Jour min. du mois — optionnel</Label>
+              <Input id="jourMinMois" type="number" min="1" max="31" step="1" placeholder="Ex : 15" {...register('jourMinMois')} />
+              {errors.jourMinMois ? (
+                <p className="text-sm text-destructive">{errors.jourMinMois.message}</p>
+              ) : (
+                <p className="text-[11px] text-[#94A3B8]">Attribution autorisée seulement à partir de ce jour.</p>
+              )}
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-[#0F172A]">
+              <input type="checkbox" className="h-4 w-4 rounded border-[rgba(15,76,129,0.3)]" {...register('requiertPeriode')} />
+              Requiert une période (dates début / fin)
+            </label>
+            <label className="flex items-center gap-2 text-xs text-[#0F172A]">
+              <input type="checkbox" className="h-4 w-4 rounded border-[rgba(15,76,129,0.3)]" {...register('recurrent')} />
+              Bénéfice récurrent (vs ponctuel)
+            </label>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {pending ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Créer'}
@@ -165,6 +310,7 @@ export function TypesBeneficePage() {
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
+                <th className="px-4 py-2.5 font-semibold">Attribution</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -173,7 +319,7 @@ export function TypesBeneficePage() {
             <tbody>
               {types.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
                     Aucun type de bénéfice. Créez-en un (ex. Billet d'avion) pour pouvoir l'accorder aux employés.
                   </td>
                 </tr>
@@ -182,6 +328,7 @@ export function TypesBeneficePage() {
                 <tr key={t.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{t.code}</td>
                   <td className="px-4 py-3">{t.libelle}</td>
+                  <td className="px-4 py-3 text-[11px] text-[#64748B]">{describeAttribution(t)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button

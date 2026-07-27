@@ -273,7 +273,12 @@ export class AuthorizationService {
     return (await this.getEffectivePermissions(userId)).has(code);
   }
 
-  /** Caisses autorisées (accès ECRITURE/ADMIN). null = toutes (admin ou périmètre vide). */
+  /**
+   * Caisses autorisées (accès ECRITURE/ADMIN). `null` = toutes (admin uniquement).
+   * SÉMANTIQUE STRICTE : un non-admin sans aucun accès obtient un ensemble VIDE
+   * (= aucune caisse), plus de « filet de sécurité ». Il faut donc peupler
+   * sec_user_caisse_access pour chaque caissier, sinon il est bloqué.
+   */
   async getCaissePerimeter(userId: string): Promise<Set<string> | null> {
     if (await this.isAdmin(userId)) return null;
     const rows = await this.dataSource
@@ -283,10 +288,13 @@ export class AuthorizationService {
     for (const a of rows) {
       if (a.niveauAcces === 'ECRITURE' || a.niveauAcces === 'ADMIN') set.add(String(a.caisseId));
     }
-    return set.size > 0 ? set : null;
+    return set;
   }
 
-  /** Portefeuilles autorisés (possédés / direction / gestionnaire). null = tous. */
+  /**
+   * Portefeuilles autorisés (possédés / direction / gestionnaire). `null` = tous
+   * (admin uniquement) ; ensemble VIDE = aucun (sémantique stricte, plus de filet).
+   */
   async getPortefeuillePerimeter(userId: string): Promise<Set<string> | null> {
     if (await this.isAdmin(userId)) return null;
     const user = await this.dataSource.getRepository(User).findOne({ where: { id: userId } });
@@ -308,7 +316,9 @@ export class AuthorizationService {
     const managed = await ptfRepo.find({ where: { gestionnaireId: userId as any } });
     for (const p of managed) set.add(String(p.id));
 
-    return set.size > 0 ? set : null;
+    // SÉMANTIQUE STRICTE (comme la caisse) : un non-admin sans portefeuille possédé /
+    // de sa direction / géré obtient un ensemble VIDE (= aucun portefeuille), pas de filet.
+    return set;
   }
 
   /** Vérifie qu'une caisse est dans le périmètre de l'utilisateur (sinon Forbidden). */

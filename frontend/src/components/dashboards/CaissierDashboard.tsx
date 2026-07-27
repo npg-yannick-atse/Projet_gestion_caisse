@@ -281,6 +281,15 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
     0,
   );
 
+  // Encaissements (entrées de caisse) — pendant du décaissement dans les KPIs.
+  const encaissementsToday = (allOperations ?? []).filter(
+    (op) => op.typeOperation === 'ENCAISSEMENT' && new Date(op.dateOperation).getTime() >= startOfToday,
+  );
+  const encaissementsTodaySum = encaissementsToday.reduce((acc, op) => acc + Number(op.montant || 0), 0);
+
+  const encaissementsMois = monthOps.filter((op) => op.typeOperation === 'ENCAISSEMENT');
+  const encaissementsMoisSum = encaissementsMois.reduce((acc, op) => acc + Number(op.montant || 0), 0);
+
   // Trésorerie totale
   const myCaisses = useMemo(
     () =>
@@ -317,8 +326,8 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
         />
       )}
 
-      {/* KPIs */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPIs — encaissements (entrées) et décaissements (sorties) appariés */}
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         <Kpi
           icon={Clock}
           label="À décaisser maintenant"
@@ -332,6 +341,14 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           sparkValues={validatedTimeline?.map((p) => p.count)}
         />
         <Kpi
+          icon={ArrowUpCircle}
+          label="Encaissé aujourd'hui"
+          value={encaissementsToday.length}
+          sub={formatMontant(encaissementsTodaySum)}
+          tone="green"
+          to="/encaissement"
+        />
+        <Kpi
           icon={ArrowDownCircle}
           label="Décaissé aujourd'hui"
           value={decaissementsToday.length}
@@ -341,11 +358,18 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           to="/operations"
         />
         <Kpi
+          icon={ArrowUpCircle}
+          label="Encaissé ce mois"
+          value={encaissementsMois.length}
+          sub={formatMontant(encaissementsMoisSum)}
+          tone="green"
+        />
+        <Kpi
           icon={Banknote}
           label="Décaissé ce mois"
           value={decaissementsMois.length}
           sub={formatMontant(decaissementsMoisSum)}
-          tone="green"
+          tone="red"
           sparkValues={decaissedTimeline?.map((p) => Number(p.montant || 0))}
         />
         <Kpi

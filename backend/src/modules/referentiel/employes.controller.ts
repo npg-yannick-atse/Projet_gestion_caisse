@@ -28,7 +28,6 @@ import { Employe } from './entities/employe.entity';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '@modules/security/authorization.service';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('Référentiel / Employés')
 @ApiBearerAuth()
@@ -75,7 +74,6 @@ export class EmployesController {
   }
 
   @Post('employes/import/apercu')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: "Aperçu (dry-run) d'un import : parse le fichier sans rien enregistrer" })
   async apercuImport(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
@@ -83,7 +81,6 @@ export class EmployesController {
   }
 
   @Post('employes/import')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Importer des employés depuis un fichier Excel (base64)' })
   async importEmployes(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
@@ -91,7 +88,6 @@ export class EmployesController {
   }
 
   @Get('employes/import/modele')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: "Télécharger un modèle Excel d'import d'employés" })
   async modeleImport(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) res: Response) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
@@ -104,7 +100,6 @@ export class EmployesController {
   }
 
   @Get('employes/export')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Exporter les employés au format Excel (respecte recherche/filtre/tri)' })
   async exportEmployes(
     @CurrentUser() user: JwtPayload,
@@ -142,7 +137,6 @@ export class EmployesController {
   }
 
   @Post('employes')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un employé' })
   async createEmploye(@Body() dto: CreateEmployeDto, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'créer un employé');
@@ -151,7 +145,6 @@ export class EmployesController {
   }
 
   @Patch('employes/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un employé' })
   async updateEmploye(@Param('id') id: string, @Body() dto: UpdateEmployeDto, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'modifier un employé');
@@ -164,7 +157,6 @@ export class EmployesController {
   }
 
   @Delete('employes/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un employé' })
   async deleteEmploye(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
@@ -185,24 +177,24 @@ export class EmployesController {
   }
 
   @Post('types-benefice')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un type de bénéfice' })
-  createTypeBenefice(@Body() dto: CreateTypeBeneficeDto, @CurrentUser() user: JwtPayload) {
+  async createTypeBenefice(@Body() dto: CreateTypeBeneficeDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'créer un type de bénéfice');
     return this.employes.createTypeBenefice(dto, user.sub);
   }
 
   @Patch('types-benefice/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un type de bénéfice' })
-  updateTypeBenefice(@Param('id') id: string, @Body() dto: UpdateTypeBeneficeDto, @CurrentUser() user: JwtPayload) {
+  async updateTypeBenefice(@Param('id') id: string, @Body() dto: UpdateTypeBeneficeDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'modifier un type de bénéfice');
     return this.employes.updateTypeBenefice(id, dto, user.sub);
   }
 
   @Delete('types-benefice/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un type de bénéfice' })
   async deleteTypeBenefice(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'supprimer un type de bénéfice');
     await this.employes.deleteTypeBenefice(id, user.sub);
   }
 
@@ -215,7 +207,6 @@ export class EmployesController {
   }
 
   @Post('employes/:id/benefices')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Accorder un bénéfice (refusé si ce type est déjà valide pour l’employé)' })
   async createBenefice(
     @Param('id') id: string,
@@ -227,7 +218,6 @@ export class EmployesController {
   }
 
   @Patch('benefices/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un bénéfice (dont activation / désactivation)' })
   async updateBenefice(
     @Param('id') id: string,
@@ -239,7 +229,6 @@ export class EmployesController {
   }
 
   @Delete('benefices/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un bénéfice' })
   async deleteBenefice(@Param('id') id: string, @CurrentUser() user: JwtPayload) {

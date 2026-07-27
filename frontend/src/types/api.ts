@@ -502,7 +502,13 @@ export interface Operation {
   motif?: string | null;
 }
 
-export type CreditStatut = 'EN_COURS' | 'SOLDE';
+export type CreditStatut =
+  | 'EN_ATTENTE'
+  | 'APPROUVEE'
+  | 'EN_COURS'
+  | 'SOLDE'
+  | 'REJETEE'
+  | 'ANNULEE';
 export type CreditSource = 'CAISSE' | 'PORTEFEUILLE';
 
 export interface Credit {
@@ -516,6 +522,12 @@ export interface Credit {
   statut: CreditStatut;
   dateDebut: string;
   commentaire?: string | null;
+  validateurId?: string | null;
+  dateValidation?: string | null;
+  commentaireValidation?: string | null;
+  decaisseParId?: string | null;
+  dateDecaissement?: string | null;
+  createdById?: string | null;
   createdAt: string;
 }
 
@@ -755,6 +767,8 @@ export interface CreateBonManuelPayload {
 
 /* ---------------------------------------------------------------- Employés -- */
 
+export type ModeReglement = 'ESPECES' | 'VIREMENT';
+
 export interface Employe {
   id: string;
   matricule: string;
@@ -763,14 +777,40 @@ export interface Employe {
   directionId?: string | null;
   /** DECIMAL(19,4) en string. null si l'appelant n'a pas EMPLOYE_VOIR_SALAIRE. */
   salaire?: string | null;
+  /** Mode de règlement de l'employé. */
+  modeReglement: ModeReglement;
+  /** Banque (mode VIREMENT). */
+  banque?: string | null;
+  /** RIB / n° de compte (mode VIREMENT). */
+  rib?: string | null;
+  /** Portefeuille source par défaut des avances/crédits. */
+  portefeuilleSourceId?: string | null;
   estActif: boolean;
+  /** Nombre de bénéfices VALIDES (indicateur sur la liste). */
+  nbBenefices?: number;
 }
+
+export type ModeMontantBenefice = 'SAISI' | 'FIXE' | 'POURCENTAGE_SALAIRE';
 
 export interface TypeBenefice {
   id: string;
   code: string;
   libelle: string;
   estActif: boolean;
+  /** Mode de détermination du montant à l'attribution. */
+  modeMontant: ModeMontantBenefice;
+  /** Montant imposé (mode FIXE). */
+  montantFixe?: string | null;
+  /** % du salaire (mode POURCENTAGE_SALAIRE). */
+  pourcentageSalaire?: string | null;
+  /** Plafond en % du salaire (tous modes). */
+  plafondPourcentageSalaire?: string | null;
+  /** Attribution autorisée seulement à partir de ce jour du mois. */
+  jourMinMois?: number | null;
+  /** Le bénéfice a-t-il une période (dates début/fin). */
+  requiertPeriode: boolean;
+  /** Bénéfice récurrent (vs ponctuel). */
+  recurrent: boolean;
 }
 
 export interface EmployeBenefice {
@@ -791,6 +831,10 @@ export interface CreateEmployePayload {
   prenoms: string;
   directionId?: string;
   salaire?: string;
+  modeReglement?: ModeReglement;
+  banque?: string | null;
+  rib?: string | null;
+  portefeuilleSourceId?: string | null;
 }
 
 export interface UpdateEmployePayload {
@@ -798,19 +842,35 @@ export interface UpdateEmployePayload {
   prenoms?: string;
   directionId?: string;
   salaire?: string;
+  modeReglement?: ModeReglement;
+  banque?: string | null;
+  rib?: string | null;
+  portefeuilleSourceId?: string | null;
   estActif?: boolean;
 }
 
-export interface CreateTypeBeneficePayload {
+export interface TypeBeneficeConfigPayload {
+  modeMontant?: ModeMontantBenefice;
+  montantFixe?: string | null;
+  pourcentageSalaire?: string | null;
+  plafondPourcentageSalaire?: string | null;
+  jourMinMois?: number | null;
+  requiertPeriode?: boolean;
+  recurrent?: boolean;
+}
+
+export interface CreateTypeBeneficePayload extends TypeBeneficeConfigPayload {
   code: string;
   libelle: string;
 }
 
 export interface CreateEmployeBeneficePayload {
   typeBeneficeId: string;
-  montant: string;
-  dateDebut: string;
-  dateFin: string;
+  /** Requis seulement si le type est en mode SAISI. */
+  montant?: string;
+  /** Requis seulement si le type a une période. */
+  dateDebut?: string;
+  dateFin?: string;
   commentaire?: string;
 }
 

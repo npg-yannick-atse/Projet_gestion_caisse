@@ -14,6 +14,8 @@ interface AuthState {
   isReady: boolean;
   bootstrap: () => Promise<void>;
   setSession: (user: User, accessToken: string, refreshToken: string) => Promise<void>;
+  /** Met à jour uniquement les tokens (après un refresh), sans toucher à l'utilisateur. */
+  setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -48,6 +50,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       SecureStore.setItemAsync(KEY_USER, JSON.stringify(user)),
     ]);
     set({ user, accessToken, refreshToken });
+  },
+
+  setTokens: async (accessToken, refreshToken) => {
+    await Promise.all([
+      SecureStore.setItemAsync(KEY_ACCESS, accessToken),
+      SecureStore.setItemAsync(KEY_REFRESH, refreshToken),
+    ]);
+    set({ accessToken, refreshToken });
   },
 
   signOut: async () => {

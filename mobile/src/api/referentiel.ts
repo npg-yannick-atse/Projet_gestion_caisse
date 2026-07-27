@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { BonPerimeter, CostCenter, NatureOperation, Partenaire, TypeBon } from '../types';
+import type { BonPerimeter, CostCenter, Division, NatureOperation, Partenaire, Pays, TypeBon } from '../types';
 
 /** Périmètre de création de l'utilisateur : CC, caisses et portefeuilles autorisés. */
 export async function getMyBonPerimeter(): Promise<BonPerimeter> {
@@ -48,6 +48,29 @@ export function useNaturesOperation() {
   return useQuery<NatureOperation[]>({
     queryKey: ['natures-operation'],
     queryFn: listNaturesOperation,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export async function listPays(): Promise<Pays[]> {
+  const { data } = await api.get<Pays[]>('/pays');
+  return data;
+}
+
+export function usePays() {
+  return useQuery<Pays[]>({ queryKey: ['pays'], queryFn: listPays, staleTime: 5 * 60 * 1000 });
+}
+
+export async function listDivisions(paysId?: string): Promise<Division[]> {
+  const { data } = await api.get<Division[]>('/divisions', { params: paysId ? { paysId } : undefined });
+  return data;
+}
+
+export function useDivisions(paysId?: string) {
+  return useQuery<Division[]>({
+    queryKey: ['divisions', paysId ?? 'all'],
+    queryFn: () => listDivisions(paysId),
+    enabled: !!paysId,
     staleTime: 5 * 60 * 1000,
   });
 }

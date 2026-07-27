@@ -15,6 +15,8 @@ export function useRecharge() {
       qc.invalidateQueries({ queryKey: ['caisses'] });
       qc.invalidateQueries({ queryKey: ['caisse', vars.caisseId, 'solde'] });
       qc.invalidateQueries({ queryKey: ['portefeuilles'] });
+      qc.invalidateQueries({ queryKey: ['portefeuille', vars.portefeuilleId, 'solde'] });
+      qc.invalidateQueries({ queryKey: ['operations'] });
     },
   });
 }

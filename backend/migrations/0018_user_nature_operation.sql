@@ -6,10 +6,10 @@
    natures qu'un utilisateur a le droit d'utiliser a la creation d'un bon.
 
    SEMANTIQUE STRICTE : sans aucune ligne pour un utilisateur, celui-ci ne peut
-   utiliser AUCUNE nature (donc ne peut creer aucun bon) — sauf les
-   administrateurs qui passent partout (cf. AuthorizationService.isAdmin).
-   Il faut donc attribuer des natures aux utilisateurs existants avant la mise
-   en service, sinon la creation de bons est bloquee pour les non-admins.
+   utiliser AUCUNE nature (donc ne peut creer aucun bon). Le perimetre s'applique
+   a TOUS, administrateurs et super admin compris (aucun bypass).
+   Il faut donc attribuer des natures a TOUS les comptes concernes (admins inclus)
+   avant la mise en service, sinon la creation de bons est bloquee.
 
    Meme forme que sec_user_division_access (perimetre par utilisateur).
    ============================================================================ */

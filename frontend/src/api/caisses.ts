@@ -105,6 +105,25 @@ export function useCaisseSoldeTimeline(id: string | null, days = 30) {
   });
 }
 
+export interface FluxPoint {
+  date: string;
+  entrees: number;
+  sorties: number;
+}
+
+export async function getCaisseFluxTimeline(id: string, days = 30): Promise<FluxPoint[]> {
+  const { data } = await api.get<FluxPoint[]>(`/caisses/${id}/flux-timeline`, { params: { days } });
+  return data;
+}
+
+export function useCaisseFluxTimeline(id: string | null, days = 30) {
+  return useQuery({
+    queryKey: ['caisse', id, 'flux-timeline', days],
+    queryFn: () => getCaisseFluxTimeline(id as string, days),
+    enabled: !!id,
+  });
+}
+
 export function useOpenCaisse() {
   const qc = useQueryClient();
   return useMutation({

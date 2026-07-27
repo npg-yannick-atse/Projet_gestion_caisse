@@ -5,3 +5,8 @@ import { api } from '../lib/api';
 export async function registerPushToken(token: string): Promise<void> {
   await api.post('/push-tokens', { token, platform: Platform.OS });
 }
+
+/** Détache le jeton push (à la déconnexion) — nécessite d'être encore authentifié. */
+export async function unregisterPushToken(token: string): Promise<void> {
+  await api.delete(`/push-tokens/${encodeURIComponent(token)}`);
+}

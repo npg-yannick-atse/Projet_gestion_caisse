@@ -38,9 +38,6 @@ import {
   UpdateTypeBeneficeDto,
 } from './dto/employe.dto';
 
-/** Code du type de bénéfice « Avance sur salaire » (règles spéciales). */
-const CODE_AVANCE = 'AVANCE';
-
 @Injectable()
 export class EmployesService {
   constructor(
@@ -61,8 +58,11 @@ export class EmployesService {
 
   /* ----------------------------------------------------------- Employés -- */
 
-  /** Liste des employés actifs — recherche, filtre direction et tri exécutés EN BASE. */
-  listEmployes(opts: EmployeQuery = {}): Promise<Employe[]> {
+  /**
+   * Liste des employés actifs — recherche, filtre direction et tri exécutés EN BASE.
+   * Chaque employé porte `nbBenefices` = nombre de bénéfices VALIDES (indicateur UI).
+   */
+  async listEmployes(opts: EmployeQuery = {}): Promise<Array<Employe & { nbBenefices: number }>> {
     const qb = this.employeRepo.createQueryBuilder('e').where('e.estActif = :actif', { actif: true });
 
     if (opts.search && opts.search.trim()) {
@@ -81,7 +81,23 @@ export class EmployesService {
     if (col) qb.orderBy(`e.${col}`, dir);
     else qb.orderBy('e.nom', 'ASC').addOrderBy('e.prenoms', 'ASC');
 
-    return qb.getMany();
+    const list = await qb.getMany();
+    if (list.length === 0) return [];
+
+    // Nombre de bénéfices VALIDES par employé (un seul appel groupé).
+    const ids = list.map((e) => e.id);
+    const rows: Array<{ eid: string; n: string }> = await this.beneficeRepo
+      .createQueryBuilder('b')
+      .select('b.employe_id', 'eid')
+      .addSelect('COUNT(*)', 'n')
+      .where('b.employe_id IN (:...ids)', { ids })
+      .andWhere('b.est_valide = 1')
+      .groupBy('b.employe_id')
+      .getRawMany();
+    const countMap = new Map<string, number>();
+    for (const r of rows) countMap.set(String(r.eid), Number(r.n));
+
+    return list.map((e) => ({ ...e, nbBenefices: countMap.get(String(e.id)) ?? 0 }));
   }
 
   /** Colonnes Excel de l'import/export (ordre + largeur). */
@@ -297,6 +313,10 @@ export class EmployesService {
       prenoms: dto.prenoms,
       directionId: dto.directionId ?? null,
       salaire: dto.salaire ?? null,
+      modeReglement: dto.modeReglement ?? 'ESPECES',
+      banque: dto.banque || null,
+      rib: dto.rib || null,
+      portefeuilleSourceId: dto.portefeuilleSourceId || null,
       estActif: true,
       createdById: userId as any,
     });
@@ -310,6 +330,10 @@ export class EmployesService {
     if (dto.prenoms !== undefined) e.prenoms = dto.prenoms;
     if (dto.directionId !== undefined) e.directionId = dto.directionId || null;
     if (dto.salaire !== undefined) e.salaire = dto.salaire || null;
+    if (dto.modeReglement !== undefined) e.modeReglement = dto.modeReglement;
+    if (dto.banque !== undefined) e.banque = dto.banque || null;
+    if (dto.rib !== undefined) e.rib = dto.rib || null;
+    if (dto.portefeuilleSourceId !== undefined) e.portefeuilleSourceId = dto.portefeuilleSourceId || null;
     if (dto.estActif !== undefined) e.estActif = dto.estActif;
     e.updatedById = userId as any;
     return this.employeRepo.save(e);
@@ -343,6 +367,33 @@ export class EmployesService {
     return t;
   }
 
+  /**
+   * Vérifie la cohérence du « mode d'attribution » d'un type après application
+   * du DTO : le mode FIXE exige un montant fixe, POURCENTAGE_SALAIRE un %.
+   */
+  private assertConfigTypeCoherente(t: TypeBenefice): void {
+    if (t.modeMontant === 'FIXE' && (t.montantFixe == null || Number(t.montantFixe) <= 0)) {
+      throw new BadRequestException('Le mode « Montant fixe » exige un montant fixe strictement positif.');
+    }
+    if (t.modeMontant === 'POURCENTAGE_SALAIRE' && (t.pourcentageSalaire == null || Number(t.pourcentageSalaire) <= 0)) {
+      throw new BadRequestException('Le mode « % du salaire » exige un pourcentage strictement positif.');
+    }
+    if (t.plafondPourcentageSalaire != null && Number(t.plafondPourcentageSalaire) <= 0) {
+      throw new BadRequestException('Le plafond en % du salaire doit être strictement positif.');
+    }
+  }
+
+  /** Applique les champs de config présents dans le DTO sur l'entité type. */
+  private appliquerConfigType(t: TypeBenefice, dto: CreateTypeBeneficeDto | UpdateTypeBeneficeDto): void {
+    if (dto.modeMontant !== undefined) t.modeMontant = dto.modeMontant;
+    if (dto.montantFixe !== undefined) t.montantFixe = dto.montantFixe || null;
+    if (dto.pourcentageSalaire !== undefined) t.pourcentageSalaire = dto.pourcentageSalaire || null;
+    if (dto.plafondPourcentageSalaire !== undefined) t.plafondPourcentageSalaire = dto.plafondPourcentageSalaire || null;
+    if (dto.jourMinMois !== undefined) t.jourMinMois = dto.jourMinMois ?? null;
+    if (dto.requiertPeriode !== undefined) t.requiertPeriode = dto.requiertPeriode;
+    if (dto.recurrent !== undefined) t.recurrent = dto.recurrent;
+  }
+
   async createTypeBenefice(dto: CreateTypeBeneficeDto, userId: string): Promise<TypeBenefice> {
     const existing = await this.typeBeneficeRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
@@ -352,8 +403,13 @@ export class EmployesService {
       code: dto.code,
       libelle: dto.libelle,
       estActif: true,
+      modeMontant: 'SAISI',
+      requiertPeriode: true,
+      recurrent: false,
       createdById: userId as any,
     });
+    this.appliquerConfigType(t, dto);
+    this.assertConfigTypeCoherente(t);
     return this.typeBeneficeRepo.save(t);
   }
 
@@ -362,6 +418,8 @@ export class EmployesService {
     // Le code n'est pas modifiable (référencé par les bénéfices existants).
     if (dto.libelle !== undefined) t.libelle = dto.libelle;
     if (dto.estActif !== undefined) t.estActif = dto.estActif;
+    this.appliquerConfigType(t, dto);
+    this.assertConfigTypeCoherente(t);
     t.updatedById = userId as any;
     return this.typeBeneficeRepo.save(t);
   }
@@ -407,46 +465,101 @@ export class EmployesService {
    * concurrentes, là où ce contrôle applicatif seul laisserait passer.
    */
   /**
-   * Règles de l'avance sur salaire (paramétrables via app_parametre) :
-   *  - autorisée seulement à partir du jour AVANCE_JOUR_MIN du mois en cours ;
-   *  - montant plafonné à AVANCE_POURCENTAGE_MAX % du salaire de l'employé.
+   * Applique le « mode d'attribution » du type pour produire le montant et la
+   * période définitifs d'un bénéfice, en validant les règles configurées :
+   *  - mode du montant (saisi / fixe / % du salaire) ;
+   *  - jour minimum du mois ;
+   *  - plafond en % du salaire ;
+   *  - période requise ou non (dates début/fin).
+   * Généralise les anciennes règles « AVANCE » (jour 15, plafond 50 %) qui sont
+   * désormais de simples valeurs de configuration portées par le type.
    */
-  private async assertReglesAvance(employe: Employe, montant: string): Promise<void> {
-    const jourMin = await this.parametres.getNumber('AVANCE_JOUR_MIN', 15);
-    const jourActuel = new Date().getDate();
-    if (jourActuel < jourMin) {
-      throw new BadRequestException(
-        `Une avance ne peut être accordée qu'à partir du ${jourMin} du mois.`,
-      );
+  private resoudreBenefice(
+    type: TypeBenefice,
+    employe: Employe,
+    dto: CreateEmployeBeneficeDto,
+  ): { montant: string; dateDebut: string; dateFin: string } {
+    const salaire = Number(employe.salaire ?? 0);
+
+    // 1. Jour minimum du mois.
+    if (type.jourMinMois != null) {
+      const jourActuel = new Date().getDate();
+      if (jourActuel < type.jourMinMois) {
+        throw new BadRequestException(
+          `Ce bénéfice ne peut être accordé qu'à partir du ${type.jourMinMois} du mois.`,
+        );
+      }
     }
 
-    const pourcentMax = await this.parametres.getNumber('AVANCE_POURCENTAGE_MAX', 50);
-    const salaire = Number(employe.salaire ?? 0);
-    if (salaire <= 0) {
-      throw new BadRequestException(
-        "Le salaire de l'employé n'est pas renseigné : impossible de plafonner l'avance.",
-      );
+    // 2. Montant selon le mode.
+    let montant: string;
+    if (type.modeMontant === 'FIXE') {
+      if (type.montantFixe == null) {
+        throw new BadRequestException('Type mal configuré : montant fixe manquant.');
+      }
+      montant = type.montantFixe;
+    } else if (type.modeMontant === 'POURCENTAGE_SALAIRE') {
+      if (type.pourcentageSalaire == null) {
+        throw new BadRequestException('Type mal configuré : pourcentage du salaire manquant.');
+      }
+      if (salaire <= 0) {
+        throw new BadRequestException(
+          "Le salaire de l'employé n'est pas renseigné : impossible de calculer le montant.",
+        );
+      }
+      montant = ((salaire * Number(type.pourcentageSalaire)) / 100).toFixed(4);
+    } else {
+      // SAISI
+      if (!dto.montant || Number(dto.montant) <= 0) {
+        throw new BadRequestException('Le montant est requis pour ce type de bénéfice.');
+      }
+      montant = dto.montant;
     }
-    const plafond = (salaire * pourcentMax) / 100;
-    if (Number(montant) > plafond) {
-      throw new BadRequestException(
-        `L'avance ne peut dépasser ${pourcentMax} % du salaire (plafond : ${plafond.toFixed(0)}).`,
-      );
+
+    // 3. Plafond en % du salaire (tous modes).
+    if (type.plafondPourcentageSalaire != null) {
+      if (salaire <= 0) {
+        throw new BadRequestException(
+          "Le salaire de l'employé n'est pas renseigné : impossible d'appliquer le plafond.",
+        );
+      }
+      const plafond = (salaire * Number(type.plafondPourcentageSalaire)) / 100;
+      if (Number(montant) > plafond) {
+        throw new BadRequestException(
+          `Le montant ne peut dépasser ${Number(type.plafondPourcentageSalaire)} % du salaire (plafond : ${plafond.toFixed(0)}).`,
+        );
+      }
     }
+
+    // 4. Période.
+    let dateDebut: string;
+    let dateFin: string;
+    if (type.requiertPeriode) {
+      if (!dto.dateDebut || !dto.dateFin) {
+        throw new BadRequestException('Ce type de bénéfice requiert une période (dates de début et de fin).');
+      }
+      if (dto.dateFin < dto.dateDebut) {
+        throw new ConflictException('La date de fin doit être postérieure ou égale à la date de début.');
+      }
+      dateDebut = dto.dateDebut;
+      dateFin = dto.dateFin;
+    } else {
+      // Bénéfice ponctuel : on borne la période sur le jour d'attribution.
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      dateDebut = dto.dateDebut ?? aujourdhui;
+      dateFin = dto.dateFin ?? dateDebut;
+    }
+
+    return { montant, dateDebut, dateFin };
   }
 
   async createBenefice(employeId: string, dto: CreateEmployeBeneficeDto, userId: string): Promise<EmployeBenefice> {
     const employe = await this.findEmploye(employeId);
     const type = await this.findTypeBenefice(dto.typeBeneficeId);
 
-    if (dto.dateFin < dto.dateDebut) {
-      throw new ConflictException('La date de fin doit être postérieure ou égale à la date de début.');
-    }
-
-    // Règles spéciales de l'AVANCE sur salaire (paramétrables).
-    if (type.code === CODE_AVANCE) {
-      await this.assertReglesAvance(employe, dto.montant);
-    }
+    // Applique le mode d'attribution du type : montant (saisi/fixe/%),
+    // plafond, jour min, période. Produit les valeurs définitives.
+    const { montant, dateDebut, dateFin } = this.resoudreBenefice(type, employe, dto);
 
     const dejaValide = await this.beneficeRepo.findOne({
       where: { employeId, typeBeneficeId: dto.typeBeneficeId, estValide: true },
@@ -460,9 +573,9 @@ export class EmployesService {
     const b = this.beneficeRepo.create({
       employeId,
       typeBeneficeId: dto.typeBeneficeId,
-      montant: dto.montant,
-      dateDebut: dto.dateDebut,
-      dateFin: dto.dateFin,
+      montant,
+      dateDebut,
+      dateFin,
       estValide: true,
       commentaire: dto.commentaire ?? null,
       createdById: userId as any,

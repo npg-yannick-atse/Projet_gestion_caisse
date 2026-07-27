@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Credit } from './entities/credit.entity';
 import { Caisse } from './entities/caisse.entity';
 import { Portefeuille } from './entities/portefeuille.entity';
@@ -41,17 +41,57 @@ export class CreditService {
     }
   }
 
-  async list(userId: string): Promise<Credit[]> {
-    const isAdmin = await this.authz.isAdmin(userId);
-    if (isAdmin) {
-      return this.creditRepo.find({ order: { createdAt: 'DESC' } });
+  /**
+   * Le crédit DÉCAISSE réellement de l'argent depuis la source : l'appelant doit
+   * avoir cette caisse / ce portefeuille dans son périmètre (comme recharge,
+   * encaissement et transfert). Les admins passent (périmètre null).
+   */
+  private async assertSourceInPerimeter(
+    userId: string,
+    sourceType: 'CAISSE' | 'PORTEFEUILLE',
+    sourceId: string,
+  ): Promise<void> {
+    if (sourceType === 'CAISSE') {
+      await this.authz.assertCaisseInPerimeter(userId, sourceId);
+    } else {
+      await this.authz.assertPortefeuilleInPerimeter(userId, sourceId);
     }
-    const dir = await this.directionOf(userId);
-    if (!dir) return [];
-    const employes = await this.employeRepo.find({ where: { directionId: dir as any } });
-    const ids = employes.map((e) => e.id);
-    if (ids.length === 0) return [];
-    return this.creditRepo.find({ where: { employeId: In(ids) as any }, order: { createdAt: 'DESC' } });
+  }
+
+  /** Whitelist des colonnes triables côté BD (défaut : created_at DESC). */
+  private static readonly CREDIT_SORT_MAP: Record<string, string> = {
+    dateDebut: 'c.date_debut',
+    montant: 'c.montant',
+    statut: 'c.statut',
+    createdAt: 'c.created_at',
+  };
+
+  async list(
+    userId: string,
+    opts: { dateFrom?: string; dateTo?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+  ): Promise<Credit[]> {
+    const qb = this.creditRepo.createQueryBuilder('c');
+
+    // Cloisonnement : admin = tous ; non-admin = crédits des employés de SA direction.
+    if (!(await this.authz.isAdmin(userId))) {
+      const dir = await this.directionOf(userId);
+      if (!dir) return [];
+      const employes = await this.employeRepo.find({ where: { directionId: dir as any } });
+      const ids = employes.map((e) => e.id);
+      if (ids.length === 0) return [];
+      qb.andWhere('c.employe_id IN (:...ids)', { ids });
+    }
+
+    // Filtre par date (sur la date de début du crédit ; date_debut est de type DATE).
+    if (opts.dateFrom) qb.andWhere('c.date_debut >= :df', { df: opts.dateFrom });
+    if (opts.dateTo) qb.andWhere('c.date_debut <= :dt', { dt: opts.dateTo });
+
+    const column = CreditService.CREDIT_SORT_MAP[opts.sortBy ?? ''];
+    const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
+    if (column) qb.orderBy(column, direction);
+    else qb.orderBy('c.created_at', 'DESC');
+
+    return qb.getMany();
   }
 
   async findOne(id: string): Promise<Credit> {
@@ -60,14 +100,14 @@ export class CreditService {
     return c;
   }
 
-  private async resolveSource(
+  /** Valide l'existence de la source et renvoie sa devise (sans exiger l'ouverture). */
+  private async resolveSourceDevise(
     sourceType: 'CAISSE' | 'PORTEFEUILLE',
     sourceId: string,
   ): Promise<{ deviseId: string }> {
     if (sourceType === 'CAISSE') {
       const caisse = await this.dataSource.getRepository(Caisse).findOne({ where: { id: sourceId } });
       if (!caisse) throw new NotFoundException(`Caisse ${sourceId} introuvable`);
-      if (caisse.statut !== 'OUVERTE') throw new BadRequestException(`La caisse ${caisse.code} est fermée`);
       return { deviseId: String(caisse.deviseId) };
     }
     const ptf = await this.dataSource.getRepository(Portefeuille).findOne({ where: { id: sourceId } });
@@ -75,10 +115,31 @@ export class CreditService {
     return { deviseId: String(ptf.deviseId) };
   }
 
+  /** Au décaissement : une caisse source doit être OUVERTE (un portefeuille est toujours utilisable). */
+  private async assertSourceOuverte(sourceType: 'CAISSE' | 'PORTEFEUILLE', sourceId: string): Promise<void> {
+    if (sourceType !== 'CAISSE') return;
+    const caisse = await this.dataSource.getRepository(Caisse).findOne({ where: { id: sourceId } });
+    if (!caisse) throw new NotFoundException(`Caisse ${sourceId} introuvable`);
+    if (caisse.statut !== 'OUVERTE') throw new BadRequestException(`La caisse ${caisse.code} est fermée`);
+  }
+
+  /** Refuse une nouvelle demande si l'employé a déjà une demande/crédit ACTIF. */
+  private async assertAucunCreditActif(employeId: string): Promise<void> {
+    const actif = await this.creditRepo
+      .createQueryBuilder('c')
+      .where('c.employe_id = :eid', { eid: employeId })
+      .andWhere("c.statut IN ('EN_ATTENTE', 'APPROUVEE', 'EN_COURS')")
+      .getOne();
+    if (actif) {
+      throw new ConflictException(
+        "Cet employé a déjà une demande ou un crédit actif — traitez-le (ou soldez-le) d'abord.",
+      );
+    }
+  }
+
   /**
-   * Accorde un crédit et décaisse réellement l'argent depuis la source.
-   * Partie double : DÉBIT source (caisse/portefeuille ↓) / CRÉDIT créance employé.
-   * Blocage d'un 2e crédit EN_COURS garanti par l'index unique filtré.
+   * Crée une DEMANDE de crédit (statut EN_ATTENTE). Aucun décaissement ici :
+   * l'argent ne sort qu'à l'étape « traiter » (caissier), après approbation DAF.
    */
   async create(dto: CreateCreditDto, userId: string): Promise<Credit> {
     const employe = await this.employeRepo.findOne({ where: { id: dto.employeId } });
@@ -86,117 +147,149 @@ export class CreditService {
     await this.assertMemeDirection(userId, employe);
 
     if (Number(dto.montant) <= 0) throw new BadRequestException('Le montant doit être positif.');
+    await this.assertAucunCreditActif(dto.employeId);
 
-    const dejaEnCours = await this.creditRepo.findOne({
-      where: { employeId: dto.employeId, statut: 'EN_COURS' },
-    });
-    if (dejaEnCours) {
-      throw new ConflictException('Cet employé a déjà un crédit en cours — soldez-le d\'abord.');
-    }
-
-    const { deviseId } = await this.resolveSource(dto.sourceType, dto.sourceId);
+    const { deviseId } = await this.resolveSourceDevise(dto.sourceType, dto.sourceId);
 
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const credit = manager.getRepository(Credit).create({
-          employeId: dto.employeId,
-          montant: dto.montant,
-          nbMois: dto.nbMois,
-          sourceType: dto.sourceType,
-          sourceId: dto.sourceId,
-          deviseId,
-          statut: 'EN_COURS',
-          dateDebut: new Date().toISOString().slice(0, 10),
-          commentaire: dto.commentaire ?? null,
-          createdById: userId as any,
-        });
-        const saved = await manager.getRepository(Credit).save(credit);
-
-        const op = await this.ledger.createOperation(
-          {
-            typeOperation: 'CREDIT',
-            caisseId: dto.sourceType === 'CAISSE' ? dto.sourceId : undefined,
-            portefeuilleId: dto.sourceType === 'PORTEFEUILLE' ? dto.sourceId : undefined,
-            montant: dto.montant,
-            deviseId,
-            userId,
-            reference: `Crédit employé ${employe.matricule}`,
-          },
-          manager,
-        );
-
-        // DÉBIT source (l'argent sort) / CRÉDIT créance employé.
-        const sourceAcc = { compteId: dto.sourceId, typeCompte: dto.sourceType, deviseId };
-        const creanceAcc = { compteId: dto.employeId, typeCompte: 'CREDIT_EMPLOYE' as const, deviseId };
-        await this.ledger.createPairedEcritures(sourceAcc, creanceAcc, dto.montant, op.transactionUuid, manager);
-
-        saved.transactionUuid = op.transactionUuid;
-        return manager.getRepository(Credit).save(saved);
+      const credit = this.creditRepo.create({
+        employeId: dto.employeId,
+        montant: dto.montant,
+        nbMois: dto.nbMois,
+        sourceType: dto.sourceType,
+        sourceId: dto.sourceId,
+        deviseId,
+        statut: 'EN_ATTENTE',
+        // date_debut définitive fixée au décaissement ; on met la date de demande en attendant.
+        dateDebut: new Date().toISOString().slice(0, 10),
+        commentaire: dto.commentaire ?? null,
+        createdById: userId as any,
       });
+      return await this.creditRepo.save(credit);
     } catch (err: any) {
       const num = err?.number ?? err?.driverError?.number;
       if (num === 2601 || num === 2627) {
-        throw new ConflictException('Cet employé a déjà un crédit en cours — soldez-le d\'abord.');
+        throw new ConflictException("Cet employé a déjà une demande ou un crédit actif.");
       }
       throw err;
     }
   }
 
   /**
-   * Modifie un crédit EN_COURS. Le nombre de mois est libre. Si le montant change,
-   * une écriture d'ajustement décaisse (ou reprend) la différence sur la source.
+   * Modifie une DEMANDE tant qu'elle est EN_ATTENTE (par le demandeur). Aucun impact
+   * financier (rien n'est encore décaissé). Figée dès l'approbation.
    */
   async update(id: string, dto: UpdateCreditDto, userId: string): Promise<Credit> {
     const credit = await this.findOne(id);
-    const employe = await this.employeRepo.findOne({ where: { id: credit.employeId } });
-    if (employe) await this.assertMemeDirection(userId, employe);
-    if (credit.statut !== 'EN_COURS') {
-      throw new BadRequestException('Un crédit soldé n\'est plus modifiable.');
+    if (credit.statut !== 'EN_ATTENTE') {
+      throw new BadRequestException('Seule une demande en attente est modifiable.');
+    }
+    if (!(await this.authz.isAdmin(userId)) && String(credit.createdById) !== String(userId)) {
+      throw new ForbiddenException('Seul le demandeur peut modifier sa demande.');
     }
 
+    if (dto.montant !== undefined) {
+      if (Number(dto.montant) <= 0) throw new BadRequestException('Le montant doit être positif.');
+      credit.montant = dto.montant;
+    }
     if (dto.nbMois !== undefined) credit.nbMois = dto.nbMois;
     if (dto.commentaire !== undefined) credit.commentaire = dto.commentaire || null;
-
-    if (dto.montant !== undefined && Number(dto.montant) !== Number(credit.montant)) {
-      if (Number(dto.montant) <= 0) throw new BadRequestException('Le montant doit être positif.');
-      const delta = Number(dto.montant) - Number(credit.montant);
-      const abs = Math.abs(delta).toFixed(4);
-      return this.dataSource.transaction(async (manager) => {
-        const op = await this.ledger.createOperation(
-          {
-            typeOperation: 'CREDIT',
-            caisseId: credit.sourceType === 'CAISSE' ? credit.sourceId : undefined,
-            portefeuilleId: credit.sourceType === 'PORTEFEUILLE' ? credit.sourceId : undefined,
-            montant: abs,
-            deviseId: credit.deviseId,
-            userId,
-            reference: `Ajustement crédit #${credit.id}`,
-          },
-          manager,
-        );
-        const sourceAcc = { compteId: credit.sourceId, typeCompte: credit.sourceType, deviseId: credit.deviseId };
-        const creanceAcc = { compteId: credit.employeId, typeCompte: 'CREDIT_EMPLOYE' as const, deviseId: credit.deviseId };
-        // delta > 0 : on décaisse plus (débit source). delta < 0 : on reprend (crédit source).
-        if (delta > 0) {
-          await this.ledger.createPairedEcritures(sourceAcc, creanceAcc, abs, op.transactionUuid, manager);
-        } else {
-          await this.ledger.createPairedEcritures(creanceAcc, sourceAcc, abs, op.transactionUuid, manager);
-        }
-        credit.montant = dto.montant as string;
-        credit.updatedById = userId as any;
-        return manager.getRepository(Credit).save(credit);
-      });
-    }
-
     credit.updatedById = userId as any;
     return this.creditRepo.save(credit);
   }
 
-  /** Solde (clôture) un crédit : libère l'employé pour un nouveau crédit. */
+  /** DAF approuve une demande (EN_ATTENTE → APPROUVEE). Pas d'auto-approbation. */
+  async approuver(id: string, userId: string): Promise<Credit> {
+    const credit = await this.findOne(id);
+    if (credit.statut !== 'EN_ATTENTE') {
+      throw new BadRequestException('Seule une demande en attente peut être approuvée.');
+    }
+    if (String(credit.createdById) === String(userId)) {
+      throw new ForbiddenException('Vous ne pouvez pas approuver votre propre demande.');
+    }
+    credit.statut = 'APPROUVEE';
+    credit.validateurId = userId as any;
+    credit.dateValidation = new Date();
+    credit.updatedById = userId as any;
+    return this.creditRepo.save(credit);
+  }
+
+  /** DAF rejette une demande (EN_ATTENTE → REJETEE) avec motif. */
+  async rejeter(id: string, userId: string, commentaire?: string): Promise<Credit> {
+    const credit = await this.findOne(id);
+    if (credit.statut !== 'EN_ATTENTE') {
+      throw new BadRequestException('Seule une demande en attente peut être rejetée.');
+    }
+    credit.statut = 'REJETEE';
+    credit.validateurId = userId as any;
+    credit.dateValidation = new Date();
+    credit.commentaireValidation = commentaire ?? null;
+    credit.updatedById = userId as any;
+    return this.creditRepo.save(credit);
+  }
+
+  /** Le demandeur annule sa propre demande (EN_ATTENTE → ANNULEE). */
+  async annuler(id: string, userId: string): Promise<Credit> {
+    const credit = await this.findOne(id);
+    if (credit.statut !== 'EN_ATTENTE') {
+      throw new BadRequestException('Seule une demande en attente peut être annulée.');
+    }
+    if (!(await this.authz.isAdmin(userId)) && String(credit.createdById) !== String(userId)) {
+      throw new ForbiddenException('Seul le demandeur peut annuler sa demande.');
+    }
+    credit.statut = 'ANNULEE';
+    credit.updatedById = userId as any;
+    return this.creditRepo.save(credit);
+  }
+
+  /**
+   * Le CAISSIER décaisse un crédit approuvé (APPROUVEE → EN_COURS) : c'est ICI que
+   * l'argent sort réellement. Partie double DÉBIT source / CRÉDIT créance employé.
+   */
+  async traiter(id: string, userId: string): Promise<Credit> {
+    const credit = await this.findOne(id);
+    if (credit.statut !== 'APPROUVEE') {
+      throw new BadRequestException('Seul un crédit approuvé peut être décaissé.');
+    }
+    await this.assertSourceInPerimeter(userId, credit.sourceType, credit.sourceId);
+    await this.assertSourceOuverte(credit.sourceType, credit.sourceId);
+    const employe = await this.employeRepo.findOne({ where: { id: credit.employeId } });
+
+    return this.dataSource.transaction(async (manager) => {
+      const op = await this.ledger.createOperation(
+        {
+          typeOperation: 'CREDIT',
+          caisseId: credit.sourceType === 'CAISSE' ? credit.sourceId : undefined,
+          portefeuilleId: credit.sourceType === 'PORTEFEUILLE' ? credit.sourceId : undefined,
+          montant: credit.montant,
+          deviseId: credit.deviseId,
+          userId,
+          reference: `Crédit employé ${employe?.matricule ?? credit.employeId}`,
+        },
+        manager,
+      );
+
+      // DÉBIT source (l'argent sort) / CRÉDIT créance employé.
+      const sourceAcc = { compteId: credit.sourceId, typeCompte: credit.sourceType, deviseId: credit.deviseId };
+      const creanceAcc = { compteId: credit.employeId, typeCompte: 'CREDIT_EMPLOYE' as const, deviseId: credit.deviseId };
+      await this.ledger.createPairedEcritures(sourceAcc, creanceAcc, credit.montant, op.transactionUuid, manager);
+
+      credit.statut = 'EN_COURS';
+      credit.decaisseParId = userId as any;
+      credit.dateDecaissement = new Date();
+      credit.dateDebut = new Date().toISOString().slice(0, 10);
+      credit.transactionUuid = op.transactionUuid;
+      credit.updatedById = userId as any;
+      return manager.getRepository(Credit).save(credit);
+    });
+  }
+
+  /** Solde (clôture) un crédit EN_COURS : libère l'employé pour un nouveau crédit. */
   async solder(id: string, userId: string): Promise<Credit> {
     const credit = await this.findOne(id);
-    const employe = await this.employeRepo.findOne({ where: { id: credit.employeId } });
-    if (employe) await this.assertMemeDirection(userId, employe);
+    if (credit.statut !== 'EN_COURS') {
+      throw new BadRequestException('Seul un crédit en cours peut être soldé.');
+    }
     credit.statut = 'SOLDE';
     credit.updatedById = userId as any;
     return this.creditRepo.save(credit);

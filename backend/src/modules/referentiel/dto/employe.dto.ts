@@ -1,13 +1,25 @@
 import {
   IsBoolean,
   IsDateString,
+  IsIn,
+  IsInt,
   IsNotEmpty,
   IsNumberString,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
+/** Modes de détermination du montant d'un bénéfice. */
+export const MODES_MONTANT_BENEFICE = ['SAISI', 'FIXE', 'POURCENTAGE_SALAIRE'] as const;
+export type ModeMontantBeneficeDto = (typeof MODES_MONTANT_BENEFICE)[number];
+
+/** Modes de règlement d'un employé. */
+export const MODES_REGLEMENT = ['ESPECES', 'VIREMENT'] as const;
+export type ModeReglementDto = (typeof MODES_REGLEMENT)[number];
 
 export class CreateEmployeDto {
   @ApiProperty()
@@ -37,6 +49,28 @@ export class CreateEmployeDto {
   @IsOptional()
   @IsNumberString()
   salaire?: string;
+
+  @ApiProperty({ required: false, enum: MODES_REGLEMENT })
+  @IsOptional()
+  @IsIn(MODES_REGLEMENT)
+  modeReglement?: ModeReglementDto;
+
+  @ApiProperty({ required: false, description: 'Banque (mode VIREMENT)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  banque?: string | null;
+
+  @ApiProperty({ required: false, description: 'RIB / n° de compte (mode VIREMENT)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rib?: string | null;
+
+  @ApiProperty({ required: false, description: 'Portefeuille source par défaut' })
+  @IsOptional()
+  @IsNumberString()
+  portefeuilleSourceId?: string | null;
 }
 
 export class UpdateEmployeDto {
@@ -62,13 +96,78 @@ export class UpdateEmployeDto {
   @IsNumberString()
   salaire?: string;
 
+  @ApiProperty({ required: false, enum: MODES_REGLEMENT })
+  @IsOptional()
+  @IsIn(MODES_REGLEMENT)
+  modeReglement?: ModeReglementDto;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  banque?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  rib?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumberString()
+  portefeuilleSourceId?: string | null;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   estActif?: boolean;
 }
 
-export class CreateTypeBeneficeDto {
+/**
+ * Réglages du « mode d'attribution » d'un type de bénéfice. Mutualisés entre
+ * création et mise à jour (tous optionnels côté update).
+ */
+export class TypeBeneficeConfigDto {
+  @ApiProperty({ required: false, enum: MODES_MONTANT_BENEFICE })
+  @IsOptional()
+  @IsIn(MODES_MONTANT_BENEFICE)
+  modeMontant?: ModeMontantBeneficeDto;
+
+  @ApiProperty({ required: false, description: 'Montant imposé (mode FIXE)' })
+  @IsOptional()
+  @IsNumberString()
+  montantFixe?: string | null;
+
+  @ApiProperty({ required: false, description: '% du salaire (mode POURCENTAGE_SALAIRE)' })
+  @IsOptional()
+  @IsNumberString()
+  pourcentageSalaire?: string | null;
+
+  @ApiProperty({ required: false, description: 'Plafond en % du salaire' })
+  @IsOptional()
+  @IsNumberString()
+  plafondPourcentageSalaire?: string | null;
+
+  @ApiProperty({ required: false, description: 'Jour minimum du mois (1–31)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  jourMinMois?: number | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  requiertPeriode?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  recurrent?: boolean;
+}
+
+export class CreateTypeBeneficeDto extends TypeBeneficeConfigDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
@@ -82,7 +181,7 @@ export class CreateTypeBeneficeDto {
   libelle!: string;
 }
 
-export class UpdateTypeBeneficeDto {
+export class UpdateTypeBeneficeDto extends TypeBeneficeConfigDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -101,20 +200,22 @@ export class CreateEmployeBeneficeDto {
   @IsNumberString()
   typeBeneficeId!: string;
 
-  @ApiProperty({ description: 'Montant — DECIMAL(19,4) en string' })
-  @IsNotEmpty()
+  // Montant et dates sont validés/complétés côté service SELON le mode
+  // d'attribution du type choisi (montant fixe/calculé, période requise ou non).
+  @ApiProperty({ required: false, description: 'Montant — requis seulement si le type est en mode SAISI' })
+  @IsOptional()
   @IsNumberString()
-  montant!: string;
+  montant?: string;
 
-  @ApiProperty({ description: 'Début de validité (AAAA-MM-JJ)' })
-  @IsNotEmpty()
+  @ApiProperty({ required: false, description: 'Début de validité (AAAA-MM-JJ) — requis si le type a une période' })
+  @IsOptional()
   @IsDateString()
-  dateDebut!: string;
+  dateDebut?: string;
 
-  @ApiProperty({ description: 'Fin de validité (AAAA-MM-JJ)' })
-  @IsNotEmpty()
+  @ApiProperty({ required: false, description: 'Fin de validité (AAAA-MM-JJ) — requis si le type a une période' })
+  @IsOptional()
   @IsDateString()
-  dateFin!: string;
+  dateFin?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

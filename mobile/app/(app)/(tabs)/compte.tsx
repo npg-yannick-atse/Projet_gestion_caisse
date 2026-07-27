@@ -2,6 +2,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
+import { getExpoPushToken } from '@/lib/push';
+import { unregisterPushToken } from '@/api/push';
 
 export default function CompteScreen() {
   const user = useAuthStore((s) => s.user);
@@ -9,7 +11,15 @@ export default function CompteScreen() {
   const queryClient = useQueryClient();
 
   async function onSignOut() {
-    // On vide d'abord le token : la garde d'auth de (app)/_layout redirige alors
+    // Détacher le jeton push AVANT de vider la session (l'appel exige le bearer).
+    // Best-effort : ne bloque jamais la déconnexion.
+    try {
+      const token = await getExpoPushToken();
+      if (token) await unregisterPushToken(token);
+    } catch {
+      /* ignore */
+    }
+    // On vide ensuite le token : la garde d'auth de (app)/_layout redirige alors
     // automatiquement vers /login. Pas de router.replace ici, sinon la navigation
     // manuelle entre en course avec la garde et la déconnexion « ne s'applique pas ».
     await signOut();

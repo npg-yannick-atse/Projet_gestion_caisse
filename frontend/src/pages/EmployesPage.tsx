@@ -4,16 +4,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   AlertTriangle,
+  Banknote,
   CheckCircle2,
+  CreditCard,
   Download,
   FileDown,
   Gift,
+  Landmark,
   Loader2,
   Pencil,
   Plus,
   Search,
   Trash2,
   Upload,
+  Wallet,
   X,
   XCircle,
 } from 'lucide-react';
@@ -32,9 +36,11 @@ import {
 } from '@/api/employes';
 import type { ApercuImport, ApercuLigne } from '@/api/employes';
 import { useTypesBenefice } from '@/api/employes';
+import { useCredits } from '@/api/credits';
 import { useDirections } from '@/api/directions';
-import { apiErrorMessage, formatMontant } from '@/lib/utils';
-import type { Employe, EmployeBenefice } from '@/types/api';
+import { usePortefeuilles } from '@/api/financierRef';
+import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
+import type { CreateEmployeBeneficePayload, Employe, EmployeBenefice, TypeBenefice } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,6 +65,10 @@ const schema = z.object({
   prenoms: z.string().trim().min(1, 'Requis'),
   directionId: z.string().optional(),
   salaire: z.string().optional(),
+  modeReglement: z.enum(['ESPECES', 'VIREMENT']),
+  banque: z.string().optional(),
+  rib: z.string().optional(),
+  portefeuilleSourceId: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -67,10 +77,12 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
   const create = useCreateEmploye();
   const update = useUpdateEmploye();
   const { data: directions } = useDirections();
+  const { data: portefeuilles } = usePortefeuilles();
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -81,9 +93,24 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
           prenoms: employe.prenoms,
           directionId: employe.directionId ?? '',
           salaire: employe.salaire ?? '',
+          modeReglement: employe.modeReglement ?? 'ESPECES',
+          banque: employe.banque ?? '',
+          rib: employe.rib ?? '',
+          portefeuilleSourceId: employe.portefeuilleSourceId ?? '',
         }
-      : undefined,
+      : {
+          matricule: '',
+          nom: '',
+          prenoms: '',
+          directionId: '',
+          salaire: '',
+          modeReglement: 'ESPECES',
+          banque: '',
+          rib: '',
+          portefeuilleSourceId: '',
+        },
   });
+  const modeReglement = watch('modeReglement');
 
   const pending = create.isPending || update.isPending;
   const mutError = create.error || update.error;
@@ -94,6 +121,14 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
       reset();
       onDone();
     };
+    // Champs de paiement communs aux deux modes. En espèces, on neutralise
+    // banque/RIB pour ne pas garder de coordonnées orphelines.
+    const paiement = {
+      modeReglement: values.modeReglement,
+      banque: values.modeReglement === 'VIREMENT' ? values.banque || null : null,
+      rib: values.modeReglement === 'VIREMENT' ? values.rib || null : null,
+      portefeuilleSourceId: values.portefeuilleSourceId || null,
+    };
     if (isEdit) {
       update.mutate(
         {
@@ -103,6 +138,7 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
             prenoms: values.prenoms,
             directionId: values.directionId || undefined,
             salaire: values.salaire || undefined,
+            ...paiement,
           },
         },
         { onSuccess: done },
@@ -115,6 +151,7 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
           prenoms: values.prenoms,
           directionId: values.directionId || undefined,
           salaire: values.salaire || undefined,
+          ...paiement,
         },
         { onSuccess: done },
       );
@@ -160,6 +197,54 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
           <Input id="salaire" type="number" min="0" step="1" placeholder="Ex : 350000" {...register('salaire')} />
           <p className="text-[10px] text-[#94A3B8]">Visible selon habilitation.</p>
         </div>
+
+        {/* ------------------------------------------------------- Paiement -- */}
+        <div className="sm:col-span-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#FBFCFE] p-3.5">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">Paiement</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="modeReglement">Mode de règlement</Label>
+              <select
+                id="modeReglement"
+                className="flex h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+                {...register('modeReglement')}
+              >
+                <option value="ESPECES">Espèces</option>
+                <option value="VIREMENT">Virement bancaire</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="portefeuilleSourceId">Portefeuille source par défaut</Label>
+              <select
+                id="portefeuilleSourceId"
+                className="flex h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+                {...register('portefeuilleSourceId')}
+              >
+                <option value="">— Aucun —</option>
+                {(portefeuilles ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.libelle}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-[#94A3B8]">Enveloppe d’où sortent ses avances / crédits.</p>
+            </div>
+
+            {modeReglement === 'VIREMENT' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="banque">Banque</Label>
+                  <Input id="banque" placeholder="Ex : SGBCI" {...register('banque')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rib">RIB / n° de compte</Label>
+                  <Input id="rib" placeholder="Ex : CI05 5…" {...register('rib')} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {pending ? 'Enregistrement…' : isEdit ? 'Enregistrer' : 'Créer'}
@@ -180,16 +265,23 @@ function EmployeForm({ employe, onDone }: { employe?: Employe; onDone: () => voi
 
 /* -------------------------------------------- Modale Bénéfices d'un employé -- */
 
-const beneficeSchema = z
-  .object({
-    typeBeneficeId: z.string().trim().min(1, 'Requis'),
-    montant: z.string().trim().min(1, 'Requis'),
-    dateDebut: z.string().trim().min(1, 'Requis'),
-    dateFin: z.string().trim().min(1, 'Requis'),
-    commentaire: z.string().optional(),
-  })
-  .refine((v) => v.dateFin >= v.dateDebut, { message: 'La fin doit suivre le début', path: ['dateFin'] });
+// Le montant et les dates sont conditionnels au type choisi (validés à la volée
+// dans onSubmit + côté serveur), d'où un schéma volontairement permissif.
+const beneficeSchema = z.object({
+  typeBeneficeId: z.string().trim().min(1, 'Requis'),
+  montant: z.string().trim().optional(),
+  dateDebut: z.string().trim().optional(),
+  dateFin: z.string().trim().optional(),
+  commentaire: z.string().optional(),
+});
 type BeneficeFormValues = z.infer<typeof beneficeSchema>;
+
+/** Décrit en une ligne comment ce type s'attribue (aide sous le sélecteur). */
+function describeMode(t: TypeBenefice): string {
+  if (t.modeMontant === 'FIXE') return `Montant fixe : ${formatMontant(t.montantFixe ?? '0')}`;
+  if (t.modeMontant === 'POURCENTAGE_SALAIRE') return `Montant = ${t.pourcentageSalaire ?? '?'} % du salaire`;
+  return 'Montant saisi librement';
+}
 
 function BeneficesModal({ employe, onClose }: { employe: Employe; onClose: () => void }) {
   const { data: benefices, isLoading } = useBenefices(employe.id);
@@ -201,22 +293,69 @@ function BeneficesModal({ employe, onClose }: { employe: Employe; onClose: () =>
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<BeneficeFormValues>({ resolver: zodResolver(beneficeSchema) });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const typeLabel = (id: string) => types?.find((t) => t.id === id)?.libelle ?? id;
 
+  // Type sélectionné → pilote l'affichage (montant éditable ou calculé, période…).
+  const selectedType = types?.find((t) => t.id === watch('typeBeneficeId')) ?? null;
+  const salaireNum = employe.salaire != null ? Number(employe.salaire) : null;
+  const montantSaisi = !selectedType || selectedType.modeMontant === 'SAISI';
+  const afficherPeriode = !selectedType || selectedType.requiertPeriode;
+
+  // Aperçu du montant imposé/calculé (modes FIXE / % du salaire).
+  const montantAuto =
+    selectedType?.modeMontant === 'FIXE'
+      ? (selectedType.montantFixe ?? null)
+      : selectedType?.modeMontant === 'POURCENTAGE_SALAIRE' && salaireNum != null && selectedType.pourcentageSalaire != null
+        ? ((salaireNum * Number(selectedType.pourcentageSalaire)) / 100).toFixed(0)
+        : null;
+
   const onSubmit = handleSubmit((values) => {
-    create.mutate(
-      {
-        typeBeneficeId: values.typeBeneficeId,
-        montant: values.montant,
-        dateDebut: values.dateDebut,
-        dateFin: values.dateFin,
-        commentaire: values.commentaire || undefined,
+    setFormError(null);
+    if (!selectedType) {
+      setFormError('Choisissez un type de bénéfice.');
+      return;
+    }
+    if (selectedType.modeMontant === 'SAISI' && (!values.montant || Number(values.montant) <= 0)) {
+      setFormError('Le montant est requis pour ce type.');
+      return;
+    }
+    if (selectedType.modeMontant === 'POURCENTAGE_SALAIRE' && salaireNum == null) {
+      setFormError("Le salaire de l'employé n'est pas connu : montant impossible à calculer.");
+      return;
+    }
+    if (selectedType.requiertPeriode) {
+      if (!values.dateDebut || !values.dateFin) {
+        setFormError('Les dates de début et de fin sont requises.');
+        return;
+      }
+      if (values.dateFin < values.dateDebut) {
+        setFormError('La date de fin doit suivre la date de début.');
+        return;
+      }
+    }
+
+    // Construit la charge utile : montant seulement en mode SAISI (sinon le
+    // serveur l'impose/calcule), dates seulement si le type a une période.
+    const payload: CreateEmployeBeneficePayload = {
+      typeBeneficeId: values.typeBeneficeId,
+      commentaire: values.commentaire || undefined,
+    };
+    if (selectedType.modeMontant === 'SAISI') payload.montant = values.montant;
+    if (selectedType.requiertPeriode) {
+      payload.dateDebut = values.dateDebut;
+      payload.dateFin = values.dateFin;
+    }
+    create.mutate(payload, {
+      onSuccess: () => {
+        reset({ typeBeneficeId: '', montant: '', dateDebut: '', dateFin: '', commentaire: '' });
+        setFormError(null);
       },
-      { onSuccess: () => reset({ typeBeneficeId: '', montant: '', dateDebut: '', dateFin: '', commentaire: '' }) },
-    );
+    });
   });
 
   const toggleValide = (b: EmployeBenefice) => {
@@ -262,22 +401,51 @@ function BeneficesModal({ employe, onClose }: { employe: Employe; onClose: () =>
                 ))}
               </select>
               {errors.typeBeneficeId && <p className="text-sm text-destructive">{errors.typeBeneficeId.message}</p>}
+              {selectedType && (
+                <p className="text-[11px] text-[#64748B]">
+                  {describeMode(selectedType)}
+                  {selectedType.plafondPourcentageSalaire ? ` · plafond ${selectedType.plafondPourcentageSalaire} % du salaire` : ''}
+                  {selectedType.jourMinMois ? ` · dès le ${selectedType.jourMinMois} du mois` : ''}
+                </p>
+              )}
             </div>
+
+            {/* Montant : éditable (SAISI) ou imposé/calculé (FIXE / % du salaire) */}
             <div className="space-y-1.5">
               <Label htmlFor="montant">Montant</Label>
-              <Input id="montant" type="number" min="0" step="1" placeholder="Ex : 500000" {...register('montant')} />
-              {errors.montant && <p className="text-sm text-destructive">{errors.montant.message}</p>}
+              {montantSaisi ? (
+                <Input id="montant" type="number" min="0" step="1" placeholder="Ex : 500000" {...register('montant')} />
+              ) : (
+                <div className="flex h-9 items-center rounded-[9px] border border-dashed border-[rgba(15,76,129,0.2)] bg-[#F1F5F9] px-3 text-xs text-[#334155]">
+                  {montantAuto != null ? (
+                    <span className="font-semibold">{formatMontant(montantAuto)}</span>
+                  ) : selectedType?.modeMontant === 'POURCENTAGE_SALAIRE' ? (
+                    <span className="text-[#B45309]">Salaire inconnu — impossible de calculer</span>
+                  ) : (
+                    <span className="text-[#94A3B8]">Déterminé automatiquement</span>
+                  )}
+                </div>
+              )}
+              {!montantSaisi && (
+                <p className="text-[11px] text-[#94A3B8]">
+                  {selectedType?.modeMontant === 'FIXE' ? 'Montant imposé par le type.' : 'Calculé à partir du salaire.'}
+                </p>
+              )}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dateDebut">Début de validité</Label>
-              <Input id="dateDebut" type="date" {...register('dateDebut')} />
-              {errors.dateDebut && <p className="text-sm text-destructive">{errors.dateDebut.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="dateFin">Fin de validité</Label>
-              <Input id="dateFin" type="date" {...register('dateFin')} />
-              {errors.dateFin && <p className="text-sm text-destructive">{errors.dateFin.message}</p>}
-            </div>
+
+            {/* Période : seulement si le type en requiert une */}
+            {afficherPeriode && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dateDebut">Début de validité</Label>
+                  <Input id="dateDebut" type="date" {...register('dateDebut')} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dateFin">Fin de validité</Label>
+                  <Input id="dateFin" type="date" {...register('dateFin')} />
+                </div>
+              </>
+            )}
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="commentaire">Commentaire (optionnel)</Label>
               <Input id="commentaire" {...register('commentaire')} />
@@ -287,8 +455,10 @@ function BeneficesModal({ employe, onClose }: { employe: Employe; onClose: () =>
                 <Plus className="mr-1 h-4 w-4" />
                 {create.isPending ? 'Ajout…' : 'Accorder le bénéfice'}
               </Button>
-              {create.isError && (
-                <p className="text-sm text-destructive">{apiErrorMessage(create.error, 'Ajout impossible')}</p>
+              {(formError || create.isError) && (
+                <p className="text-sm text-destructive">
+                  {formError ?? apiErrorMessage(create.error, 'Ajout impossible')}
+                </p>
               )}
             </div>
           </form>
@@ -350,6 +520,229 @@ function BeneficesModal({ employe, onClose }: { employe: Employe; onClose: () =>
               <p className="mt-2 text-sm text-destructive">{apiErrorMessage(update.error, 'Modification impossible')}</p>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------- Fiche employé (détail) -- */
+
+const CREDIT_STATUT_META: Record<string, { label: string; cls: string }> = {
+  EN_ATTENTE: { label: 'En attente', cls: 'bg-[#FFFBEB] text-[#B45309]' },
+  APPROUVEE: { label: 'Approuvée', cls: 'bg-[#EFF6FF] text-[#1D4ED8]' },
+  EN_COURS: { label: 'En cours', cls: 'bg-[#ECFEFF] text-[#0E7490]' },
+  SOLDE: { label: 'Soldée', cls: 'bg-[#ECFDF5] text-[#047857]' },
+  REJETEE: { label: 'Rejetée', cls: 'bg-[#FEF2F2] text-[#B42318]' },
+  ANNULEE: { label: 'Annulée', cls: 'bg-[#F1F5F9] text-[#64748B]' },
+};
+
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-[0.6px] text-[#94A3B8]">{label}</span>
+      <span className="text-xs font-medium text-[#0F172A]">{children}</span>
+    </div>
+  );
+}
+
+function EmployeDetailModal({
+  employe,
+  onClose,
+  onEdit,
+  onBenefices,
+}: {
+  employe: Employe;
+  onClose: () => void;
+  onEdit: () => void;
+  onBenefices: () => void;
+}) {
+  const { data: directions } = useDirections();
+  const { data: portefeuilles } = usePortefeuilles();
+  const { data: types } = useTypesBenefice();
+  const { data: benefices, isLoading: benLoading } = useBenefices(employe.id);
+  const { data: allCredits, isLoading: credLoading } = useCredits();
+
+  const direction = directions?.find((d) => d.id === employe.directionId);
+  const portefeuille = portefeuilles?.find((p) => p.id === employe.portefeuilleSourceId);
+  const typeLabel = (id: string) => types?.find((t) => t.id === id)?.libelle ?? id;
+  const credits = (allCredits ?? []).filter((c) => c.employeId === employe.id);
+  const salaireInconnu = employe.salaire === null || employe.salaire === undefined;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* En-tête */}
+        <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-5 py-3">
+          <div className="min-w-0">
+            <div className="font-display text-sm font-semibold text-[#0F172A]">
+              {employe.nom} {employe.prenoms}
+            </div>
+            <div className="text-[11px] text-[#64748B]">
+              {employe.matricule}
+              {!employe.estActif && ' · inactif'}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onBenefices}
+              className="flex items-center gap-1.5 rounded-[8px] border border-[rgba(15,76,129,0.15)] px-2.5 py-1.5 text-[11px] font-medium text-[#0F4C81] hover:bg-[#F0FDF4]"
+            >
+              <Gift className="h-3.5 w-3.5" /> Bénéfices
+            </button>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex items-center gap-1.5 rounded-[8px] border border-[rgba(15,76,129,0.15)] px-2.5 py-1.5 text-[11px] font-medium text-[#1A6DB5] hover:bg-[#EFF6FF]"
+            >
+              <Pencil className="h-3.5 w-3.5" /> Modifier
+            </button>
+            <button
+              type="button"
+              aria-label="Fermer"
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-white hover:text-[#0F172A]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          {/* Identité + salaire */}
+          <section className="grid gap-4 rounded-[11px] border border-[rgba(15,76,129,0.1)] bg-[#FBFCFE] p-4 sm:grid-cols-3">
+            <InfoRow label="Direction">{direction ? `${direction.code} — ${direction.libelle}` : '—'}</InfoRow>
+            <InfoRow label="Salaire">
+              {salaireInconnu ? <span className="text-[#CBD5E1]">•••• (non habilité)</span> : formatMontant(employe.salaire!)}
+            </InfoRow>
+            <InfoRow label="Statut">{employe.estActif ? 'Actif' : 'Inactif'}</InfoRow>
+          </section>
+
+          {/* Paiement */}
+          <section>
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+              <Banknote className="h-3.5 w-3.5" /> Paiement
+            </div>
+            <div className="grid gap-4 rounded-[11px] border border-[rgba(15,76,129,0.1)] bg-white p-4 sm:grid-cols-3">
+              <InfoRow label="Mode de règlement">
+                <span className="inline-flex items-center gap-1.5">
+                  {employe.modeReglement === 'VIREMENT' ? (
+                    <>
+                      <CreditCard className="h-3.5 w-3.5 text-[#0E7490]" /> Virement bancaire
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="h-3.5 w-3.5 text-[#047857]" /> Espèces
+                    </>
+                  )}
+                </span>
+              </InfoRow>
+              <InfoRow label="Portefeuille source">
+                <span className="inline-flex items-center gap-1.5">
+                  <Landmark className="h-3.5 w-3.5 text-[#0F4C81]" />
+                  {portefeuille ? `${portefeuille.code} — ${portefeuille.libelle}` : '—'}
+                </span>
+              </InfoRow>
+              {employe.modeReglement === 'VIREMENT' && (
+                <>
+                  <InfoRow label="Banque">{employe.banque || '—'}</InfoRow>
+                  <InfoRow label="RIB / compte">{employe.rib || '—'}</InfoRow>
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Bénéfices */}
+          <section>
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+              <Gift className="h-3.5 w-3.5" /> Bénéfices
+            </div>
+            {benLoading ? (
+              <div className="py-4 text-sm text-[#64748B]">Chargement…</div>
+            ) : !benefices || benefices.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-[rgba(15,76,129,0.15)] py-5 text-center text-xs text-[#94A3B8]">
+                Aucun bénéfice.
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="bg-[#F8FAFC]">
+                  <tr className="text-left text-[10px] uppercase tracking-[0.6px] text-[#64748B]">
+                    <th className="px-3 py-2 font-semibold">Type</th>
+                    <th className="px-3 py-2 font-semibold">Montant</th>
+                    <th className="px-3 py-2 font-semibold">Période</th>
+                    <th className="px-3 py-2 font-semibold">État</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benefices.map((b) => (
+                    <tr key={b.id} className="border-t border-[rgba(15,76,129,0.07)]">
+                      <td className="px-3 py-2 font-medium">{typeLabel(b.typeBeneficeId)}</td>
+                      <td className="px-3 py-2 tabular-nums">{formatMontant(b.montant)}</td>
+                      <td className="px-3 py-2 text-[#64748B]">
+                        {b.dateDebut} → {b.dateFin}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                            b.estValide ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#F1F5F9] text-[#64748B]',
+                          )}
+                        >
+                          {b.estValide ? 'Valide' : 'Inactif'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* Crédits */}
+          <section>
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+              <CreditCard className="h-3.5 w-3.5" /> Crédits / avances
+            </div>
+            {credLoading ? (
+              <div className="py-4 text-sm text-[#64748B]">Chargement…</div>
+            ) : credits.length === 0 ? (
+              <div className="rounded-[10px] border border-dashed border-[rgba(15,76,129,0.15)] py-5 text-center text-xs text-[#94A3B8]">
+                Aucun crédit.
+              </div>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="bg-[#F8FAFC]">
+                  <tr className="text-left text-[10px] uppercase tracking-[0.6px] text-[#64748B]">
+                    <th className="px-3 py-2 font-semibold">Montant</th>
+                    <th className="px-3 py-2 font-semibold">Mois</th>
+                    <th className="px-3 py-2 font-semibold">Début</th>
+                    <th className="px-3 py-2 font-semibold">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {credits.map((c) => {
+                    const meta = CREDIT_STATUT_META[c.statut] ?? { label: c.statut, cls: 'bg-[#F1F5F9] text-[#64748B]' };
+                    return (
+                      <tr key={c.id} className="border-t border-[rgba(15,76,129,0.07)]">
+                        <td className="px-3 py-2 tabular-nums font-medium">{formatMontant(c.montant)}</td>
+                        <td className="px-3 py-2 text-[#64748B]">{c.nbMois}</td>
+                        <td className="px-3 py-2 text-[#64748B]">{c.dateDebut}</td>
+                        <td className="px-3 py-2">
+                          <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', meta.cls)}>
+                            {meta.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </section>
         </div>
       </div>
     </div>
@@ -422,6 +815,7 @@ export function EmployesPage() {
   const [editing, setEditing] = useState<Employe | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Employe | null>(null);
   const [beneficesFor, setBeneficesFor] = useState<Employe | null>(null);
+  const [detailFor, setDetailFor] = useState<Employe | null>(null);
 
   const directionLabel = (id?: string | null) => {
     if (!id) return '—';
@@ -777,7 +1171,12 @@ export function EmployesPage() {
                 </tr>
               )}
               {employes.map((e) => (
-                <tr key={e.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
+                <tr
+                  key={e.id}
+                  onClick={() => setDetailFor(e)}
+                  className="cursor-pointer border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]"
+                  title="Voir la fiche"
+                >
                   <td className="px-4 py-3 font-medium">{e.matricule}</td>
                   <td className="px-4 py-3">{e.nom}</td>
                   <td className="px-4 py-3">{e.prenoms}</td>
@@ -789,32 +1188,43 @@ export function EmployesPage() {
                       formatMontant(e.salaire)
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className="px-4 py-3 text-right" onClick={(ev) => ev.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
                         aria-label="Bénéfices"
-                        title="Gérer les bénéfices"
+                        title={
+                          (e.nbBenefices ?? 0) > 0
+                            ? `${e.nbBenefices} bénéfice${(e.nbBenefices ?? 0) > 1 ? 's' : ''} actif${(e.nbBenefices ?? 0) > 1 ? 's' : ''} — gérer`
+                            : 'Aucun bénéfice — en accorder'
+                        }
                         onClick={() => setBeneficesFor(e)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#F0FDF4] hover:text-[#16A34A]"
+                        className="relative inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#F0FDF4] hover:text-[#16A34A]"
                       >
-                        <Gift className="h-3.5 w-3.5" />
+                        <Gift className="h-5 w-5" />
+                        {(e.nbBenefices ?? 0) > 0 && (
+                          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#16A34A] px-1 text-[9px] font-bold leading-none text-white">
+                            {e.nbBenefices}
+                          </span>
+                        )}
                       </button>
                       <button
                         type="button"
                         aria-label="Modifier"
+                        title="Modifier l'employé"
                         onClick={() => openEdit(e)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-5 w-5" />
                       </button>
                       <button
                         type="button"
                         aria-label="Supprimer"
+                        title="Désactiver l'employé"
                         onClick={() => setPendingDelete(e)}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-5 w-5" />
                       </button>
                     </div>
                   </td>
@@ -824,6 +1234,23 @@ export function EmployesPage() {
           </table>
         )}
       </Panel>
+
+      {detailFor && (
+        <EmployeDetailModal
+          employe={detailFor}
+          onClose={() => setDetailFor(null)}
+          onEdit={() => {
+            const emp = detailFor;
+            setDetailFor(null);
+            openEdit(emp);
+          }}
+          onBenefices={() => {
+            const emp = detailFor;
+            setDetailFor(null);
+            setBeneficesFor(emp);
+          }}
+        />
+      )}
 
       {beneficesFor && <BeneficesModal employe={beneficesFor} onClose={() => setBeneficesFor(null)} />}
 

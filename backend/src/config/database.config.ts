@@ -14,6 +14,10 @@ export default registerAs(
       encrypt: process.env.DB_ENCRYPT === 'true',
       trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE !== 'false',
       enableArithAbort: true,
+      // Identité de connexion de l'app (APP_NAME côté SQL) : sert aux triggers qui
+      // n'autorisent la modification des tables de sécurité qu'à cette application.
+      // Runtime, migrations et seeds partagent cette config → tous reconnus.
+      appName: 'fdc-backend',
     },
     pool: {
       max: 20,

@@ -267,7 +267,7 @@ export function useApprouverExtension() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bons'] });
       qc.invalidateQueries({ queryKey: ['bon'] });
-      qc.invalidateQueries({ queryKey: ['portefeuille-solde'] });
+      qc.invalidateQueries({ queryKey: ['portefeuille'] });
     },
   });
 }

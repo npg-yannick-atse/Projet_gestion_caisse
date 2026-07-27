@@ -26,6 +26,9 @@ const FILTERS: { key: 'all' | BonStatut; label: string }[] = [
   { key: 'CREE', label: 'En attente' },
   { key: 'VALIDE', label: 'Validés' },
   { key: 'DECAISSE', label: 'Décaissés' },
+  { key: 'COMPTABILISE', label: 'Comptabilisés' },
+  { key: 'ANNULE', label: 'Annulés' },
+  { key: 'REFUSE', label: 'Refusés' },
 ];
 
 const actBtn =
