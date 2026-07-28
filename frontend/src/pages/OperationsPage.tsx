@@ -26,8 +26,9 @@ import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useCostCenters } from '@/api/referentiel';
 import { useUsers, useUserRoles } from '@/api/users';
+import { useEnvoyerOperationSap } from '@/api/sap';
 import { useAuthStore } from '@/stores/auth.store';
-import { cn, formatMontant } from '@/lib/utils';
+import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { Operation, RoleCode, TypeOperation } from '@/types/api';
 
 type TabKey = 'TOUTES' | TypeOperation;
@@ -42,7 +43,9 @@ interface TabDef {
 const ALL_TABS: TabDef[] = [
   { key: 'TOUTES', label: 'Toutes', icon: SlidersHorizontal },
   { key: 'RECHARGE', label: 'Recharges', icon: ArrowUpCircle, type: 'RECHARGE' },
+  { key: 'ENCAISSEMENT', label: 'Encaissements', icon: ArrowUpCircle, type: 'ENCAISSEMENT' },
   { key: 'DECAISSEMENT', label: 'Décaissements', icon: ArrowDownCircle, type: 'DECAISSEMENT' },
+  { key: 'CREDIT', label: 'Crédits', icon: ArrowDownCircle, type: 'CREDIT' },
   { key: 'TRANSFERT', label: 'Transferts', icon: ArrowLeftRight, type: 'TRANSFERT' },
   { key: 'AJUSTEMENT', label: 'Ajustements', icon: SlidersHorizontal, type: 'AJUSTEMENT' },
 ];
@@ -77,6 +80,52 @@ function isToday(iso: string): boolean {
 
 function sum(list: Operation[]): number {
   return list.reduce((acc, op) => acc + Number(op.montant || 0), 0);
+}
+
+/** Types d'opération transmis à SAP (mouvements internes exclus). */
+const SAP_ENVOYABLES: TypeOperation[] = ['ENCAISSEMENT', 'DECAISSEMENT', 'CREDIT'];
+
+/** Cellule d'envoi d'une opération vers SAP (statut + bouton, admins). */
+function OperationSapCell({ op, canSend }: { op: Operation; canSend: boolean }) {
+  const envoyer = useEnvoyerOperationSap();
+  if (op.sapPiece) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#047857]" title={`Pièce SAP ${op.sapPiece}`}>
+        ✓ {op.sapPiece}
+      </span>
+    );
+  }
+  // Mouvements internes (recharge, transfert, ajustement) : rien à envoyer.
+  if (!SAP_ENVOYABLES.includes(op.typeOperation)) {
+    return <span className="text-[11px] text-[#CBD5E1]">—</span>;
+  }
+  const res = envoyer.data;
+  return (
+    <div className="flex flex-col gap-0.5">
+      {canSend ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm('Envoyer cette opération en comptabilité SAP ?')) envoyer.mutate(op.id);
+          }}
+          disabled={envoyer.isPending}
+          className="w-fit rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2 py-0.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+        >
+          {envoyer.isPending ? 'Envoi…' : '→ SAP'}
+        </button>
+      ) : op.sapStatut === 'ERREUR' ? (
+        <span className="text-[11px] text-[#B42318]" title={op.sapMessage ?? ''}>erreur</span>
+      ) : (
+        <span className="text-[11px] text-[#94A3B8]">—</span>
+      )}
+      {envoyer.isError && <span className="text-[10px] text-[#B42318]">{apiErrorMessage(envoyer.error, 'Échec')}</span>}
+      {res && !res.ok && (
+        <span className="text-[10px] text-[#B42318]" title={res.messages.join(' | ')}>
+          refusé
+        </span>
+      )}
+    </div>
+  );
 }
 
 function OpTypeBadge({ type }: { type: TypeOperation }) {
@@ -219,8 +268,10 @@ export function OperationsPage() {
     const list = ops ?? [];
     if (isAdmin) return list;
     if (isCaissier) {
-      // Le caissier voit les mouvements de trésorerie : recharges + décaissements.
-      return list.filter((op) => op.typeOperation === 'RECHARGE' || op.typeOperation === 'DECAISSEMENT');
+      // Le caissier voit ses mouvements de trésorerie : entrées (recharge,
+      // encaissement) et sorties (décaissement, décaissement de crédit).
+      const treso: TypeOperation[] = ['RECHARGE', 'ENCAISSEMENT', 'DECAISSEMENT', 'CREDIT'];
+      return list.filter((op) => treso.includes(op.typeOperation));
     }
     if (isValidateur) {
       // Le validateur voit uniquement les décaissements (traçabilité des bons qu'il a validés).
@@ -233,7 +284,8 @@ export function OperationsPage() {
   const tabs = useMemo(() => {
     if (isAdmin) return ALL_TABS;
     if (isCaissier) {
-      return ALL_TABS.filter((t) => t.key === 'TOUTES' || t.key === 'RECHARGE' || t.key === 'DECAISSEMENT');
+      const keys: TabKey[] = ['TOUTES', 'RECHARGE', 'ENCAISSEMENT', 'DECAISSEMENT', 'CREDIT'];
+      return ALL_TABS.filter((t) => keys.includes(t.key));
     }
     if (isValidateur) {
       return ALL_TABS.filter((t) => t.key === 'TOUTES' || t.key === 'DECAISSEMENT');
@@ -570,19 +622,20 @@ export function OperationsPage() {
                   Montant
                 </SortableHeader>
                 <th className="px-5 py-2.5 font-semibold">Par</th>
+                <th className="px-5 py-2.5 font-semibold">SAP</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-5 py-10 text-center text-[#64748B]">
                     Chargement…
                   </td>
                 </tr>
               )}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-5 py-10 text-center text-[#64748B]">
                     <div className="mb-2 text-2xl opacity-30">📊</div>
                     Aucune opération
                   </td>
@@ -668,6 +721,9 @@ export function OperationsPage() {
                       ) : (
                         <span className="text-[#64748B]">—</span>
                       )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <OperationSapCell op={op} canSend={isAdmin} />
                     </td>
                   </tr>
                 );

@@ -169,8 +169,10 @@ export function useBonsSummary(opts: {
   });
 }
 
+export type ByDirectionPeriod = 'today' | 'week' | 'month' | 'quarter' | 'all';
+
 export async function getBonsByDirection(opts: {
-  period?: 'today' | 'week' | 'month';
+  period?: ByDirectionPeriod;
 } = {}): Promise<BonsByDirectionRow[]> {
   const { data } = await api.get<BonsByDirectionRow[]>('/bons/stats/by-direction', {
     params: opts.period ? { period: opts.period } : undefined,
@@ -178,7 +180,7 @@ export async function getBonsByDirection(opts: {
   return data;
 }
 
-export function useBonsByDirection(opts: { period?: 'today' | 'week' | 'month' } = {}) {
+export function useBonsByDirection(opts: { period?: ByDirectionPeriod } = {}) {
   return useQuery({
     queryKey: ['bons', 'by-direction', opts],
     queryFn: () => getBonsByDirection(opts),

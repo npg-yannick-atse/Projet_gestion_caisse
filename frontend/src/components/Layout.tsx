@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   LogOut,
   Network,
+  Plug,
   Plus,
   Receipt,
   TrendingUp,
@@ -119,6 +120,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/parametres', label: 'Paramètres', icon: Settings, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
+      { to: '/sap', label: 'SAP (test)', icon: Plug, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
     ],
   },
   {

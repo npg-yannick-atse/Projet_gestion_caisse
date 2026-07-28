@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Ban, Banknote, CalendarRange, CheckCircle2, Pencil, Plus, Send, X, XCircle } from 'lucide-react';
 import {
   useCredits,
@@ -127,7 +127,44 @@ export function CreditsPage() {
 
   const employeById = useMemo(() => new Map((employes ?? []).map((e) => [e.id, e])), [employes]);
   const codeOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId)?.code ?? '';
-  const openCaisses = (caisses ?? []).filter((c) => c.statut === 'OUVERTE');
+
+  // Source de l'argent restreinte à la DIRECTION de l'employé choisi :
+  //  - portefeuilles dont le propriétaire est cette direction ;
+  //  - caisses = caisses sources (ouvertes) de ces portefeuilles.
+  const selectedEmploye = employeId ? (employeById.get(employeId) ?? null) : null;
+  const employeDirectionId = selectedEmploye?.directionId ?? null;
+
+  const sourcePortefeuilles = useMemo(
+    () =>
+      employeDirectionId
+        ? (portefeuilles ?? []).filter(
+            (p) => p.estActif && p.proprietaireType === 'DIRECTION' && String(p.proprietaireId) === String(employeDirectionId),
+          )
+        : [],
+    [portefeuilles, employeDirectionId],
+  );
+  const sourceCaisses = useMemo(() => {
+    const ids = new Set(sourcePortefeuilles.map((p) => p.caisseSourceId));
+    return (caisses ?? []).filter((c) => c.statut === 'OUVERTE' && ids.has(c.id));
+  }, [sourcePortefeuilles, caisses]);
+  const sourceOptions = sourceType === 'CAISSE' ? sourceCaisses : sourcePortefeuilles;
+
+  // À la sélection d'un employé : pré-remplir avec son portefeuille source par
+  // défaut s'il appartient bien à sa direction ; sinon vider la source.
+  useEffect(() => {
+    if (!selectedEmploye) {
+      setSourceId('');
+      return;
+    }
+    const def = selectedEmploye.portefeuilleSourceId;
+    if (def && sourcePortefeuilles.some((p) => String(p.id) === String(def))) {
+      setSourceType('PORTEFEUILLE');
+      setSourceId(String(def));
+    } else {
+      setSourceId('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employeId, sourcePortefeuilles]);
 
   // Alerte : l'employé a-t-il déjà une demande ou un crédit ACTIF (attente/approuvé/en cours) ?
   const creditActif = useMemo(
@@ -275,14 +312,32 @@ export function CreditsPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className={labelClass}>{sourceType === 'CAISSE' ? 'Caisse' : 'Portefeuille'}</label>
-            <select className={selectClass} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+            <select
+              className={selectClass}
+              value={sourceId}
+              onChange={(e) => setSourceId(e.target.value)}
+              disabled={!employeId || sourceOptions.length === 0}
+            >
               <option value="">— Choisir —</option>
-              {(sourceType === 'CAISSE' ? openCaisses : portefeuilles ?? []).map((x) => (
+              {sourceOptions.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.code} — {x.libelle}
                 </option>
               ))}
             </select>
+            {!employeId ? (
+              <p className="text-[11px] text-[#94A3B8]">Choisissez d'abord un employé.</p>
+            ) : !employeDirectionId ? (
+              <p className="text-[11px] text-[#B45309]">Cet employé n'a pas de direction — aucune source rattachée.</p>
+            ) : sourceOptions.length === 0 ? (
+              <p className="text-[11px] text-[#B45309]">
+                {sourceType === 'CAISSE'
+                  ? 'Aucune caisse ouverte rattachée à sa direction.'
+                  : 'Aucun portefeuille rattaché à sa direction.'}
+              </p>
+            ) : (
+              <p className="text-[11px] text-[#94A3B8]">Limité à la direction de l'employé.</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5 sm:col-span-2">

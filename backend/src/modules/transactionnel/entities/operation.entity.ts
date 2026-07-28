@@ -53,6 +53,20 @@ export class Operation {
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   motif?: string | null;
 
+  /* -------- Intégration SAP (envoi comptable, idempotence) -------- */
+
+  @Column({ name: 'sap_piece', type: 'nvarchar', length: 20, nullable: true })
+  sapPiece?: string | null;
+
+  @Column({ name: 'sap_statut', type: 'nvarchar', length: 20, nullable: true })
+  sapStatut?: string | null; // ENVOYE / ERREUR
+
+  @Column({ name: 'sap_date', type: 'datetime2', precision: 3, nullable: true })
+  sapDate?: Date | null;
+
+  @Column({ name: 'sap_message', type: 'nvarchar', length: 500, nullable: true })
+  sapMessage?: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'datetime2', precision: 3 })
   createdAt!: Date;
 }

@@ -339,11 +339,30 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
 
         <div className="space-y-1.5">
           <Label htmlFor="pf-edit-budget">
-            Budget mensuel <span className="text-xs font-normal text-[#64748B]">(optionnel)</span>
+            Budget mensuel{' '}
+            {portefeuille.proprietaireType === 'USER' && (
+              <span className="text-xs font-normal text-[#64748B]">(optionnel)</span>
+            )}
           </Label>
-          <Input id="pf-edit-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
-          {errors.budgetMensuel && (
-            <p className="text-sm text-destructive">{errors.budgetMensuel.message}</p>
+          {portefeuille.proprietaireType === 'DIRECTION' ? (
+            <>
+              <Input
+                id="pf-edit-budget"
+                disabled
+                value={portefeuille.budgetMensuel != null ? String(portefeuille.budgetMensuel) : ''}
+                placeholder="Hérité du centre de coût"
+                readOnly
+              />
+              <p className="text-[11px] text-[#B45309]">
+                Hérité du budget mensuel du centre de coût de la direction — non modifiable ici. Pour le changer,
+                éditez le centre de coût de la direction.
+              </p>
+            </>
+          ) : (
+            <>
+              <Input id="pf-edit-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
+              {errors.budgetMensuel && <p className="text-sm text-destructive">{errors.budgetMensuel.message}</p>}
+            </>
           )}
         </div>
 
@@ -506,9 +525,20 @@ function NewPortefeuilleInline({
           <Input id="pf-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="pf-budget">Budget mensuel (optionnel)</Label>
-          <Input id="pf-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
-          {errors.budgetMensuel && <p className="text-xs text-destructive">{errors.budgetMensuel.message}</p>}
+          <Label htmlFor="pf-budget">Budget mensuel {proprietaireType === 'USER' && '(optionnel)'}</Label>
+          {proprietaireType === 'DIRECTION' ? (
+            <>
+              <Input id="pf-budget" disabled placeholder="Hérité du centre de coût" />
+              <p className="text-[11px] text-[#94A3B8]">
+                Hérité automatiquement du budget mensuel du centre de coût de la direction (non modifiable ici).
+              </p>
+            </>
+          ) : (
+            <>
+              <Input id="pf-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
+              {errors.budgetMensuel && <p className="text-xs text-destructive">{errors.budgetMensuel.message}</p>}
+            </>
+          )}
         </div>
         <div className="flex items-end gap-2">
           <Button type="submit" disabled={create.isPending} size="sm">

@@ -500,6 +500,11 @@ export interface Operation {
   clientNom?: string | null;
   clientNumero?: string | null;
   motif?: string | null;
+  /** Intégration SAP : n° de pièce, statut d'envoi. */
+  sapPiece?: string | null;
+  sapStatut?: string | null;
+  sapDate?: string | null;
+  sapMessage?: string | null;
 }
 
 export type CreditStatut =

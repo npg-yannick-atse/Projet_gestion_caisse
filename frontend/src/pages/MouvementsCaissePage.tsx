@@ -5,6 +5,7 @@ import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useRecharge } from '@/api/recharge';
 import { useEncaissement } from '@/api/encaissement';
+import { useVerifierClientSap } from '@/api/sap';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
@@ -29,6 +30,33 @@ const inputClass =
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
 export type MouvementMode = 'ENCAISSEMENT' | 'RECHARGE';
+
+/** Bouton inline « Vérifier SAP » d'un code client → auto-remplit le nom client. */
+function SapClientVerify({ code, onResolved }: { code: string; onResolved: (nom: string) => void }) {
+  const m = useVerifierClientSap();
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={!code?.trim() || m.isPending}
+        onClick={() => m.mutate(code.trim(), { onSuccess: (r) => { if (r.existe && r.nom) onResolved(r.nom); } })}
+        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+      >
+        {m.isPending ? 'Vérif…' : 'Vérifier SAP'}
+      </button>
+      {m.data &&
+        (m.data.existe ? (
+          <span className="text-[11px] text-[#047857]">
+            ✓ {m.data.nom ?? 'trouvé'}
+            {m.data.ville ? ` · ${m.data.ville}` : ''}
+          </span>
+        ) : (
+          <span className="text-[11px] text-[#B42318]">Client introuvable dans SAP</span>
+        ))}
+      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
+    </div>
+  );
+}
 
 /**
  * Page unifiée « Mouvements de caisse » : Encaissement (entrée d'argent dans une
@@ -330,6 +358,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   onChange={(e) => setClientNumero(e.target.value)}
                   placeholder="Identifiant client (optionnel)"
                 />
+                {isEnc && <SapClientVerify code={clientNumero} onResolved={(nom) => setClientNom(nom)} />}
               </div>
 
               <div className="flex flex-col gap-1.5 sm:col-span-2">

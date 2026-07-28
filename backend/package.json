@@ -37,6 +37,7 @@
     "helmet": "^8.0.0",
     "mssql": "^11.0.1",
     "nest-winston": "^1.10.0",
+    "node-rfc": "^3.3.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",

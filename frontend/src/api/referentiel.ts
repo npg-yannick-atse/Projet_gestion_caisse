@@ -93,11 +93,20 @@ export function useCostCenters(filters: RefFilters = {}) {
   return useQuery({ queryKey: ['cost-centers', filters], queryFn: () => listCostCenters(filters) });
 }
 
+// Le budget mensuel d'un centre de coût est répercuté (côté backend) sur les
+// portefeuilles de sa direction → on rafraîchit aussi ['portefeuilles'] et les
+// soldes, sinon l'affichage du budget reste figé sur l'ancienne valeur.
+function invalidateCostCenter(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['cost-centers'] });
+  qc.invalidateQueries({ queryKey: ['portefeuilles'] });
+  qc.invalidateQueries({ queryKey: ['portefeuille'] });
+}
+
 export function useCreateCostCenter() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createCostCenter,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cost-centers'] }),
+    onSuccess: () => invalidateCostCenter(qc),
   });
 }
 
@@ -106,7 +115,7 @@ export function useUpdateCostCenter() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<CreateCostCenterPayload> }) =>
       updateCostCenter(id, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cost-centers'] }),
+    onSuccess: () => invalidateCostCenter(qc),
   });
 }
 

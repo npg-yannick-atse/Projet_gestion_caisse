@@ -171,8 +171,9 @@ export class BonsController {
       'Décaissements agrégés par direction (jointure sous_bon → cost_center → direction)',
   })
   async getByDirection(@Query('period') period?: string) {
+    const periods = ['today', 'week', 'month', 'quarter', 'all'] as const;
     return this.bonsService.getByDirection({
-      period: period === 'today' || period === 'week' || period === 'month' ? period : undefined,
+      period: (periods as readonly string[]).includes(period ?? '') ? (period as (typeof periods)[number]) : undefined,
     });
   }
 

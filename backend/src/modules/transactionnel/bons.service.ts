@@ -716,7 +716,7 @@ export class BonsService {
    * Statut considéré : DECAISSE + COMPTABILISE.
    */
   async getByDirection(opts: {
-    period?: 'today' | 'week' | 'month';
+    period?: 'today' | 'week' | 'month' | 'quarter' | 'all';
   } = {}): Promise<
     Array<{
       directionId: string | null;
@@ -732,7 +732,7 @@ export class BonsService {
     // dans une sous-requête JOINTE, puis on somme la colonne (repli sur le montant demandé
     // si aucun décaissement). Évite l'écart demandé/décaissé (remarque de test #10).
     const decJoin =
-      '(SELECT bc.sous_bon_source_id AS sb_id, SUM(dd.montant) AS montant_dec ' +
+      '(SELECT bc.sous_bon_source_id AS sb_id, SUM(dd.montant) AS montant_dec, MAX(dd.date_decaissement) AS date_dec ' +
       'FROM trx_decaissement dd INNER JOIN trx_bon_caisse bc ON bc.id = dd.bon_caisse_id ' +
       'GROUP BY bc.sous_bon_source_id)';
     const montantEffectif = 'COALESCE(dec.montant_dec, CAST(sb.montant AS DECIMAL(19,4)))';
@@ -754,12 +754,15 @@ export class BonsService {
       .addGroupBy('d.code')
       .addGroupBy('d.libelle');
 
-    if (opts.period) {
+    // Filtre de période basé sur la DATE DE DÉCAISSEMENT (quand l'argent sort),
+    // pas la date de création du sous-bon. 'all' (ou absent) = pas de filtre.
+    if (opts.period && opts.period !== 'all') {
       const cutoff = new Date();
       cutoff.setUTCHours(0, 0, 0, 0);
       if (opts.period === 'week') cutoff.setUTCDate(cutoff.getUTCDate() - 6);
       else if (opts.period === 'month') cutoff.setUTCDate(1);
-      qb.andWhere('sb.created_at >= :cutoff', { cutoff });
+      else if (opts.period === 'quarter') cutoff.setUTCMonth(cutoff.getUTCMonth() - 3);
+      qb.andWhere('dec.date_dec >= :cutoff', { cutoff });
     }
 
     qb.orderBy(`SUM(${montantEffectif})`, 'DESC');

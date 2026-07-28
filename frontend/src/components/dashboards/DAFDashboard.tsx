@@ -1,35 +1,62 @@
-import { ShieldCheck, Banknote, Landmark } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldCheck, Landmark, ChevronDown } from 'lucide-react';
 import type { User } from '@/types/api';
+import { cn } from '@/lib/utils';
 import { Hero } from './_shared';
 import { AdminDashboard } from './AdminDashboard';
-import { CaissierDashboard } from './CaissierDashboard';
 import { FondCaissePanel } from './FondCaissePanel';
 
 interface Props {
   user: User;
 }
 
-/** Titre de section pour séparer les deux volets du tableau de bord combiné. */
-function SectionTitle({ icon: Icon, children }: { icon: typeof ShieldCheck; children: React.ReactNode }) {
+/**
+ * Section repliable (accordéon) d'un volet du tableau de bord combiné DAF.
+ * Le contenu n'est monté que lorsqu'elle est ouverte : les requêtes du volet
+ * ne partent qu'à l'ouverture, ce qui allège aussi le premier rendu.
+ */
+function CollapsibleSection({
+  icon: Icon,
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  icon: typeof ShieldCheck;
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="flex items-center gap-2 pt-1">
-      <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-[#EFF6FF] text-[#0F4C81]">
-        <Icon className="h-4 w-4" />
-      </span>
-      <h2 className="font-display text-sm font-semibold text-[#0F172A]">{children}</h2>
-      <div className="ml-2 h-px flex-1 bg-[rgba(15,76,129,0.1)]" />
-    </div>
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 pt-1 text-left"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-[#EFF6FF] text-[#0F4C81]">
+          <Icon className="h-4 w-4" />
+        </span>
+        <h2 className="font-display text-sm font-semibold text-[#0F172A]">{title}</h2>
+        <div className="ml-2 h-px flex-1 bg-[rgba(15,76,129,0.1)]" />
+        <ChevronDown
+          className={cn('h-4 w-4 shrink-0 text-[#64748B] transition-transform', open ? '' : '-rotate-90')}
+        />
+      </button>
+      {open && <div className="mt-4">{children}</div>}
+    </section>
   );
 }
 
 /**
  * Tableau de bord DAF : une seule vue qui fusionne le pilotage Administrateur
- * et la supervision Caissier. Les deux dashboards sont réutilisés sans leur
- * propre en-tête (showHero=false) sous un Hero unique.
+ * et la supervision Caissier. Les volets sont des sections repliables (seul le
+ * pilotage administratif est ouvert au départ) pour garder la page courte.
  */
 export function DAFDashboard({ user }: Props) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <Hero
         icon={ShieldCheck}
         eyebrow="DAF · Directeur Administratif & Financier"
@@ -43,14 +70,13 @@ export function DAFDashboard({ user }: Props) {
         }
       />
 
-      <SectionTitle icon={ShieldCheck}>Pilotage administratif</SectionTitle>
-      <AdminDashboard user={user} showHero={false} />
+      <CollapsibleSection icon={ShieldCheck} title="Pilotage administratif" defaultOpen>
+        <AdminDashboard user={user} showHero={false} />
+      </CollapsibleSection>
 
-      <SectionTitle icon={Banknote}>Caisse &amp; décaissement</SectionTitle>
-      <CaissierDashboard user={user} showHero={false} />
-
-      <SectionTitle icon={Landmark}>Fond de caisse</SectionTitle>
-      <FondCaissePanel />
+      <CollapsibleSection icon={Landmark} title="Fond de caisse">
+        <FondCaissePanel />
+      </CollapsibleSection>
     </div>
   );
 }

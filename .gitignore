@@ -6,6 +6,10 @@
 # Scripts / config de test SAP (contiennent la config de connexion — à garder en local)
 test-sap.ps1
 sap.env
+sap-common.ps1
+sap-inspect.ps1
+sap-client.ps1
+sap-commande.ps1
 
 # Node
 node_modules/

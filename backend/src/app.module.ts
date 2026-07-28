@@ -18,6 +18,7 @@ import { TransactionnelModule } from '@modules/transactionnel/transactionnel.mod
 import { AuditModule } from '@modules/audit/audit.module';
 import { NotificationsModule } from '@modules/notifications/notifications.module';
 import { TelemetryModule } from '@modules/telemetry/telemetry.module';
+import { SapModule } from '@modules/sap/sap.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -43,6 +44,7 @@ import { HealthModule } from './health/health.module';
     AuditModule,
     NotificationsModule,
     TelemetryModule,
+    SapModule,
     HealthModule,
   ],
   providers: [

@@ -18,6 +18,7 @@ import { RolesPage } from '@/pages/RolesPage';
 import { ProfilsPage } from '@/pages/ProfilsPage';
 import { InterimsPage } from '@/pages/InterimsPage';
 import { AuditPage } from '@/pages/AuditPage';
+import { SapTestPage } from '@/pages/SapTestPage';
 import { MouvementsCaissePage } from '@/pages/MouvementsCaissePage';
 import { ReleveAgentPage } from '@/pages/ReleveAgentPage';
 import { ParametresPage } from '@/pages/ParametresPage';
@@ -190,6 +191,16 @@ const auditRoute = createRoute({
   component: AuditPage,
 });
 
+const sapTestRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/sap',
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+      <SapTestPage />
+    </RoleGuard>
+  ),
+});
+
 const partenairesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/partenaires',
@@ -297,6 +308,7 @@ const routeTree = rootRoute.addChildren([
     profilsRoute,
     interimsRoute,
     auditRoute,
+    sapTestRoute,
     partenairesRoute,
     costCentersRoute,
     directionsRoute,

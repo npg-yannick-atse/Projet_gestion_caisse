@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   AlertCircle,
@@ -16,6 +16,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useBons, useBonsByDirection, useBonsSummary, useBonsTimeline } from '@/api/bons';
+import type { ByDirectionPeriod } from '@/api/bons';
 import { useCaisses } from '@/api/caisses';
 import { useOperations } from '@/api/ledger';
 import { useUsers } from '@/api/users';
@@ -76,11 +77,12 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
     return Math.round((valides / total) * 100);
   }, [summary]);
 
-  // Bar chart : montant décaissé du mois par direction.
+  // Bar chart : montant décaissé par direction, période sélectionnable.
   // L'agrégation est faite en BD via /bons/stats/by-direction (jointure
-  // sous_bon → cost_center → direction). C'est la direction du cost-center
-  // qui détermine l'imputation budgétaire, pas celle du demandeur.
-  const { data: byDirectionRaw } = useBonsByDirection({ period: 'month' });
+  // sous_bon → cost_center → direction), filtrée sur la DATE DE DÉCAISSEMENT.
+  // Défaut « 3 mois » pour ne pas afficher un graphe vide en début de mois.
+  const [dirPeriod, setDirPeriod] = useState<ByDirectionPeriod>('quarter');
+  const { data: byDirectionRaw } = useBonsByDirection({ period: dirPeriod });
   const byDirection = useMemo(() => {
     return (byDirectionRaw ?? []).map((r) => ({
       directionId: r.directionId ?? 'NONE',
@@ -184,6 +186,40 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
         />
       </div>
 
+      {/* Pipeline des bons (distribution par statut) */}
+      <div className="overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white">
+        <div className="flex items-center gap-2 border-b border-[rgba(15,76,129,0.1)] px-5 py-4">
+          <FileCheck2 className="h-4 w-4 text-[#1A6DB5]" />
+          <div className="font-display text-[13px] font-semibold">Pipeline des bons</div>
+          <span className="rounded-full bg-[#E8F2FF] px-2 py-0.5 text-[10px] font-semibold text-[#1A6DB5]">
+            Tous statuts confondus
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-px bg-[rgba(15,76,129,0.08)] p-px sm:grid-cols-6">
+          {(['CREE', 'VALIDE', 'DECAISSE', 'COMPTABILISE', 'REFUSE', 'ANNULE'] as const).map((statut) => {
+            const row = summary?.byStatut?.[statut];
+            return (
+              <Link
+                key={statut}
+                to="/bons"
+                search={{ statut } as any}
+                className={cn(
+                  'flex flex-col gap-1 bg-white p-4 transition-colors hover:bg-[#FAFBFF]',
+                )}
+              >
+                <span className="text-[10px] uppercase tracking-[0.6px] text-[#64748B]">{statut}</span>
+                <span className="font-display text-xl font-semibold tabular-nums text-[#0F172A]">
+                  {row?.count ?? 0}
+                </span>
+                <span className="text-[10px] tabular-nums text-[#94A3B8]">
+                  {row ? formatMontant(row.montant) : '—'}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Bar chart par direction + anomalies */}
       <div className="grid gap-3.5 lg:grid-cols-[1fr_340px]">
         {/* Bar chart par direction */}
@@ -191,20 +227,44 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
           <div className="flex items-center gap-2.5 border-b border-[rgba(15,76,129,0.1)] px-5 py-4">
             <Network className="h-4 w-4 text-[#1A6DB5]" />
             <div className="font-display text-[13px] font-semibold">Décaissements par direction</div>
-            <span className="rounded-full bg-[#E8F2FF] px-2 py-0.5 text-[10px] font-semibold text-[#1A6DB5]">
-              ce mois
-            </span>
-            <Link
-              to="/directions"
-              className="ml-auto flex items-center gap-1 text-xs font-medium text-[#1A6DB5] hover:underline"
-            >
-              Directions <ArrowRight className="h-3 w-3" />
-            </Link>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="inline-flex rounded-[8px] border border-[rgba(15,76,129,0.12)] p-0.5">
+                {(
+                  [
+                    ['month', 'Ce mois'],
+                    ['quarter', '3 mois'],
+                    ['all', 'Tout'],
+                  ] as [ByDirectionPeriod, string][]
+                ).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setDirPeriod(val)}
+                    className={cn(
+                      'rounded-[6px] px-2 py-0.5 text-[10px] font-medium transition',
+                      dirPeriod === val ? 'bg-[#0F4C81] text-white' : 'text-[#475569] hover:bg-[#F1F5F9]',
+                    )}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+              <Link
+                to="/directions"
+                className="flex items-center gap-1 text-xs font-medium text-[#1A6DB5] hover:underline"
+              >
+                Directions <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
           </div>
           <div className="space-y-2.5 p-5">
             {byDirection.length === 0 && (
               <div className="py-6 text-center text-xs text-[#64748B]">
-                Aucun décaissement ce mois
+                {dirPeriod === 'month'
+                  ? 'Aucun décaissement ce mois'
+                  : dirPeriod === 'quarter'
+                    ? 'Aucun décaissement sur les 3 derniers mois'
+                    : 'Aucun décaissement'}
               </div>
             )}
             {byDirection.map((d) => {
@@ -342,39 +402,6 @@ export function AdminDashboard({ user, isSuper = false, showHero = true }: Props
         </div>
       </div>
 
-      {/* Distribution par statut (utile pour admin) */}
-      <div className="overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white">
-        <div className="flex items-center gap-2 border-b border-[rgba(15,76,129,0.1)] px-5 py-4">
-          <FileCheck2 className="h-4 w-4 text-[#1A6DB5]" />
-          <div className="font-display text-[13px] font-semibold">Pipeline des bons</div>
-          <span className="rounded-full bg-[#E8F2FF] px-2 py-0.5 text-[10px] font-semibold text-[#1A6DB5]">
-            Tous statuts confondus
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-px bg-[rgba(15,76,129,0.08)] p-px sm:grid-cols-6">
-          {(['CREE', 'VALIDE', 'DECAISSE', 'COMPTABILISE', 'REFUSE', 'ANNULE'] as const).map((statut) => {
-            const row = summary?.byStatut?.[statut];
-            return (
-              <Link
-                key={statut}
-                to="/bons"
-                search={{ statut } as any}
-                className={cn(
-                  'flex flex-col gap-1 bg-white p-4 transition-colors hover:bg-[#FAFBFF]',
-                )}
-              >
-                <span className="text-[10px] uppercase tracking-[0.6px] text-[#64748B]">{statut}</span>
-                <span className="font-display text-xl font-semibold tabular-nums text-[#0F172A]">
-                  {row?.count ?? 0}
-                </span>
-                <span className="text-[10px] tabular-nums text-[#94A3B8]">
-                  {row ? formatMontant(row.montant) : '—'}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

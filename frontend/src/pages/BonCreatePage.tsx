@@ -8,6 +8,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
 import { useTypeBons, usePartenaires, usePays, useDivisions } from '@/api/referentiel';
 import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
+import { useVerifierClientSap, useVerifierCommandeSap } from '@/api/sap';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { Portefeuille } from '@/types/api';
@@ -20,6 +21,65 @@ const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const montantRegex = /^\d+(\.\d{1,4})?$/;
+
+/** Bouton inline « Vérifier SAP » d'un code client → auto-remplit le nom client. */
+function SapClientVerify({ code, onResolved }: { code: string; onResolved: (nom: string) => void }) {
+  const m = useVerifierClientSap();
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={!code?.trim() || m.isPending}
+        onClick={() => m.mutate(code.trim(), { onSuccess: (r) => { if (r.existe && r.nom) onResolved(r.nom); } })}
+        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+      >
+        {m.isPending ? 'Vérif…' : 'Vérifier SAP'}
+      </button>
+      {m.data &&
+        (m.data.existe ? (
+          <span className="text-[11px] text-[#047857]">
+            ✓ {m.data.nom ?? 'trouvé'}
+            {m.data.ville ? ` · ${m.data.ville}` : ''}
+          </span>
+        ) : (
+          <span className="text-[11px] text-[#B42318]">Client introuvable dans SAP</span>
+        ))}
+      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
+    </div>
+  );
+}
+
+/** Bouton inline « Vérifier commande SAP » → type / fournisseur / usine source. */
+function SapCommandeVerify({ numero }: { numero: string }) {
+  const m = useVerifierCommandeSap();
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={!numero?.trim() || m.isPending}
+        onClick={() => m.mutate(numero.trim())}
+        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+      >
+        {m.isPending ? 'Vérif…' : 'Vérifier commande SAP'}
+      </button>
+      {m.data &&
+        (m.data.existe ? (
+          <span className="text-[11px] text-[#047857]">
+            ✓{' '}
+            {m.data.fournisseur
+              ? `Fourn. ${m.data.fournisseur}${m.data.fournisseurNom ? ` — ${m.data.fournisseurNom}` : ''}`
+              : m.data.usineSource
+                ? `Transfert usine ${m.data.usineSource}`
+                : 'trouvée'}
+            {m.data.societe ? ` · Sté ${m.data.societe}` : ''}
+          </span>
+        ) : (
+          <span className="text-[11px] text-[#B42318]">Commande introuvable dans SAP</span>
+        ))}
+      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
+    </div>
+  );
+}
 
 const sousBonSchema = z.object({
   // Libellé requis sauf pour les types « nom client » (ex. restitution) — cf. superRefine.
@@ -550,6 +610,7 @@ export function BonCreatePage() {
                   {errors.soubons?.[index]?.numeroBl && (
                     <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
                   )}
+                  <SapCommandeVerify numero={watch(`soubons.${index}.numeroBl`) ?? ''} />
                 </div>
               )}
               <div className="space-y-2">
@@ -563,6 +624,10 @@ export function BonCreatePage() {
                   {errors.soubons?.[index]?.numeroClient && (
                     <p className="text-sm text-destructive">{errors.soubons[index]?.numeroClient?.message}</p>
                   )}
+                  <SapClientVerify
+                    code={watch(`soubons.${index}.numeroClient`) ?? ''}
+                    onResolved={(nom) => setValue(`soubons.${index}.nomClient`, nom, { shouldValidate: true })}
+                  />
                 </div>
               )}
               <div className="space-y-2 sm:col-span-2">
