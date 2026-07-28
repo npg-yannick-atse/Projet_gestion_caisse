@@ -29,22 +29,23 @@ import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { Caisse, Portefeuille } from '@/types/api';
 
-/** Droits de gestion caisses/portefeuilles de l'utilisateur connecté (permission, admin = bypass). */
+/**
+ * Droits de gestion caisses/portefeuilles de l'utilisateur connecté.
+ * Gouvernance : STRICTEMENT par permission — AUCUN bypass admin. Un admin doit
+ * avoir la permission attribuée (cf. migration 0031 qui les donne aux profils admin).
+ */
 function useFinancePerms() {
   const user = useAuthStore((s) => s.user);
-  const { data: roles } = useUserRoles(user?.id ?? null);
   const { data: perms } = useMyPermissions(user?.id ?? null);
-  const codes = new Set((roles ?? []).map((r) => r.code));
-  const isAdmin = codes.has('SUPER_ADMIN') || codes.has('ADMINISTRATEUR');
   const p = new Set(perms ?? []);
   return {
-    isAdmin,
-    canManageCaisse: isAdmin || p.has('CAISSE_MODIFIER'),
-    canDeleteCaisse: isAdmin || p.has('CAISSE_SUPPRIMER'),
-    canManagePf: isAdmin || p.has('PORTEFEUILLE_MODIFIER'),
-    canDeletePf: isAdmin || p.has('PORTEFEUILLE_SUPPRIMER'),
-    canEditSoldeInitial: isAdmin || p.has('PORTEFEUILLE_SOLDE_INITIAL'),
-    canOpenClose: isAdmin || codes.has('CAISSIER'),
+    canManageCaisse: p.has('CAISSE_MODIFIER'),
+    canDeleteCaisse: p.has('CAISSE_SUPPRIMER'),
+    canManagePf: p.has('PORTEFEUILLE_MODIFIER'),
+    canDeletePf: p.has('PORTEFEUILLE_SUPPRIMER'),
+    canEditSoldeInitial: p.has('PORTEFEUILLE_SOLDE_INITIAL'),
+    canOpen: p.has('CAISSE_OUVRIR'),
+    canClose: p.has('CAISSE_CLOTURER'),
   };
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -926,26 +927,27 @@ function CaisseCard({
         </div>
 
         <div className="mt-4 flex items-center gap-2" onClick={stop}>
-          {fp.canOpenClose &&
-            (caisse.statut === 'FERMEE' ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => open.mutate({ id: caisse.id })}
-                className="rounded-md bg-white px-3 py-1 text-[11px] font-semibold text-[#047857] transition-colors hover:bg-[#ECFDF5] disabled:opacity-50"
-              >
-                Ouvrir
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => close.mutate({ id: caisse.id })}
-                className="rounded-md bg-white/10 px-3 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-white/20 disabled:opacity-50"
-              >
-                Clôturer
-              </button>
-            ))}
+          {caisse.statut === 'FERMEE'
+            ? fp.canOpen && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => open.mutate({ id: caisse.id })}
+                  className="rounded-md bg-white px-3 py-1 text-[11px] font-semibold text-[#047857] transition-colors hover:bg-[#ECFDF5] disabled:opacity-50"
+                >
+                  Ouvrir
+                </button>
+              )
+            : fp.canClose && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => close.mutate({ id: caisse.id })}
+                  className="rounded-md bg-white/10 px-3 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+                >
+                  Clôturer
+                </button>
+              )}
           <div className="ml-auto flex gap-1">
             {fp.canManageCaisse && (
               <button

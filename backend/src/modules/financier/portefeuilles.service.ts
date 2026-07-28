@@ -81,7 +81,7 @@ export class PortefeuillesService {
     //     changer l'amorce réécrirait rétroactivement tout l'historique de solde.
     //     Pour corriger un solde après activité, passer par une opération d'ajustement.
     if (dto.soldeInitial !== undefined && Number(dto.soldeInitial) !== Number(pf.soldeInitial || 0)) {
-      await this.authz.assertPermission(
+      await this.authz.assertPermissionStrict(
         userId,
         'PORTEFEUILLE_SOLDE_INITIAL',
         'modifier le solde initial d\'un portefeuille',

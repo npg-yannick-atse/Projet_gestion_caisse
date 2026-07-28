@@ -32,14 +32,14 @@ export class PortefeuillesController {
   @Post()
   @ApiOperation({ summary: 'Créer un portefeuille' })
   async create(@Body() dto: CreatePortefeuilleDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'PORTEFEUILLE_MODIFIER', 'créer un portefeuille');
+    await this.authz.assertPermissionStrict(user.sub, 'PORTEFEUILLE_MODIFIER', 'créer un portefeuille');
     return this.portefeuillesService.create(dto, user.sub);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour un portefeuille' })
   async update(@Param('id') id: string, @Body() dto: UpdatePortefeuilleDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'PORTEFEUILLE_MODIFIER', 'modifier un portefeuille');
+    await this.authz.assertPermissionStrict(user.sub, 'PORTEFEUILLE_MODIFIER', 'modifier un portefeuille');
     return this.portefeuillesService.update(id, dto, user.sub);
   }
 
@@ -50,7 +50,7 @@ export class PortefeuillesController {
     @Body() dto: { estActif: boolean },
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.authz.assertPermission(user.sub, 'PORTEFEUILLE_MODIFIER', 'activer/désactiver un portefeuille');
+    await this.authz.assertPermissionStrict(user.sub, 'PORTEFEUILLE_MODIFIER', 'activer/désactiver un portefeuille');
     return this.portefeuillesService.toggleActif(id, dto.estActif, user.sub);
   }
 
@@ -58,7 +58,7 @@ export class PortefeuillesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer un portefeuille (soft-delete)' })
   async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'PORTEFEUILLE_SUPPRIMER', 'supprimer un portefeuille');
+    await this.authz.assertPermissionStrict(user.sub, 'PORTEFEUILLE_SUPPRIMER', 'supprimer un portefeuille');
     await this.portefeuillesService.softDelete(id, user.sub);
   }
 

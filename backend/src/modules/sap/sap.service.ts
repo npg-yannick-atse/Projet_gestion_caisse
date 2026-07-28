@@ -246,14 +246,20 @@ export class SapService {
    */
   async getComptes(recherche?: string, bukrs = '2251'): Promise<Array<{ compte: string; libelle?: string }>> {
     return this.withClient(async (c) => {
+      const q = (recherche ?? '').trim();
+      const estNumero = /^\d+$/.test(q);
+      // Comptes de la société : on POUSSE le filtre numéro dans SAP (SAKNR LIKE) pour
+      // ne pas être limité aux premiers comptes ; sinon on charge large et on filtre.
+      const skb1Options: Array<{ TEXT: string }> = [{ TEXT: `BUKRS EQ '${bukrs}'` }];
+      if (q && estNumero) skb1Options.push({ TEXT: `AND SAKNR LIKE '%${q}%'` });
       let skb1: any;
       try {
         skb1 = await c.call('RFC_READ_TABLE', {
           QUERY_TABLE: 'SKB1',
           DELIMITER: '|',
-          ROWCOUNT: 300,
+          ROWCOUNT: 3000,
           FIELDS: [{ FIELDNAME: 'SAKNR' }],
-          OPTIONS: [{ TEXT: `BUKRS EQ '${bukrs}'` }],
+          OPTIONS: skb1Options,
         });
       } catch (e: any) {
         throw new ServiceUnavailableException(
@@ -268,7 +274,7 @@ export class SapService {
         const skat = await c.call('RFC_READ_TABLE', {
           QUERY_TABLE: 'SKAT',
           DELIMITER: '|',
-          ROWCOUNT: 6000,
+          ROWCOUNT: 9000,
           FIELDS: [{ FIELDNAME: 'SAKNR' }, { FIELDNAME: 'TXT50' }],
           OPTIONS: [{ TEXT: `KTOPL EQ 'PCGG'` }, { TEXT: `AND SPRAS EQ 'F'` }],
         });
@@ -410,6 +416,47 @@ export class SapService {
     return this.getMapping();
   }
 
+  /* ---------------- Mapping des centres de coût (app → SAP) ---------------- */
+
+  async getCostCenterMapping(): Promise<Array<{ costCenterApp: string; costCenterSap: string | null }>> {
+    const rows: any[] = await this.dataSource.query(
+      `SELECT cost_center_app, cost_center_sap FROM dbo.sap_cost_center_mapping WHERE est_actif = 1 ORDER BY cost_center_app`,
+    );
+    return rows.map((r) => ({ costCenterApp: r.cost_center_app, costCenterSap: r.cost_center_sap ?? null }));
+  }
+
+  private async getCostCenterMap(): Promise<Map<string, string>> {
+    const rows: any[] = await this.dataSource.query(
+      `SELECT cost_center_app, cost_center_sap FROM dbo.sap_cost_center_mapping WHERE est_actif = 1 AND cost_center_sap IS NOT NULL AND cost_center_sap <> ''`,
+    );
+    return new Map(rows.map((r) => [r.cost_center_app as string, String(r.cost_center_sap).trim()]));
+  }
+
+  async setCostCenterMapping(
+    costCenterApp: string,
+    costCenterSap: string | null,
+  ): Promise<Array<{ costCenterApp: string; costCenterSap: string | null }>> {
+    const a = String(costCenterApp || '').trim();
+    if (!a) throw new BadRequestException('centre de coût (app) requis.');
+    const s = costCenterSap && String(costCenterSap).trim() ? String(costCenterSap).trim() : null;
+    const exists: any[] = await this.dataSource.query(
+      `SELECT 1 FROM dbo.sap_cost_center_mapping WHERE cost_center_app = @0`,
+      [a],
+    );
+    if (exists.length) {
+      await this.dataSource.query(
+        `UPDATE dbo.sap_cost_center_mapping SET cost_center_sap = @1, updated_at = SYSUTCDATETIME() WHERE cost_center_app = @0`,
+        [a, s],
+      );
+    } else {
+      await this.dataSource.query(
+        `INSERT INTO dbo.sap_cost_center_mapping (cost_center_app, cost_center_sap) VALUES (@0, @1)`,
+        [a, s],
+      );
+    }
+    return this.getCostCenterMapping();
+  }
+
   /**
    * Envoie une OPÉRATION de l'appli vers SAP : construit la pièce à partir de ses
    * écritures en partie double (compte = numero_compte du plan comptable, centre de
@@ -439,6 +486,7 @@ export class SapService {
     }
 
     const mapping = await this.getMappingMap();
+    const ccMap = await this.getCostCenterMap();
 
     const ecr: any[] = await this.dataSource.query(
       `SELECT e.debit, e.credit, e.type_compte AS tc, cc.code AS cc
@@ -459,12 +507,18 @@ export class SapService {
     const lignes = ecr.map((e) => {
       const credit = Number(e.credit ?? 0);
       const debit = Number(e.debit ?? 0);
+      // Centre de coût : traduit app → SAP via le mapping ; si non mappé, on n'en
+      // envoie pas (évite l'erreur « centre inexistant »).
+      const centreCout = e.cc ? ccMap.get(e.cc) || undefined : undefined;
+      // INVERSION débit/crédit : l'appli tient ses soldes en « crédit − débit »
+      // (miroir de SAP). Un CRÉDIT app (argent entrant / contrepartie) = un DÉBIT
+      // SAP, et inversement. Sans ça, la pièce SAP serait comptablement à l'envers.
       return {
         compteGL: String(mapping.get(e.tc)),
-        sens: (credit > 0 ? 'C' : 'D') as 'C' | 'D',
+        sens: (credit > 0 ? 'D' : 'C') as 'C' | 'D',
         montant: credit > 0 ? credit : debit,
         texte: (op.reference || op.type || 'Fond de Caisse') as string,
-        centreCout: e.cc || undefined,
+        centreCout,
       };
     });
 

@@ -8,7 +8,8 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
 import { useTypeBons, usePartenaires, usePays, useDivisions } from '@/api/referentiel';
 import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
-import { useVerifierClientSap, useVerifierCommandeSap } from '@/api/sap';
+import { SapClientVerify, SapCommandeVerify } from '@/components/sap/SapVerify';
+import { verifierClientSap, verifierCommandeSap } from '@/api/sap';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { Portefeuille } from '@/types/api';
@@ -21,65 +22,6 @@ const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const montantRegex = /^\d+(\.\d{1,4})?$/;
-
-/** Bouton inline « Vérifier SAP » d'un code client → auto-remplit le nom client. */
-function SapClientVerify({ code, onResolved }: { code: string; onResolved: (nom: string) => void }) {
-  const m = useVerifierClientSap();
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        disabled={!code?.trim() || m.isPending}
-        onClick={() => m.mutate(code.trim(), { onSuccess: (r) => { if (r.existe && r.nom) onResolved(r.nom); } })}
-        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
-      >
-        {m.isPending ? 'Vérif…' : 'Vérifier SAP'}
-      </button>
-      {m.data &&
-        (m.data.existe ? (
-          <span className="text-[11px] text-[#047857]">
-            ✓ {m.data.nom ?? 'trouvé'}
-            {m.data.ville ? ` · ${m.data.ville}` : ''}
-          </span>
-        ) : (
-          <span className="text-[11px] text-[#B42318]">Client introuvable dans SAP</span>
-        ))}
-      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
-    </div>
-  );
-}
-
-/** Bouton inline « Vérifier commande SAP » → type / fournisseur / usine source. */
-function SapCommandeVerify({ numero }: { numero: string }) {
-  const m = useVerifierCommandeSap();
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        disabled={!numero?.trim() || m.isPending}
-        onClick={() => m.mutate(numero.trim())}
-        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
-      >
-        {m.isPending ? 'Vérif…' : 'Vérifier commande SAP'}
-      </button>
-      {m.data &&
-        (m.data.existe ? (
-          <span className="text-[11px] text-[#047857]">
-            ✓{' '}
-            {m.data.fournisseur
-              ? `Fourn. ${m.data.fournisseur}${m.data.fournisseurNom ? ` — ${m.data.fournisseurNom}` : ''}`
-              : m.data.usineSource
-                ? `Transfert usine ${m.data.usineSource}`
-                : 'trouvée'}
-            {m.data.societe ? ` · Sté ${m.data.societe}` : ''}
-          </span>
-        ) : (
-          <span className="text-[11px] text-[#B42318]">Commande introuvable dans SAP</span>
-        ))}
-      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
-    </div>
-  );
-}
 
 const sousBonSchema = z.object({
   // Libellé requis sauf pour les types « nom client » (ex. restitution) — cf. superRefine.
@@ -329,9 +271,42 @@ export function BonCreatePage() {
     );
   };
 
-  const onSubmit = handleSubmit((values) => {
-    // Si le total dépasse le solde du portefeuille principal, on demande à l'utilisateur
-    // s'il veut formuler une demande d'extension.
+  // Contrôle SAP BLOQUANT : si le type exige un n° client / n° commande, on vérifie
+  // dans SAP avant de laisser créer le bon. Un code introuvable bloque la création.
+  // SAP injoignable n'empêche pas (on ne fige pas la saisie sur une panne SAP).
+  const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
+
+  const verifierSapAvantEnvoi = async (values: FormValues): Promise<string | null> => {
+    for (let i = 0; i < values.soubons.length; i++) {
+      const sb = values.soubons[i];
+      if (reqNumeroClient && sb.numeroClient?.trim()) {
+        try {
+          const r = await verifierClientSap(sb.numeroClient.trim());
+          if (!r.existe) return `Sous-bon ${i + 1} : le client « ${sb.numeroClient} » n'existe pas dans SAP.`;
+        } catch {
+          /* SAP injoignable : on laisse passer */
+        }
+      }
+      if (reqBl && sb.numeroBl?.trim()) {
+        try {
+          const r = await verifierCommandeSap(sb.numeroBl.trim());
+          if (!r.existe) return `Sous-bon ${i + 1} : la commande « ${sb.numeroBl} » n'existe pas dans SAP.`;
+        } catch {
+          /* SAP injoignable : on laisse passer */
+        }
+      }
+    }
+    return null;
+  };
+
+  const onSubmit = handleSubmit(async (values) => {
+    // 1) Vérification SAP bloquante des champs requis.
+    setSapCheck({ checking: true, error: null });
+    const sapErr = await verifierSapAvantEnvoi(values);
+    setSapCheck({ checking: false, error: sapErr });
+    if (sapErr) return;
+
+    // 2) Si le total dépasse le solde du portefeuille principal, on propose l'extension.
     if (isInsufficient) {
       setPendingValues(values);
       setExtensionDescription('');
@@ -603,16 +578,18 @@ export function BonCreatePage() {
                   </p>
                 )}
               </div>
-              {reqBl && (
-                <div className="space-y-2">
-                  <Label>N° Document</Label>
-                  <Input {...register(`soubons.${index}.numeroBl`)} />
-                  {errors.soubons?.[index]?.numeroBl && (
-                    <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
-                  )}
-                  <SapCommandeVerify numero={watch(`soubons.${index}.numeroBl`) ?? ''} />
-                </div>
-              )}
+              {/* Toujours affiché ; obligatoire seulement si le type l'exige (requiertBl). */}
+              <div className="space-y-2">
+                <Label>
+                  N° Document{' '}
+                  {!reqBl && <span className="text-xs font-normal text-muted-foreground">(optionnel)</span>}
+                </Label>
+                <Input {...register(`soubons.${index}.numeroBl`)} />
+                {errors.soubons?.[index]?.numeroBl && (
+                  <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
+                )}
+                <SapCommandeVerify numero={watch(`soubons.${index}.numeroBl`) ?? ''} />
+              </div>
               <div className="space-y-2">
                 <Label>Code manutention</Label>
                 <Input {...register(`soubons.${index}.codeManutention`)} />
@@ -650,13 +627,16 @@ export function BonCreatePage() {
           <Button type="button" variant="outline" onClick={() => append({ ...emptySousBon })}>
             <Plus className="h-4 w-4" /> Ajouter un sous-bon
           </Button>
-          <Button type="submit" disabled={createBon.isPending}>
-            {createBon.isPending
-              ? 'Création…'
-              : isInsufficient
-                ? 'Créer & demander extension'
-                : 'Créer le bon'}
+          <Button type="submit" disabled={createBon.isPending || sapCheck.checking}>
+            {sapCheck.checking
+              ? 'Vérification SAP…'
+              : createBon.isPending
+                ? 'Création…'
+                : isInsufficient
+                  ? 'Créer & demander extension'
+                  : 'Créer le bon'}
           </Button>
+          {sapCheck.error && <p className="text-sm text-destructive">{sapCheck.error}</p>}
           {createBon.isError && (
             <p className="text-sm text-destructive">{apiErrorMessage(createBon.error, 'Création impossible')}</p>
           )}

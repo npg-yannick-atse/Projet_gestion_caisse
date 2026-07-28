@@ -22,14 +22,14 @@ export class CaissesController {
   @Post()
   @ApiOperation({ summary: 'Créer une caisse (créée FERMÉE)' })
   async create(@Body() dto: CreateCaisseDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_MODIFIER', 'créer une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_MODIFIER', 'créer une caisse');
     return this.caissesService.create(dto, user.sub);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour une caisse' })
   async update(@Param('id') id: string, @Body() dto: UpdateCaisseDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_MODIFIER', 'modifier une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_MODIFIER', 'modifier une caisse');
     return this.caissesService.update(id, dto, user.sub);
   }
 
@@ -40,7 +40,7 @@ export class CaissesController {
     @Body() dto: { estActif: boolean },
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_MODIFIER', 'activer/désactiver une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_MODIFIER', 'activer/désactiver une caisse');
     return this.caissesService.toggleActif(id, dto.estActif, user.sub);
   }
 
@@ -48,7 +48,7 @@ export class CaissesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer une caisse (soft-delete, refusée si la caisse est ouverte)' })
   async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_SUPPRIMER', 'supprimer une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_SUPPRIMER', 'supprimer une caisse');
     await this.caissesService.softDelete(id, user.sub);
   }
 
@@ -137,14 +137,14 @@ export class CaissesController {
   @Post(':id/ouvrir')
   @ApiOperation({ summary: 'Ouvrir une caisse (crée une session) — caissier + admins' })
   async open(@Param('id') id: string, @Body() dto: OpenCaisseDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_OUVRIR', 'ouvrir une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_OUVRIR', 'ouvrir une caisse');
     return this.caissesService.open(id, user.sub, dto.soldeOuverture);
   }
 
   @Post(':id/cloturer')
   @ApiOperation({ summary: 'Clôturer manuellement une caisse — caissier + admins' })
   async close(@Param('id') id: string, @Body() dto: CloseCaisseDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'CAISSE_CLOTURER', 'clôturer une caisse');
+    await this.authz.assertPermissionStrict(user.sub, 'CAISSE_CLOTURER', 'clôturer une caisse');
     return this.caissesService.close(id, user.sub, dto.soldeCloture);
   }
 }

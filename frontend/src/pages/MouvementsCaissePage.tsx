@@ -5,7 +5,8 @@ import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useRecharge } from '@/api/recharge';
 import { useEncaissement } from '@/api/encaissement';
-import { useVerifierClientSap } from '@/api/sap';
+import { SapClientVerify } from '@/components/sap/SapVerify';
+import { verifierClientSap } from '@/api/sap';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
@@ -30,33 +31,6 @@ const inputClass =
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
 export type MouvementMode = 'ENCAISSEMENT' | 'RECHARGE';
-
-/** Bouton inline « Vérifier SAP » d'un code client → auto-remplit le nom client. */
-function SapClientVerify({ code, onResolved }: { code: string; onResolved: (nom: string) => void }) {
-  const m = useVerifierClientSap();
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        disabled={!code?.trim() || m.isPending}
-        onClick={() => m.mutate(code.trim(), { onSuccess: (r) => { if (r.existe && r.nom) onResolved(r.nom); } })}
-        className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2.5 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
-      >
-        {m.isPending ? 'Vérif…' : 'Vérifier SAP'}
-      </button>
-      {m.data &&
-        (m.data.existe ? (
-          <span className="text-[11px] text-[#047857]">
-            ✓ {m.data.nom ?? 'trouvé'}
-            {m.data.ville ? ` · ${m.data.ville}` : ''}
-          </span>
-        ) : (
-          <span className="text-[11px] text-[#B42318]">Client introuvable dans SAP</span>
-        ))}
-      {m.isError && <span className="text-[11px] text-[#B45309]">SAP indisponible</span>}
-    </div>
-  );
-}
 
 /**
  * Page unifiée « Mouvements de caisse » : Encaissement (entrée d'argent dans une
@@ -101,6 +75,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   const [encCaisseId, setEncCaisseId] = useState('');
   const [clientNom, setClientNom] = useState('');
   const [clientNumero, setClientNumero] = useState('');
+  const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
   const [encMotif, setEncMotif] = useState('');
 
   // Champs recharge.
@@ -146,11 +121,27 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     return { totals, last: list[0], count: list.length };
   }, [ops]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) return;
     setDone(false);
+    setSapCheck({ checking: false, error: null });
     if (mode === 'ENCAISSEMENT') {
+      // Contrôle SAP bloquant : si un n° client est saisi, il doit exister dans SAP.
+      // (SAP injoignable n'empêche pas l'encaissement.)
+      if (clientNumero.trim()) {
+        setSapCheck({ checking: true, error: null });
+        try {
+          const r = await verifierClientSap(clientNumero.trim());
+          if (!r.existe) {
+            setSapCheck({ checking: false, error: `Le client « ${clientNumero.trim()} » n'existe pas dans SAP.` });
+            return;
+          }
+        } catch {
+          /* SAP injoignable : on laisse passer */
+        }
+        setSapCheck({ checking: false, error: null });
+      }
       encaissement.mutate(
         {
           caisseId: encCaisseId,
@@ -515,17 +506,18 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                 {isEnc ? 'Encaissement enregistré.' : 'Recharge effectuée.'}
               </p>
             )}
-            {isError && (
+            {sapCheck.error && <p className="mr-auto text-sm text-[#EF4444]">{sapCheck.error}</p>}
+            {isError && !sapCheck.error && (
               <p className="mr-auto text-sm text-[#EF4444]">
                 {apiErrorMessage(error, isEnc ? 'Encaissement impossible' : 'Recharge impossible')}
               </p>
             )}
             <button
               type="submit"
-              disabled={!valid || busy}
+              disabled={!valid || busy || sapCheck.checking}
               className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {busy ? 'Traitement…' : isEnc ? 'Encaisser' : 'Valider la recharge'}
+              {sapCheck.checking ? 'Vérification SAP…' : busy ? 'Traitement…' : isEnc ? 'Encaisser' : 'Valider la recharge'}
             </button>
           </div>
         </form>

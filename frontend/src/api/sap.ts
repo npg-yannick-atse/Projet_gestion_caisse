@@ -161,6 +161,39 @@ export function useSetSapMapping() {
     onSuccess: (data) => qc.setQueryData(['sap-mapping'], data),
   });
 }
+
+/* --------------------------- Mapping centres de coût --------------------------- */
+
+export interface SapCcMappingRow {
+  costCenterApp: string;
+  costCenterSap: string | null;
+}
+
+export async function getSapCostCenterMapping(): Promise<SapCcMappingRow[]> {
+  const { data } = await api.get<SapCcMappingRow[]>('/sap/cost-centers');
+  return data;
+}
+
+export async function setSapCostCenterMapping(
+  costCenterApp: string,
+  costCenterSap: string | null,
+): Promise<SapCcMappingRow[]> {
+  const { data } = await api.post<SapCcMappingRow[]>('/sap/cost-centers', { costCenterApp, costCenterSap });
+  return data;
+}
+
+export function useSapCostCenterMapping() {
+  return useQuery({ queryKey: ['sap-cc-mapping'], queryFn: getSapCostCenterMapping });
+}
+
+export function useSetSapCostCenterMapping() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ costCenterApp, costCenterSap }: { costCenterApp: string; costCenterSap: string | null }) =>
+      setSapCostCenterMapping(costCenterApp, costCenterSap),
+    onSuccess: (data) => qc.setQueryData(['sap-cc-mapping'], data),
+  });
+}
 export function useVerifierClientSap() {
   return useMutation({ mutationFn: verifierClientSap });
 }

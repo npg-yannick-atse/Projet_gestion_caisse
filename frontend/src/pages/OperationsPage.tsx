@@ -100,9 +100,27 @@ function OperationSapCell({ op, canSend }: { op: Operation; canSend: boolean }) 
     return <span className="text-[11px] text-[#CBD5E1]">—</span>;
   }
   const res = envoyer.data;
+  // Messages d'erreur SAP : du dernier envoi (res) ou stockés sur l'opération (sap_message).
+  const rawMsgs =
+    res && !res.ok
+      ? res.messages
+      : op.sapStatut === 'ERREUR' && op.sapMessage
+        ? op.sapMessage.split(' | ')
+        : [];
+  // On garde les vraies erreurs [E], dédoublonnées, sans l'en-tête technique « BKPFF $ … ».
+  const erreurs = Array.from(
+    new Set(
+      rawMsgs
+        .filter((m) => m.startsWith('[E]'))
+        .map((m) => m.replace(/^\[E\]\s*/, ''))
+        .filter((m) => !/BKPFF\s*\$/.test(m)),
+    ),
+  );
+  const enErreur = erreurs.length > 0 || envoyer.isError;
+
   return (
-    <div className="flex flex-col gap-0.5">
-      {canSend ? (
+    <div className="flex flex-col gap-1">
+      {canSend && (
         <button
           type="button"
           onClick={() => {
@@ -111,18 +129,22 @@ function OperationSapCell({ op, canSend }: { op: Operation; canSend: boolean }) 
           disabled={envoyer.isPending}
           className="w-fit rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2 py-0.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
         >
-          {envoyer.isPending ? 'Envoi…' : '→ SAP'}
+          {envoyer.isPending ? 'Envoi…' : enErreur ? 'Réessayer → SAP' : '→ SAP'}
         </button>
-      ) : op.sapStatut === 'ERREUR' ? (
-        <span className="text-[11px] text-[#B42318]" title={op.sapMessage ?? ''}>erreur</span>
-      ) : (
-        <span className="text-[11px] text-[#94A3B8]">—</span>
       )}
-      {envoyer.isError && <span className="text-[10px] text-[#B42318]">{apiErrorMessage(envoyer.error, 'Échec')}</span>}
-      {res && !res.ok && (
-        <span className="text-[10px] text-[#B42318]" title={res.messages.join(' | ')}>
-          refusé
+      {envoyer.isError && (
+        <span className="max-w-[280px] text-[10px] leading-tight text-[#B42318]">
+          {apiErrorMessage(envoyer.error, 'Échec')}
         </span>
+      )}
+      {erreurs.length > 0 && (
+        <ul className="max-w-[280px] space-y-0.5">
+          {erreurs.map((m, i) => (
+            <li key={i} className="text-[10px] leading-tight text-[#B42318]">
+              • {m}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

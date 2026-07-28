@@ -70,4 +70,16 @@ export class SapController {
   setMapping(@Body() body: { typeCompte: string; compteSap: string | null }) {
     return this.sap.setMappingCompte(body.typeCompte, body.compteSap);
   }
+
+  @Get('cost-centers')
+  @ApiOperation({ summary: 'Mapping des centres de coût (app → SAP)' })
+  getCostCenters() {
+    return this.sap.getCostCenterMapping();
+  }
+
+  @Post('cost-centers')
+  @ApiOperation({ summary: 'Définir le centre de coût SAP d’un centre de coût app' })
+  setCostCenter(@Body() body: { costCenterApp: string; costCenterSap: string | null }) {
+    return this.sap.setCostCenterMapping(body.costCenterApp, body.costCenterSap);
+  }
 }

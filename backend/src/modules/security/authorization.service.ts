@@ -165,6 +165,16 @@ export class AuthorizationService {
   }
 
   /**
+   * Comme assertPermission mais SANS bypass admin : la permission est exigée même
+   * pour SUPER_ADMIN / ADMINISTRATEUR. Utilisé là où la gouvernance impose que
+   * TOUTE action passe par une permission explicite (ex. caisses & portefeuilles).
+   */
+  async assertPermissionStrict(userId: string, code: string, action: string): Promise<void> {
+    if (await this.hasPermission(userId, code)) return;
+    throw new ForbiddenException(`Action non autorisée (${action}). Permission requise : ${code}.`);
+  }
+
+  /**
    * Permissions effectives d'un utilisateur = union des trois canaux :
    *  - rôles    : sec_user_role → sec_role_permission
    *  - profils  : sec_user_profil → sec_profil_permission

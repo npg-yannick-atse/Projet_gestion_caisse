@@ -10,6 +10,8 @@ import {
   useListComptesSap,
   useSapMapping,
   useSetSapMapping,
+  useSapCostCenterMapping,
+  useSetSapCostCenterMapping,
   type LigneEcriture,
   type SapClientInfo,
   type SapCommandeInfo,
@@ -80,6 +82,55 @@ function Messages({ messages }: { messages: string[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Mapping centre de coût (appli) → centre de coût SAP. Requis pour poster avec analytique. */
+function CostCenterMappingPanel() {
+  const { data: rows } = useSapCostCenterMapping();
+  const save = useSetSapCostCenterMapping();
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (rows) setDraft(Object.fromEntries(rows.map((r) => [r.costCenterApp, r.costCenterSap ?? ''])));
+  }, [rows]);
+  const cls =
+    'flex h-8 w-40 rounded-[7px] border border-[rgba(15,76,129,0.12)] bg-white px-2 text-xs outline-none focus:border-[#1A6DB5]';
+
+  return (
+    <Panel>
+      <PanelHeader title="Mapping centres de coût SAP" />
+      <div className="space-y-2 p-[18px]">
+        <p className="text-[11px] text-[#64748B]">
+          Traduit chaque centre de coût de l’appli vers le centre de coût SAP. Laissé vide = aucun centre envoyé (évite
+          l’erreur « centre inexistant »).
+        </p>
+        {(rows ?? []).map((r) => (
+          <div key={r.costCenterApp} className="flex items-center gap-2">
+            <span className="w-40 text-xs font-medium text-[#0F172A]">{r.costCenterApp}</span>
+            <span className="text-[#94A3B8]">→</span>
+            <input
+              className={cls}
+              placeholder="Centre de coût SAP"
+              value={draft[r.costCenterApp] ?? ''}
+              onChange={(e) => setDraft((d) => ({ ...d, [r.costCenterApp]: e.target.value }))}
+            />
+            <button
+              type="button"
+              onClick={() => save.mutate({ costCenterApp: r.costCenterApp, costCenterSap: draft[r.costCenterApp] || null })}
+              disabled={save.isPending}
+              className="rounded-[7px] border border-[rgba(15,76,129,0.2)] px-2 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+            >
+              Enregistrer
+            </button>
+            {r.costCenterSap ? (
+              <span className="text-[11px] text-[#047857]">✓ {r.costCenterSap}</span>
+            ) : (
+              <span className="text-[11px] text-[#94A3B8]">non envoyé</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -497,6 +548,8 @@ export function SapTestPage() {
       </Panel>
 
       <MappingPanel />
+
+      <CostCenterMappingPanel />
 
       <EcriturePanel />
 
