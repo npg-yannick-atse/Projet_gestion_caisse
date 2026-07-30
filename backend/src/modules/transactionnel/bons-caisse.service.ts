@@ -329,7 +329,15 @@ export class BonsCaisseService {
       // DÉBIT portefeuille (le solde baisse) / CRÉDIT charge imputée au centre de coût.
       await this.ledger.createPairedEcritures(
         { compteId: sousBon.portefeuilleId, typeCompte: 'PORTEFEUILLE', deviseId: sousBon.deviseId, costCenterId: sousBon.costCenterId },
-        { compteId: sousBon.costCenterId, typeCompte: 'CHARGE', deviseId: sousBon.deviseId, costCenterId: sousBon.costCenterId },
+        {
+          compteId: sousBon.costCenterId,
+          typeCompte: 'CHARGE',
+          deviseId: sousBon.deviseId,
+          costCenterId: sousBon.costCenterId,
+          // Lien vers le sous-bon → sa nature comptable → son compte PCGG (envoi SAP).
+          referenceSousBonId: String(sousBon.id),
+          referenceBonId: bonCaisse.bonSourceId != null ? String(bonCaisse.bonSourceId) : undefined,
+        },
         montantEffectif,
         txUuid,
         manager,

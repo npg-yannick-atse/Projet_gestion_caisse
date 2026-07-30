@@ -687,15 +687,29 @@ export class SapService {
     const ccMap = await this.getCostCenterMap();
 
     const ecr: any[] = await this.dataSource.query(
-      `SELECT e.debit, e.credit, e.type_compte AS tc, cc.code AS cc
+      `SELECT e.debit, e.credit, e.type_compte AS tc, cc.code AS cc, nc.code_comptable_sap AS compte_nature
          FROM dbo.trx_ecriture_comptable e
          LEFT JOIN dbo.ref_cost_center cc ON cc.id = e.cost_center_id
+         LEFT JOIN dbo.trx_sous_bon sb ON sb.id = e.reference_sous_bon_id
+         LEFT JOIN dbo.ref_nature_operation no ON no.id = sb.nature_operation_id
+         LEFT JOIN dbo.ref_nature_comptable nc ON nc.id = no.nature_comptable_id
         WHERE e.transaction_uuid = (SELECT transaction_uuid FROM dbo.trx_operation WHERE id = @0)
         ORDER BY e.id`,
       [id],
     );
     if (!ecr.length) throw new BadRequestException('Opération sans écritures comptables.');
-    const nonMappes = [...new Set(ecr.map((e) => e.tc).filter((tc) => !mapping.get(tc)))];
+
+    // Compte SAP d'une ligne : pour une CHARGE, on utilise EN PRIORITÉ le compte de
+    // la nature comptable du sous-bon (imputation juste, ex. Billet d'avion → Voyages) ;
+    // sinon on retombe sur le mapping générique par type de compte.
+    const resolveCompte = (e: any): string | undefined => {
+      if (e.tc === 'CHARGE' && e.compte_nature && String(e.compte_nature).trim()) {
+        return String(e.compte_nature).trim();
+      }
+      return mapping.get(e.tc);
+    };
+
+    const nonMappes = [...new Set(ecr.filter((e) => !resolveCompte(e)).map((e) => e.tc))];
     if (nonMappes.length) {
       throw new BadRequestException(
         `Types de compte non mappés : ${nonMappes.join(', ')}. Renseignez le mapping comptable (page SAP) avant l'envoi.`,
@@ -712,7 +726,7 @@ export class SapService {
       // (miroir de SAP). Un CRÉDIT app (argent entrant / contrepartie) = un DÉBIT
       // SAP, et inversement. Sans ça, la pièce SAP serait comptablement à l'envers.
       return {
-        compteGL: String(mapping.get(e.tc)),
+        compteGL: String(resolveCompte(e)),
         sens: (credit > 0 ? 'D' : 'C') as 'C' | 'D',
         montant: credit > 0 ? credit : debit,
         texte: (op.reference || op.type || 'Fond de Caisse') as string,

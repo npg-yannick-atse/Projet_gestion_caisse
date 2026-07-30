@@ -1264,7 +1264,15 @@ export class BonsService {
         // Partie double (cf. Dossier) : DÉBIT portefeuille / CRÉDIT charge (centre de coût).
         await this.ledger.createPairedEcritures(
           { compteId: sb.portefeuilleId, typeCompte: 'PORTEFEUILLE', deviseId: sb.deviseId, costCenterId: sb.costCenterId },
-          { compteId: sb.costCenterId, typeCompte: 'CHARGE', deviseId: sb.deviseId, costCenterId: sb.costCenterId },
+          {
+            compteId: sb.costCenterId,
+            typeCompte: 'CHARGE',
+            deviseId: sb.deviseId,
+            costCenterId: sb.costCenterId,
+            // Lien sous-bon → nature comptable → compte PCGG (envoi SAP).
+            referenceSousBonId: String(sb.id),
+            referenceBonId: String(sb.bonId),
+          },
           sb.montant,
           txUuid,
           manager,
