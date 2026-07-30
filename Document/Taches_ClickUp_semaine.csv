@@ -1,0 +1,52 @@
+Application,Task Name,Parent Task,Status,Start Date,Due Date,Notes
+Gestion de Caisse,Employes & Benefices (Gestion de Caisse),,in progress,2026-07-17,2026-07-21,Master Data : employes + types de benefice + benefices
+Gestion de Caisse,Migration BDD 0016/0017 (tables + index unique filtre),Employes & Benefices (Gestion de Caisse),complete,2026-07-17,2026-07-17,Appliquee et verifiee en base
+Gestion de Caisse,"Backend (entites, service, controleur, permissions)",Employes & Benefices (Gestion de Caisse),complete,2026-07-17,2026-07-17,Compile OK ; regle 1 benefice actif par type + masquage salaire
+Gestion de Caisse,"Frontend (ecrans Employes, modale Benefices, Types de benefice)",Employes & Benefices (Gestion de Caisse),complete,2026-07-17,2026-07-17,Compile OK ; ajoute dans Master Data
+Gestion de Caisse,Retrait menu Plan Comptable,Employes & Benefices (Gestion de Caisse),complete,2026-07-17,2026-07-17,Menu + route retires ; code/tables conserves
+Gestion de Caisse,Test fonctionnel bout-en-bout,Employes & Benefices (Gestion de Caisse),to do,2026-07-20,2026-07-20,Creer employe + benefice + verifier refus 2e benefice actif meme type
+Gestion de Caisse,Deploiement (redemarrage backend + build frontend),Employes & Benefices (Gestion de Caisse),to do,2026-07-20,2026-07-21,Charger le nouveau module cote serveur
+Gestion de Caisse (Mobile),Mobile - correctifs & APK,,in progress,2026-07-17,2026-07-23,Correctifs code faits ; reste build + distribution
+Gestion de Caisse (Mobile),Correctif Nature d'operation a la creation,Mobile - correctifs & APK,complete,2026-07-17,2026-07-17,Debloque la creation de bon (etait 400)
+Gestion de Caisse (Mobile),Icones barre d'onglets (emojis vers pictogrammes),Mobile - correctifs & APK,complete,2026-07-17,2026-07-17,Ionicons ; prennent enfin la couleur active/inactive
+Gestion de Caisse (Mobile),Debloquer le build (EAS cloud) : eas login + eas init,Mobile - correctifs & APK,to do,2026-07-21,2026-07-21,Contourne la limite Windows 260 caracteres
+Gestion de Caisse (Mobile),Build APK (profil preview EAS),Mobile - correctifs & APK,to do,2026-07-21,2026-07-22,Genere l'APK a jour
+Gestion de Caisse (Mobile),Redistribution de l'APK aux testeurs,Mobile - correctifs & APK,to do,2026-07-22,2026-07-22,Sinon les correctifs n'atteignent pas les utilisateurs
+Gestion de Caisse (Mobile),Test creation de bon sur le nouvel APK,Mobile - correctifs & APK,to do,2026-07-22,2026-07-23,Valider le cas qui echouait en 400
+Documentation,Documentation reunion,,in progress,2026-07-17,2026-07-17,Point Applications
+Documentation,MAJ Point Applications (energie + conteneurs sans LE + retard livraison),Documentation reunion,complete,2026-07-17,2026-07-17,Document regenere et verifie
+Gestion de Caisse,Securite,,to do,2026-07-20,2026-07-21,Secrets exposes dans le depot
+Gestion de Caisse,Retirer backend/.env du suivi git + rotation des secrets,Securite,to do,2026-07-20,2026-07-21,.env contient identifiants BDD + secrets JWT
+Gestion de Caisse,Git,,to do,2026-07-20,2026-07-20,Versionner le travail
+Gestion de Caisse,Commit + push de tout le travail non commite,Git,to do,2026-07-20,2026-07-20,Employes/Benefices + mobile + docs + retrait menu
+Gestion de Caisse (SAP),Integration SAP,,blocked,2026-07-20,,Depend de l'equipe SAP - non garanti cette semaine
+Gestion de Caisse (SAP),"Obtenir les referentiels (comptes, natures) de l'equipe SAP",Integration SAP,blocked,,,Prerequis externe
+Gestion de Caisse (SAP),Brancher la determination de compte + envoi des ecritures,Integration SAP,blocked,,,Depend des referentiels SAP
+Gestion de Caisse (Mobile),Mobile push (app fermee),,blocked,2026-07-20,,Depend d'identifiants Firebase - non garanti cette semaine
+Gestion de Caisse (Mobile),eas init projectId + Firebase google-services.json + FCM V1,Mobile push (app fermee),blocked,,,Identifiants Firebase a obtenir
+Station,Station - amelioration de l'interface,,to do,2026-07-21,2026-07-24,Mise a jour visant a ameliorer l'ergonomie / presentation
+Station,Cadrer les ecrans / points d'interface a revoir,Station - amelioration de l'interface,to do,2026-07-21,2026-07-21,
+Station,Realiser la mise a jour et la faire valider,Station - amelioration de l'interface,to do,2026-07-22,2026-07-24,
+NpgReclamation,NpgReclamation - autocompletion des articles,,to do,2026-07-21,2026-07-24,Ajout de l'autocompletion (recherche assistee) des articles
+NpgReclamation,Implementer le champ d'autocompletion (recherche + selection),NpgReclamation - autocompletion des articles,to do,2026-07-21,2026-07-23,
+NpgReclamation,Tester avec le referentiel articles et valider,NpgReclamation - autocompletion des articles,to do,2026-07-23,2026-07-24,
+Tags,Tags - script + interface,,in progress,2026-07-20,2026-07-23,Finalisation du script des Tags et de leur interface
+Tags,Finaliser le script,Tags - script + interface,in progress,2026-07-20,2026-07-22,
+Tags,Completer / relier l'interface et valider le rendu,Tags - script + interface,to do,2026-07-22,2026-07-23,
+Ecrans de Section,Ecrans de Section - peaufinage interface,,to do,2026-07-22,2026-07-24,"Revoir et affiner l'interface (presentation, ergonomie, coherence)"
+Ecrans de Section,Identifier les ecrans a retravailler et les points a ameliorer,Ecrans de Section - peaufinage interface,to do,2026-07-22,2026-07-22,
+Ecrans de Section,Realiser le peaufinage et valider le rendu,Ecrans de Section - peaufinage interface,to do,2026-07-23,2026-07-24,
+Situation Dossier,Situation Dossier - suivi des dossiers,,in progress,2026-07-20,2026-07-24,Application de suivi de la situation des dossiers
+Situation Dossier,Poursuivre le developpement et valider les ecrans de suivi,Situation Dossier - suivi des dossiers,in progress,2026-07-20,2026-07-24,
+Scripts de notification,Script de Notification Conteneur,,complete,2026-07-17,2026-07-17,En service ; alertes conteneurs
+Scripts de notification,ALERTE - Conteneurs embarques sans LE dans SAP,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,Nouveau - vient d'etre implemente
+Scripts de notification,ALERTE - Conteneurs en retard de livraison,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,Nouveau - vient d'etre implemente
+Scripts de notification,ALERTE - Conteneurs en attente d'accord de depotage,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,En service
+Scripts de notification,ALERTE - Conteneurs en attente de depotage,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,En service
+Scripts de notification,ALERTE - Conteneurs payes et en attente,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,En service
+Scripts de notification,Rapport des dossiers avec conteneurs sans livraison,Script de Notification Conteneur,complete,2026-07-17,2026-07-17,En service
+Scripts de notification,Script - Liste des OF interrompus,,complete,2026-07-17,2026-07-17,En service (ex. 9 OF)
+Scripts de notification,Script - Nombre de palettes en retard,,complete,2026-07-17,2026-07-17,En service
+Traitement des donnees de l'energie,Traitement des donnees de l'energie,,in progress,2026-07-20,2026-07-24,Collecte des donnees de consommation + rapports de suivi
+Traitement des donnees de l'energie,Poursuivre le traitement et fiabiliser la collecte des donnees,Traitement des donnees de l'energie,in progress,2026-07-20,2026-07-23,
+Traitement des donnees de l'energie,Finaliser les rapports de consommation et les faire valider,Traitement des donnees de l'energie,to do,2026-07-23,2026-07-24,

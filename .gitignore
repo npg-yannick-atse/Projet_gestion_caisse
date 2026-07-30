@@ -38,3 +38,8 @@ Thumbs.db
 
 # Fichiers Claude / outputs
 .claude/
+
+# Fichiers sensibles / verrous rangés dans Document/
+Document/sap.env
+Document/comptes_test.txt
+~$*
