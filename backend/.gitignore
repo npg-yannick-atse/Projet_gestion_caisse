@@ -10,3 +10,8 @@ coverage/
 
 # Logs de test (JSONL)
 logs/
+
+# Secrets d'environnement (ne jamais committer)
+.env
+.env.*
+!.env.example
