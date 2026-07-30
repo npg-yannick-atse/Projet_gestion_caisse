@@ -4,16 +4,19 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMyBons } from '@/api/bons';
 import { useAuthStore } from '@/store/auth';
 import { DateField } from '@/components/DateField';
 import { STATUT_META, formatDate, formatMontant, todayISO } from '@/lib/format';
-import type { Bon } from '@/types';
+import type { Bon, BonStatut } from '@/types';
 
 export default function MesBonsScreen() {
   const router = useRouter();
@@ -26,6 +29,9 @@ export default function MesBonsScreen() {
 
   const { data: bons, isLoading, isError, refetch, isRefetching } = useMyBons(user?.id, { dateFrom, dateTo });
 
+  const [search, setSearch] = useState('');
+  const [statutFilter, setStatutFilter] = useState<BonStatut | 'TOUTES'>('TOUTES');
+
   // Total des bons déjà décaissés sur la période filtrée.
   const totalDecaisse = useMemo(() => {
     const list: Bon[] = bons ?? [];
@@ -33,6 +39,21 @@ export default function MesBonsScreen() {
       .filter((b) => b.statut === 'DECAISSE')
       .reduce((s, b) => s + Number(b.montantTotal || 0), 0);
   }, [bons]);
+
+  // Statuts présents (pour les puces de filtre) + recherche (n° / montant).
+  const statutsPresents = useMemo(() => {
+    const list: Bon[] = bons ?? [];
+    return [...new Set(list.map((b) => b.statut))];
+  }, [bons]);
+  const filteredBons = useMemo(() => {
+    const list: Bon[] = bons ?? [];
+    const q = search.trim().toLowerCase();
+    return list.filter(
+      (b) =>
+        (statutFilter === 'TOUTES' || b.statut === statutFilter) &&
+        (!q || b.numero.toLowerCase().includes(q) || String(b.montantTotal).includes(q)),
+    );
+  }, [bons, search, statutFilter]);
 
   const renderItem = useCallback(
     ({ item }: { item: Bon }) => {
@@ -83,6 +104,43 @@ export default function MesBonsScreen() {
         <Text style={styles.summaryValue}>{formatMontant(totalDecaisse)}</Text>
       </View>
 
+      {/* Recherche */}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={16} color="#94A3B8" />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Rechercher (n°, montant)…"
+          placeholderTextColor="#94A3B8"
+          autoCorrect={false}
+        />
+        {search ? (
+          <Pressable onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color="#CBD5E1" />
+          </Pressable>
+        ) : null}
+      </View>
+
+      {/* Puces de statut */}
+      {statutsPresents.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {(['TOUTES', ...statutsPresents] as (BonStatut | 'TOUTES')[]).map((s) => {
+            const active = statutFilter === s;
+            const label = s === 'TOUTES' ? 'Tous' : STATUT_META[s]?.label ?? s;
+            return (
+              <Pressable
+                key={s}
+                onPress={() => setStatutFilter(s)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color="#0F4C81" />
@@ -96,7 +154,7 @@ export default function MesBonsScreen() {
         </View>
       ) : (
         <FlatList
-          data={bons ?? []}
+          data={filteredBons}
           keyExtractor={(b) => b.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
@@ -104,7 +162,10 @@ export default function MesBonsScreen() {
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0F4C81" />}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.empty}>Aucun bon sur cette période.</Text>
+              <Ionicons name="file-tray-outline" size={40} color="#CBD5E1" />
+              <Text style={styles.empty}>
+                {search || statutFilter !== 'TOUTES' ? 'Aucun bon ne correspond.' : 'Aucun bon sur cette période.'}
+              </Text>
             </View>
           }
         />
@@ -146,6 +207,25 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { fontSize: 12, fontWeight: '600', color: '#047857' },
   summaryValue: { fontSize: 18, fontWeight: '800', color: '#047857' },
+  searchWrap: {
+    marginHorizontal: 14,
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: '#0F172A' },
+  chips: { gap: 8, paddingHorizontal: 14, paddingTop: 10 },
+  chip: { borderRadius: 999, borderWidth: 1, borderColor: '#CBD5E1', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
+  chipActive: { backgroundColor: '#0F4C81', borderColor: '#0F4C81' },
+  chipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  chipTextActive: { color: '#fff' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   listContent: { padding: 14, flexGrow: 1 },
   sep: { height: 10 },

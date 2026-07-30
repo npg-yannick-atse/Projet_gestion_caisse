@@ -17,6 +17,8 @@ import { useMyBonPerimeter, listPartenaires, useTypeBons, usePays, useDivisions 
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
 import { RemoteSelect } from '@/components/RemoteSelect';
+import { useToast } from '@/store/toast';
+import { notifySuccess, notifyError, tapLight } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
 import type { CostCenter, Division, NatureOperation, Partenaire, Pays, Portefeuille, TypeBon } from '@/types';
 
@@ -47,6 +49,7 @@ export default function NouvelleDemandeScreen() {
   const [porteur, setPorteur] = useState('');
   const [estRecurrent, setEstRecurrent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const showToast = useToast((s) => s.show);
 
   const portefeuilles: Portefeuille[] = perimeter?.portefeuilles ?? [];
   const costCenters: CostCenter[] = perimeter?.costCenters ?? [];
@@ -168,8 +171,11 @@ export default function NouvelleDemandeScreen() {
         ],
       });
       resetForm();
+      notifySuccess();
+      showToast('Bon créé ✓', 'success');
       router.replace('/'); // retour à « Mes bons »
     } catch (e) {
+      notifyError();
       setError(apiErrorMessage(e, 'Création impossible'));
     }
   }

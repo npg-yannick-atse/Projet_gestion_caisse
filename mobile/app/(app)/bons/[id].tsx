@@ -14,6 +14,8 @@ import { useBon, useSousBons, useValidateBon } from '@/api/bons';
 import { useCostCenters, useNaturesOperation, usePartenaires } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { STATUT_META, formatDate, formatMontant } from '@/lib/format';
+import { useToast } from '@/store/toast';
+import { notifySuccess, notifyError } from '@/lib/haptics';
 import { useCanValidate } from '@/lib/roles';
 import type { BonStatut, CostCenter, NatureOperation, Partenaire, SousBon } from '@/types';
 
@@ -31,6 +33,7 @@ export default function BonDetailScreen() {
 
   const [commentaire, setCommentaire] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const showToast = useToast((s) => s.show);
   // Sous-bons dépliés (tap pour voir le détail).
   const [openSb, setOpenSb] = useState<Set<string>>(new Set());
   function toggleSb(sbId: string) {
@@ -66,8 +69,11 @@ export default function BonDetailScreen() {
     setError(null);
     try {
       await validate.mutateAsync({ approuve, commentaire: commentaire.trim() || undefined });
+      notifySuccess();
+      showToast(approuve ? 'Bon validé ✓' : 'Bon refusé', approuve ? 'success' : 'info');
       router.back();
     } catch (e) {
+      notifyError();
       setError(apiErrorMessage(e, approuve ? 'Validation impossible' : 'Refus impossible'));
     }
   }
