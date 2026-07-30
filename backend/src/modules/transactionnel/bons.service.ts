@@ -131,6 +131,36 @@ export class BonsService {
         }
       }
     }
+    // Type exigeant un partenaire : présence obligatoire ET le partenaire doit être
+    // relié à un fournisseur SAP (n° fournisseur / LIFNR). Contrôle serveur (vaut pour
+    // l'API et le mobile), pas seulement le formulaire web.
+    if (typeBon?.requiertPartenaire) {
+      for (const sb of input.soubons) {
+        if (!sb.partenaireId) {
+          throw new BadRequestException('Un partenaire est requis pour ce type de bon.');
+        }
+      }
+      const ids = [...new Set(input.soubons.map((sb) => String(sb.partenaireId)))];
+      const placeholders = ids.map((_, i) => `@${i}`).join(', ');
+      const rows: Array<{ raison_sociale: string; numero_fournisseur: string | null }> =
+        await this.dataSource.query(
+          `SELECT raison_sociale, numero_fournisseur FROM dbo.ref_partenaire WHERE id IN (${placeholders})`,
+          ids,
+        );
+      const sansFournisseur = rows.filter((r) => !r.numero_fournisseur || !String(r.numero_fournisseur).trim());
+      if (sansFournisseur.length) {
+        throw new BadRequestException(
+          `Fournisseur sans N° SAP : ${sansFournisseur.map((r) => r.raison_sociale).join(', ')}. Renseignez le N° fournisseur SAP dans Partenaires.`,
+        );
+      }
+    }
+    if (typeBon?.requiertBl) {
+      for (const sb of input.soubons) {
+        if (!sb.numeroBl || !String(sb.numeroBl).trim()) {
+          throw new BadRequestException('Le N° de document (BL) est requis pour ce type de bon.');
+        }
+      }
+    }
 
     // Nature d'opération obligatoire sur chaque sous-bon (contrôle serveur, vaut aussi
     // pour l'API et le mobile ; le formulaire web l'impose déjà côté client).

@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SapService } from './sap.service';
 import { PosterPieceDto } from './dto/poster-piece.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
+import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 @ApiTags('SAP')
 @ApiBearerAuth()
@@ -36,12 +37,14 @@ export class SapController {
   }
 
   @Post('sync/comptes')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Synchroniser le plan comptable PCGG depuis SAP (ajoute les nouveaux)' })
   syncComptes() {
     return this.sap.synchroniserComptes();
   }
 
   @Post('sync/fournisseurs')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Synchroniser les fournisseurs depuis SAP (ajoute les nouveaux)' })
   syncFournisseurs() {
     return this.sap.synchroniserFournisseurs();
@@ -54,24 +57,28 @@ export class SapController {
   }
 
   @Post('ecriture/check')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Contrôler une pièce comptable SANS l’écrire (BAPI_ACC_DOCUMENT_CHECK)' })
   checkEcriture(@Body() dto: PosterPieceDto) {
     return this.sap.checkPiece(dto);
   }
 
   @Post('ecriture/post')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Poster réellement une pièce comptable (BAPI_ACC_DOCUMENT_POST + COMMIT)' })
   posterEcriture(@Body() dto: PosterPieceDto) {
     return this.sap.posterPiece(dto);
   }
 
   @Post('ecriture/contrepasser')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Contrepasser (annuler) une pièce postée (BAPI_ACC_DOCUMENT_REV_POST)' })
   contrepasser(@Body() body: { objKey: string; motif?: string }) {
     return this.sap.contrepasser(body.objKey, body.motif);
   }
 
   @Post('operations/:id/envoyer')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Envoyer une opération vers SAP (construit + poste la pièce, idempotent)' })
   envoyerOperation(@Param('id') id: string) {
     return this.sap.envoyerOperation(id);
@@ -84,6 +91,7 @@ export class SapController {
   }
 
   @Post('mapping')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Définir le compte SAP d’un type de compte' })
   setMapping(@Body() body: { typeCompte: string; compteSap: string | null }) {
     return this.sap.setMappingCompte(body.typeCompte, body.compteSap);
@@ -102,6 +110,7 @@ export class SapController {
   }
 
   @Post('cost-centers')
+  @Roles('DAF')
   @ApiOperation({ summary: 'Définir le centre de coût SAP d’un centre de coût app' })
   setCostCenter(@Body() body: { costCenterApp: string; costCenterSap: string | null }) {
     return this.sap.setCostCenterMapping(body.costCenterApp, body.costCenterSap);
