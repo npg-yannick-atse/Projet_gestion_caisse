@@ -6,6 +6,8 @@ import { Employe } from './entities/employe.entity';
 import { TypeBenefice } from './entities/type-benefice.entity';
 import { EmployeBenefice } from './entities/employe-benefice.entity';
 import { Direction } from '@modules/security/entities/direction.entity';
+import { User } from '@modules/security/entities/user.entity';
+import { AuthorizationService } from '@modules/security/authorization.service';
 import { ParametresService } from './parametres.service';
 
 export interface EmployeQuery {
@@ -46,7 +48,24 @@ export class EmployesService {
     @InjectRepository(EmployeBenefice) private readonly beneficeRepo: Repository<EmployeBenefice>,
     private readonly parametres: ParametresService,
     private readonly dataSource: DataSource,
+    private readonly authz: AuthorizationService,
   ) {}
+
+  /**
+   * Employés « sélectionnables » pour un picker (ex. formulaire de crédit) :
+   * l'utilisateur ne voit que les employés de SA direction (admins : tous).
+   * Aucune donnée sensible ici — le salaire est retiré par le contrôleur.
+   */
+  async listSelectionnables(userId: string): Promise<Employe[]> {
+    const qb = this.employeRepo.createQueryBuilder('e').where('e.estActif = :a', { a: true });
+    if (!(await this.authz.isAdmin(userId))) {
+      const u = await this.dataSource.getRepository(User).findOne({ where: { id: userId as any } });
+      const dir = u?.directionId ? String(u.directionId) : null;
+      if (!dir) return [];
+      qb.andWhere('e.directionId = :dir', { dir });
+    }
+    return qb.orderBy('e.nom', 'ASC').addOrderBy('e.prenoms', 'ASC').getMany();
+  }
 
   /** Colonnes triables (whitelist : le tri se fait en base). */
   private static readonly SORT_MAP: Record<string, string> = {
@@ -341,6 +360,17 @@ export class EmployesService {
 
   async deleteEmploye(id: string, userId: string): Promise<void> {
     const e = await this.findEmploye(id);
+    // Garde-fou : refus si l'employé a un crédit encore actif (non soldé).
+    const r = await this.employeRepo.manager.query(
+      `SELECT COUNT(*) n FROM dbo.fin_credit WHERE employe_id=@0 AND statut IN ('EN_ATTENTE','APPROUVEE','EN_COURS') AND deleted_at IS NULL`,
+      [id],
+    );
+    const n = Number(r?.[0]?.n ?? 0);
+    if (n > 0) {
+      throw new ConflictException(
+        `Impossible de désactiver cet employé : ${n} crédit(s) actif(s) (non soldé). Soldez-les d'abord.`,
+      );
+    }
     e.estActif = false;
     e.deletedAt = new Date();
     e.deletedById = userId as any;

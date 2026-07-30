@@ -10,7 +10,6 @@ import {
   Bell,
   BellOff,
   Globe,
-  Gift,
   IdCard,
   Tags,
   Briefcase,
@@ -106,8 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Gestion des employés',
     items: [
-      { to: '/employes', label: 'Employés', icon: IdCard, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/types-benefice', label: 'Types de bénéfice', icon: Gift, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/employes', label: 'Employés', icon: IdCard, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'], permission: 'EMPLOYE_VOIR' },
       { to: '/credits', label: 'Crédits', icon: Banknote, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF', 'VALIDATEUR'] },
       { to: '/releve-agent', label: 'Relevé par agent', icon: Scale, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'] },
     ],
@@ -129,7 +127,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/directions', label: 'Directions', icon: Network, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/partenaires', label: 'Partenaires', icon: Building2, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/natures-operation', label: "Natures d'opération", icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/natures-operation', label: 'Natures comptables', icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
       { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
     ],
   },

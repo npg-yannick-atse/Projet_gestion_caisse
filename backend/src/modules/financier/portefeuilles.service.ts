@@ -108,6 +108,23 @@ export class PortefeuillesService {
 
   async softDelete(id: string, userId: string): Promise<void> {
     const pf = await this.findOne(id);
+    // Garde-fou : refus si le portefeuille a encore des opérations en cours.
+    const m = this.portefeuilleRepo.manager;
+    const checks: Array<[string, string]> = [
+      ['demande(s) de recharge en attente', `SELECT COUNT(*) n FROM dbo.fin_demande_recharge WHERE portefeuille_id=@0 AND statut='EN_ATTENTE' AND deleted_at IS NULL`],
+      ['transfert(s) en cours', `SELECT COUNT(*) n FROM dbo.fin_demande_transfert WHERE statut IN ('CREE','VALIDE') AND deleted_at IS NULL AND ((source_type='PORTEFEUILLE' AND source_id=@0) OR (destination_type='PORTEFEUILLE' AND destination_id=@0))`],
+    ];
+    const bloquants: string[] = [];
+    for (const [label, sql] of checks) {
+      const r = await m.query(sql, [id]);
+      const n = Number(r?.[0]?.n ?? 0);
+      if (n > 0) bloquants.push(`${n} ${label}`);
+    }
+    if (bloquants.length) {
+      throw new ConflictException(
+        `Impossible de désactiver ce portefeuille : ${bloquants.join(', ')}. Traitez-les d'abord.`,
+      );
+    }
     pf.deletedAt = new Date();
     pf.deletedById = userId as any;
     pf.estActif = false;

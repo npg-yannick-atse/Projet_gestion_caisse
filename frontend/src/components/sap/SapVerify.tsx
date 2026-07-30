@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useVerifierClientSap, useVerifierCommandeSap } from '@/api/sap';
+import { useVerifierClientSap, useVerifierCommandeSap, useVerifierFournisseurSap } from '@/api/sap';
 
 /** Délai (ms) après la dernière frappe avant d'interroger SAP. */
 const DEBOUNCE_MS = 700;
@@ -13,16 +13,44 @@ function docTypeLabel(t?: string): string {
   return map[t] ?? t;
 }
 
+export type SapVerifyStatus = 'idle' | 'checking' | 'found' | 'notfound' | 'error';
+
 /**
  * Vérification AUTOMATIQUE d'un code client dans SAP : dès que `code` change
  * (après une courte pause), interroge SAP et auto-remplit le nom via `onResolved`.
+ * `onStatus` remonte l'état de vérification (pour bloquer un bouton, etc.).
  */
-export function SapClientVerify({ code, onResolved }: { code: string; onResolved: (nom: string) => void }) {
+export function SapClientVerify({
+  code,
+  onResolved,
+  onStatus,
+}: {
+  code: string;
+  onResolved: (nom: string) => void;
+  onStatus?: (status: SapVerifyStatus) => void;
+}) {
   const m = useVerifierClientSap();
   const [debounced, setDebounced] = useState('');
   const lastRef = useRef<string>('');
   const resolvedRef = useRef(onResolved);
   resolvedRef.current = onResolved;
+  const statusRef = useRef(onStatus);
+  statusRef.current = onStatus;
+
+  const status: SapVerifyStatus = !code?.trim()
+    ? 'idle'
+    : m.isPending
+      ? 'checking'
+      : m.isError
+        ? 'error'
+        : m.data
+          ? m.data.existe
+            ? 'found'
+            : 'notfound'
+          : 'idle';
+  useEffect(() => {
+    statusRef.current?.(status);
+  }, [status]);
 
   useEffect(() => {
     const v = (code ?? '').trim();
@@ -59,6 +87,65 @@ export function SapClientVerify({ code, onResolved }: { code: string; onResolved
           <span className="text-[#B42318]">Client introuvable dans SAP</span>
         )
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Vérification MANUELLE (au clic) d'un code client / n° de commande dans SAP.
+ * Sert à « déverrouiller » la suite de la saisie : le résultat est remonté via
+ * `onResult(existe, nom?)`. Affiche le bouton + le statut de la dernière vérif.
+ */
+export function SapCheckButton({
+  kind,
+  value,
+  disabled,
+  onResult,
+}: {
+  kind: 'client' | 'commande' | 'fournisseur';
+  value: string;
+  disabled?: boolean;
+  onResult: (existe: boolean, nom?: string) => void;
+}) {
+  const clientM = useVerifierClientSap();
+  const commandeM = useVerifierCommandeSap();
+  const fournisseurM = useVerifierFournisseurSap();
+  const m = kind === 'client' ? clientM : kind === 'fournisseur' ? fournisseurM : commandeM;
+  const v = (value ?? '').trim();
+
+  const run = () => {
+    if (!v) return;
+    m.mutate(v, { onSuccess: (r: any) => onResult(!!r.existe, r.nom) });
+  };
+
+  const data = m.data as any;
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={run}
+        disabled={disabled || v.length < MIN_LEN || m.isPending}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[#0F4C81] px-3 text-xs font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {m.isPending ? 'Vérification…' : 'Vérification'}
+      </button>
+      <div className="min-h-[14px] text-[11px] leading-tight">
+        {m.isPending ? (
+          <span className="text-[#64748B]">Vérification SAP…</span>
+        ) : m.isError ? (
+          <span className="text-[#B45309]">SAP indisponible</span>
+        ) : data ? (
+          data.existe ? (
+            <span className="text-[#047857]">
+              ✓ {kind === 'commande' ? docTypeLabel(data.typeDocument) || 'trouvé' : data.nom ?? 'trouvé'}
+            </span>
+          ) : (
+            <span className="text-[#B42318]">
+              {kind === 'client' ? 'Client introuvable' : kind === 'fournisseur' ? 'Fournisseur introuvable' : 'Commande introuvable'} dans SAP
+            </span>
+          )
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -36,7 +36,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   caisses: 'Caisse',
   partenaires: 'Partenaire',
   'cost-centers': 'Centre de coût',
-  'natures-operation': "Nature d'opération",
+  'natures-operation': 'Nature comptable',
   'plan-comptable': 'Plan comptable',
   interims: 'Intérim',
   bons: 'Bon',

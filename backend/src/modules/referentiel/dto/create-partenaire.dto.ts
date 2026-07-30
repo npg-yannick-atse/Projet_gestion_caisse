@@ -31,6 +31,12 @@ export class CreatePartenaireDto {
   @MaxLength(50)
   numeroClient?: string;
 
+  @ApiProperty({ required: false, description: 'N° fournisseur SAP (LIFNR)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  numeroFournisseur?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

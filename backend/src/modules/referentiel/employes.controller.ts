@@ -56,7 +56,7 @@ export class EmployesController {
   /* ----------------------------------------------------------- Employés -- */
 
   @Get('employes')
-  @ApiOperation({ summary: 'Lister les employés (recherche, filtre direction et tri exécutés en base)' })
+  @ApiOperation({ summary: 'Lister les employés (réservé EMPLOYE_VOIR : admins + DAF)' })
   async listEmployes(
     @CurrentUser() user: JwtPayload,
     @Query('search') search?: string,
@@ -64,6 +64,7 @@ export class EmployesController {
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR', 'consulter les employés');
     const list = await this.employes.listEmployes({
       search,
       directionId,
@@ -73,24 +74,36 @@ export class EmployesController {
     return this.filtrerSalaire(list, user.sub);
   }
 
+  @Get('employes/selectionnables')
+  @ApiOperation({
+    summary:
+      "Employés sélectionnables (picker crédit) : ceux de SA direction, sans salaire. Réservé CREDIT_DEMANDER.",
+  })
+  async listSelectionnables(@CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'CREDIT_DEMANDER', 'sélectionner un employé');
+    const list = await this.employes.listSelectionnables(user.sub);
+    // Le picker n'a jamais besoin du salaire : on le retire systématiquement.
+    return list.map((e) => ({ ...e, salaire: null }));
+  }
+
   @Post('employes/import/apercu')
   @ApiOperation({ summary: "Aperçu (dry-run) d'un import : parse le fichier sans rien enregistrer" })
   async apercuImport(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_CREER', 'importer des employés');
     return this.employes.apercuImport(body?.fileBase64 ?? '');
   }
 
   @Post('employes/import')
   @ApiOperation({ summary: 'Importer des employés depuis un fichier Excel (base64)' })
   async importEmployes(@Body() body: { fileBase64: string }, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_CREER', 'importer des employés');
     return this.employes.importEmployes(body?.fileBase64 ?? '', user.sub);
   }
 
   @Get('employes/import/modele')
   @ApiOperation({ summary: "Télécharger un modèle Excel d'import d'employés" })
   async modeleImport(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) res: Response) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'importer des employés');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_CREER', 'importer des employés');
     const buf = await this.employes.modeleImport();
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -109,7 +122,7 @@ export class EmployesController {
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'exporter les employés');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR', 'exporter les employés');
     const voitSalaire =
       (await this.authz.hasPermission(user.sub, 'EMPLOYE_VOIR_SALAIRE')) ||
       (await this.authz.isAdmin(user.sub));
@@ -130,8 +143,9 @@ export class EmployesController {
   }
 
   @Get('employes/:id')
-  @ApiOperation({ summary: 'Détail d’un employé' })
+  @ApiOperation({ summary: 'Détail d’un employé (réservé EMPLOYE_VOIR)' })
   async findEmploye(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR', 'consulter un employé');
     const e = await this.employes.findEmploye(id);
     return this.filtrerSalaire(e, user.sub);
   }
@@ -139,7 +153,7 @@ export class EmployesController {
   @Post('employes')
   @ApiOperation({ summary: 'Créer un employé' })
   async createEmploye(@Body() dto: CreateEmployeDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'créer un employé');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_CREER', 'créer un employé');
     const e = await this.employes.createEmploye(dto, user.sub);
     return this.filtrerSalaire(e, user.sub);
   }
@@ -147,7 +161,7 @@ export class EmployesController {
   @Patch('employes/:id')
   @ApiOperation({ summary: 'Mettre à jour un employé' })
   async updateEmploye(@Param('id') id: string, @Body() dto: UpdateEmployeDto, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'modifier un employé');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_MODIFIER', 'modifier un employé');
     // Modifier le salaire suppose le droit de le voir.
     if (dto.salaire !== undefined) {
       await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR_SALAIRE', 'modifier le salaire');
@@ -160,7 +174,7 @@ export class EmployesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un employé' })
   async deleteEmploye(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
-    await this.authz.assertPermission(user.sub, 'EMPLOYE_GERER', 'supprimer un employé');
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_SUPPRIMER', 'supprimer un employé');
     await this.employes.deleteEmploye(id, user.sub);
   }
 

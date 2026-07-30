@@ -13,6 +13,7 @@ import { Division } from './entities/division.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
 import { CreatePartenaireDto } from './dto/create-partenaire.dto';
+import { UpdatePartenaireDto } from './dto/update-partenaire.dto';
 import { CreateCostCenterDto } from './dto/create-cost-center.dto';
 import { UpdateCostCenterDto } from './dto/update-cost-center.dto';
 import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
@@ -116,12 +117,12 @@ export class ReferentielService {
 
   listPartenaires(
     type?: TypePartenaire,
-    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
   ): Promise<Partenaire[]> {
     const qb = this.partenaireRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true });
     if (type) qb.andWhere('x.typePartenaire = :t', { t: type });
     return this.applyRefList(
-      qb, 'x', opts, ['raisonSociale', 'code', 'sigle'],
+      qb, 'x', opts, ['raisonSociale', 'code', 'sigle', 'numeroClient', 'numeroFournisseur'],
       { code: 'code', raisonSociale: 'raisonSociale' }, 'raisonSociale',
     );
   }
@@ -143,6 +144,7 @@ export class ReferentielService {
       typePartenaire: dto.typePartenaire,
       sigle: dto.sigle ?? null,
       numeroClient: dto.numeroClient ?? null,
+      numeroFournisseur: dto.numeroFournisseur ?? null,
       adresse: dto.adresse ?? null,
       telephone: dto.telephone ?? null,
       email: dto.email ?? null,
@@ -151,6 +153,29 @@ export class ReferentielService {
       estActif: true,
       createdById: userId as any,
     });
+    return this.partenaireRepo.save(p);
+  }
+
+  async updatePartenaire(id: string, dto: UpdatePartenaireDto, userId: string): Promise<Partenaire> {
+    const p = await this.findPartenaire(id);
+    if (dto.code && dto.code !== p.code) {
+      const dup = await this.partenaireRepo.findOne({ where: { code: dto.code } });
+      if (dup && String(dup.id) !== String(p.id)) {
+        throw new ConflictException(`Un partenaire avec le code ${dto.code} existe déjà`);
+      }
+      p.code = dto.code;
+    }
+    if (dto.raisonSociale !== undefined) p.raisonSociale = dto.raisonSociale;
+    if (dto.typePartenaire !== undefined) p.typePartenaire = dto.typePartenaire;
+    if (dto.sigle !== undefined) p.sigle = dto.sigle || null;
+    if (dto.numeroClient !== undefined) p.numeroClient = dto.numeroClient || null;
+    if (dto.numeroFournisseur !== undefined) p.numeroFournisseur = dto.numeroFournisseur || null;
+    if (dto.adresse !== undefined) p.adresse = dto.adresse || null;
+    if (dto.telephone !== undefined) p.telephone = dto.telephone || null;
+    if (dto.email !== undefined) p.email = dto.email || null;
+    if (dto.pays !== undefined) p.pays = dto.pays || null;
+    if (dto.ville !== undefined) p.ville = dto.ville || null;
+    p.updatedById = userId as any;
     return this.partenaireRepo.save(p);
   }
 
@@ -169,7 +194,7 @@ export class ReferentielService {
   private applyRefList(
     qb: any,
     alias: string,
-    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' },
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number },
     searchCols: string[],
     sortMap: Record<string, string>,
     defaultCol: string,
@@ -182,6 +207,7 @@ export class ReferentielService {
     const col = sortMap[opts.sortBy ?? ''];
     const dir: 'ASC' | 'DESC' = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
     qb.orderBy(col ? `${alias}.${col}` : `${alias}.${defaultCol}`, col ? dir : 'ASC');
+    if (opts.limit && opts.limit > 0) qb.take(Math.min(opts.limit, 500));
     return qb.getMany();
   }
 
@@ -243,6 +269,26 @@ export class ReferentielService {
 
   async deleteCostCenter(id: string, userId: string): Promise<void> {
     const cc = await this.findCostCenter(id);
+    // Garde-fou : refus si le centre de coût est encore rattaché à des éléments
+    // actifs (utilisateurs, autorisations, natures comptables / d'opération).
+    const m = this.costCenterRepo.manager;
+    const checks: Array<[string, string]> = [
+      ['utilisateur(s) (centre par défaut)', `SELECT COUNT(*) n FROM dbo.sec_user WHERE cost_center_id=@0 AND est_actif=1`],
+      ['autorisation(s) utilisateur', `SELECT COUNT(*) n FROM dbo.sec_user_cost_center WHERE cost_center_id=@0`],
+      ['nature(s) comptable(s)', `SELECT COUNT(*) n FROM dbo.ref_nature_comptable WHERE cost_center_id=@0 AND est_actif=1`],
+      ["nature(s) d'opération", `SELECT COUNT(*) n FROM dbo.ref_nature_operation WHERE cost_center_id=@0 AND est_actif=1`],
+    ];
+    const bloquants: string[] = [];
+    for (const [label, sql] of checks) {
+      const r = await m.query(sql, [id]);
+      const n = Number(r?.[0]?.n ?? 0);
+      if (n > 0) bloquants.push(`${n} ${label}`);
+    }
+    if (bloquants.length) {
+      throw new ConflictException(
+        `Impossible de désactiver ce centre de coût : encore rattaché à ${bloquants.join(', ')}. Détachez-les d'abord.`,
+      );
+    }
     cc.estActif = false;
     cc.deletedAt = new Date();
     cc.deletedById = userId as any;
@@ -253,11 +299,12 @@ export class ReferentielService {
     return this.typeBonRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
   }
 
-  listNaturesOperation(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<NatureOperation[]> {
-    return this.applyRefList(
-      this.natureOperationRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
-      'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
-    );
+  listNaturesOperation(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {}): Promise<NatureOperation[]> {
+    const qb = this.natureOperationRepo
+      .createQueryBuilder('x')
+      .leftJoinAndSelect('x.natureComptable', 'nc')
+      .where('x.estActif = :a', { a: true });
+    return this.applyRefList(qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle');
   }
 
   async findNatureOperation(id: string): Promise<NatureOperation> {
@@ -283,6 +330,7 @@ export class ReferentielService {
       existing.libelle = dto.libelle;
       existing.costCenterId = dto.costCenterId ?? null;
       existing.planComptableId = dto.planComptableId ?? null;
+      existing.natureComptableId = dto.natureComptableId ?? null;
       return this.natureOperationRepo.save(existing);
     }
     const n = this.natureOperationRepo.create({
@@ -290,6 +338,7 @@ export class ReferentielService {
       libelle: dto.libelle,
       costCenterId: dto.costCenterId ?? null,
       planComptableId: dto.planComptableId ?? null,
+      natureComptableId: dto.natureComptableId ?? null,
       estActif: true,
       createdById: userId as any,
     });
@@ -315,6 +364,7 @@ export class ReferentielService {
     if (dto.libelle !== undefined) n.libelle = dto.libelle;
     if (dto.costCenterId !== undefined) n.costCenterId = dto.costCenterId || null;
     if (dto.planComptableId !== undefined) n.planComptableId = dto.planComptableId || null;
+    if (dto.natureComptableId !== undefined) n.natureComptableId = dto.natureComptableId || null;
     n.updatedById = userId as any;
     return this.natureOperationRepo.save(n);
   }

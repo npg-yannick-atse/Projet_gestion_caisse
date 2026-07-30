@@ -1,6 +1,7 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
+import { NatureComptable } from './nature-comptable.entity';
 
 @Entity({ name: 'ref_nature_operation' })
 export class NatureOperation extends AuditableEntity {
@@ -17,6 +18,16 @@ export class NatureOperation extends AuditableEntity {
 
   @Column({ name: 'plan_comptable_id', type: 'bigint', nullable: true })
   planComptableId?: string | null;
+
+  // Compte comptable PCGG rattaché (référentiel ref_nature_comptable). Fusion
+  // « nature d'opération = nature comptable » : chaque nature porte son compte.
+  @ApiProperty({ required: false })
+  @Column({ name: 'nature_comptable_id', type: 'bigint', nullable: true })
+  natureComptableId?: string | null;
+
+  @ManyToOne(() => NatureComptable, { nullable: true })
+  @JoinColumn({ name: 'nature_comptable_id' })
+  natureComptable?: NatureComptable | null;
 
   @ApiProperty({ default: true })
   @Column({ name: 'est_actif', type: 'bit', default: true })

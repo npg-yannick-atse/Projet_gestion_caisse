@@ -298,6 +298,7 @@ export interface Partenaire {
   raisonSociale: string;
   typePartenaire: TypePartenaire;
   numeroClient?: string | null;
+  numeroFournisseur?: string | null;
   estActif: boolean;
 }
 
@@ -354,6 +355,8 @@ export interface NatureOperation {
   libelle: string;
   costCenterId?: string | null;
   planComptableId?: string | null;
+  natureComptableId?: string | null;
+  natureComptable?: { id: string; libelle: string; codeComptableSap?: string | null } | null;
   estActif: boolean;
 }
 
@@ -582,6 +585,7 @@ export interface CreatePartenairePayload {
   typePartenaire: TypePartenaire;
   sigle?: string;
   numeroClient?: string;
+  numeroFournisseur?: string;
   adresse?: string;
   telephone?: string;
   email?: string;

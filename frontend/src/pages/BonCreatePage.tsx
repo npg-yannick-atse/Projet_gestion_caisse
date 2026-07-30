@@ -6,17 +6,18 @@ import { useQueries } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2, Wallet, X } from 'lucide-react';
 import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
-import { useTypeBons, usePartenaires, usePays, useDivisions } from '@/api/referentiel';
+import { useTypeBons, usePays, useDivisions, listPartenaires, listNaturesOperation } from '@/api/referentiel';
 import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
-import { SapClientVerify, SapCommandeVerify } from '@/components/sap/SapVerify';
+import { SapCheckButton, SapCommandeVerify } from '@/components/sap/SapVerify';
 import { verifierClientSap, verifierCommandeSap } from '@/api/sap';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
-import type { Portefeuille } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { RemoteSearchableSelect, type SelectOption } from '@/components/ui/searchable-select';
+import type { NatureOperation, Partenaire, Portefeuille } from '@/types/api';
 
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -80,7 +81,6 @@ export function BonCreatePage() {
   const user = useAuthStore((s) => s.user);
 
   const { data: typeBons } = useTypeBons();
-  const { data: partenaires } = usePartenaires();
   const { data: paysList } = usePays();
   const { data: allDivisions } = useDivisions();
   // Tout le périmètre de création (CC, caisses, portefeuilles autorisés) vient du serveur.
@@ -90,6 +90,30 @@ export function BonCreatePage() {
   const costCenters = perimeter?.costCenters;
   const portefeuilles = perimeter?.portefeuilles;
   const { data: devises } = useDevises();
+
+  // Recherche EN BASE (pas de filtre JS) pour les listes volumineuses.
+  const fetchPartenaires = (q: string): Promise<SelectOption[]> =>
+    listPartenaires({ search: q || undefined, limit: 30 }).then((ps) =>
+      ps.map((p) => ({
+        value: String(p.id),
+        label: p.raisonSociale,
+        hint: p.numeroFournisseur ? undefined : '⚠ pas de n° SAP',
+        data: p,
+      })),
+    );
+  const fetchNatures = (q: string): Promise<SelectOption[]> =>
+    listNaturesOperation({ search: q || undefined, limit: 30 }).then((ns) =>
+      ns.map((n) => {
+        const num = n.natureComptable?.codeComptableSap ?? '';
+        const extra = num && num !== n.code ? `  ·  ${num}` : '';
+        return { value: String(n.id), label: `${n.code} — ${n.libelle}${extra}`, data: n };
+      }),
+    );
+
+  // Mémo des éléments sélectionnés (libellé + méta), pour affichage et contrôles
+  // sans recharger toute la liste.
+  const [partMeta, setPartMeta] = useState<Record<string, { label: string; numeroFournisseur?: string | null }>>({});
+  const [natMeta, setNatMeta] = useState<Record<string, { label: string; compteFull?: string; compteNum?: string }>>({});
 
   // Parmi les portefeuilles du périmètre, on met en avant ceux que l'utilisateur possède
   // (propriétaire direct ou via sa direction) pour la pré-sélection et le groupe « Mes portefeuilles ».
@@ -276,6 +300,21 @@ export function BonCreatePage() {
   // SAP injoignable n'empêche pas (on ne fige pas la saisie sur une panne SAP).
   const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
 
+  // Déverrouillage par sous-bon : si le type exige une vérif SAP (n° client ou n°
+  // commande), la suite du sous-bon reste grisée tant que SAP n'a pas CONFIRMÉ
+  // l'existence. Clé = field.id (stable même après suppression d'un sous-bon).
+  const gateActive = reqBl || reqNumeroClient;
+  const [sapGate, setSapGate] = useState<Record<string, { client?: boolean; commande?: boolean }>>({});
+  const setGate = (fid: string, key: 'client' | 'commande', ok: boolean) =>
+    setSapGate((s) => ({ ...s, [fid]: { ...s[fid], [key]: ok } }));
+  const resetGate = (fid: string, key: 'client' | 'commande') =>
+    setSapGate((s) => (s[fid]?.[key] === undefined ? s : { ...s, [fid]: { ...s[fid], [key]: undefined } }));
+  const isUnlocked = (fid: string) => {
+    if (!gateActive) return true;
+    const st = sapGate[fid] ?? {};
+    return (reqNumeroClient ? st.client === true : true) && (reqBl ? st.commande === true : true);
+  };
+
   const verifierSapAvantEnvoi = async (values: FormValues): Promise<string | null> => {
     for (let i = 0; i < values.soubons.length; i++) {
       const sb = values.soubons[i];
@@ -300,6 +339,21 @@ export function BonCreatePage() {
   };
 
   const onSubmit = handleSubmit(async (values) => {
+    // 0) Si le type exige un partenaire, il doit avoir un N° fournisseur SAP valide.
+    if (reqPartenaire) {
+      for (let i = 0; i < values.soubons.length; i++) {
+        const pid = values.soubons[i].partenaireId;
+        const part = pid ? partMeta[pid] : null;
+        if (!part?.numeroFournisseur) {
+          setSapCheck({
+            checking: false,
+            error: `Sous-bon ${i + 1} : le fournisseur choisi n'a pas de N° fournisseur SAP. Renseigne-le dans Partenaires d'abord.`,
+          });
+          return;
+        }
+      }
+    }
+
     // 1) Vérification SAP bloquante des champs requis.
     setSapCheck({ checking: true, error: null });
     const sapErr = await verifierSapAvantEnvoi(values);
@@ -338,7 +392,7 @@ export function BonCreatePage() {
 
       {perimeter && (naturesOperation?.length ?? 0) === 0 && (
         <div className="rounded-[10px] border border-[#FED7AA] bg-[#FFF7ED] px-4 py-3 text-sm text-[#9A3412]">
-          Aucune nature d'opération ne vous est autorisée — vous ne pouvez pas créer de bon.
+          Aucune nature comptable ne vous est autorisée — vous ne pouvez pas créer de bon.
           Demandez à un administrateur de vous en affecter (page Utilisateurs).
         </div>
       )}
@@ -397,7 +451,10 @@ export function BonCreatePage() {
           </CardContent>
         </Card>
 
-        {fields.map((field, index) => (
+        {fields.map((field, index) => {
+          const fid = field.id;
+          const unlocked = isUnlocked(fid);
+          return (
           <Card key={field.id}>
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Sous-bon {index + 1}</CardTitle>
@@ -408,6 +465,61 @@ export function BonCreatePage() {
               )}
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
+              {/* ---- Vérification SAP requise : À FAIRE EN PREMIER, déverrouille la suite ---- */}
+              {gateActive && (
+                <div className="space-y-3 rounded-[10px] border border-[#BFDBFE] bg-[#F0F7FF] p-3.5 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#1E40AF]">
+                    Vérification SAP requise
+                  </p>
+                  {reqNumeroClient && (
+                    <div className="space-y-1.5">
+                      <Label>N° client</Label>
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <Input {...register(`soubons.${index}.numeroClient`, { onChange: () => resetGate(fid, 'client') })} />
+                        </div>
+                        <SapCheckButton
+                          kind="client"
+                          value={watch(`soubons.${index}.numeroClient`) ?? ''}
+                          onResult={(existe, nom) => {
+                            setGate(fid, 'client', existe);
+                            if (existe && nom) setValue(`soubons.${index}.nomClient`, nom, { shouldValidate: true });
+                          }}
+                        />
+                      </div>
+                      {errors.soubons?.[index]?.numeroClient && (
+                        <p className="text-sm text-destructive">{errors.soubons[index]?.numeroClient?.message}</p>
+                      )}
+                    </div>
+                  )}
+                  {reqBl && (
+                    <div className="space-y-1.5">
+                      <Label>N° Document (commande)</Label>
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1">
+                          <Input {...register(`soubons.${index}.numeroBl`, { onChange: () => resetGate(fid, 'commande') })} />
+                        </div>
+                        <SapCheckButton
+                          kind="commande"
+                          value={watch(`soubons.${index}.numeroBl`) ?? ''}
+                          onResult={(existe) => setGate(fid, 'commande', existe)}
+                        />
+                      </div>
+                      {errors.soubons?.[index]?.numeroBl && (
+                        <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
+                      )}
+                    </div>
+                  )}
+                  <p className={cn('text-[11px]', unlocked ? 'text-[#047857]' : 'text-[#64748B]')}>
+                    {unlocked
+                      ? '✓ Vérifié dans SAP — vous pouvez compléter le sous-bon.'
+                      : 'Vérifiez le(s) numéro(s) dans SAP pour débloquer la saisie ci-dessous.'}
+                  </p>
+                </div>
+              )}
+
+              {/* ---- Reste du sous-bon : grisé tant que la vérification SAP n'est pas confirmée ---- */}
+              <fieldset disabled={!unlocked} className="contents">
               {!reqNomClient && (
                 <div className="space-y-2 sm:col-span-2">
                   <Label>Libellé</Label>
@@ -533,17 +645,35 @@ export function BonCreatePage() {
               {reqPartenaire && (
                 <div className="space-y-2">
                   <Label>Partenaire</Label>
-                  <select className={selectClass} {...register(`soubons.${index}.partenaireId`)}>
-                    <option value="">— Choisir —</option>
-                    {partenaires?.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.raisonSociale}
-                      </option>
-                    ))}
-                  </select>
+                  <RemoteSearchableSelect
+                    value={watch(`soubons.${index}.partenaireId`) ?? ''}
+                    selectedLabel={partMeta[watch(`soubons.${index}.partenaireId`) ?? '']?.label}
+                    onChange={(v, opt) => {
+                      setValue(`soubons.${index}.partenaireId`, v, { shouldValidate: true });
+                      const p = opt?.data as Partenaire | undefined;
+                      if (p) setPartMeta((m) => ({ ...m, [v]: { label: p.raisonSociale, numeroFournisseur: p.numeroFournisseur } }));
+                    }}
+                    fetcher={fetchPartenaires}
+                    queryKey="bon-partenaire"
+                    placeholder="— Choisir un partenaire —"
+                  />
                   {errors.soubons?.[index]?.partenaireId && (
                     <p className="text-sm text-destructive">{errors.soubons[index]?.partenaireId?.message}</p>
                   )}
+                  {(() => {
+                    const pid = watch(`soubons.${index}.partenaireId`);
+                    const part = pid ? partMeta[pid] : null;
+                    if (!part) return null;
+                    return part.numeroFournisseur ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Fournisseur SAP : <span className="font-mono text-[#0F172A]">{part.numeroFournisseur}</span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-[#B45309]">
+                        ⚠ Ce fournisseur n'a pas de N° fournisseur SAP — renseigne-le dans Partenaires pour créer le bon.
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
               <div className="space-y-2">
@@ -558,18 +688,46 @@ export function BonCreatePage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>Nature d'opération</Label>
-                <select className={selectClass} {...register(`soubons.${index}.natureOperationId`)}>
-                  <option value="">— Choisir —</option>
-                  {naturesOperation?.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.code} — {n.libelle}
-                    </option>
-                  ))}
-                </select>
+                <Label>Nature comptable</Label>
+                <RemoteSearchableSelect
+                  value={watch(`soubons.${index}.natureOperationId`) ?? ''}
+                  selectedLabel={natMeta[watch(`soubons.${index}.natureOperationId`) ?? '']?.label}
+                  onChange={(v, opt) => {
+                    setValue(`soubons.${index}.natureOperationId`, v, { shouldValidate: true });
+                    const n = opt?.data as NatureOperation | undefined;
+                    if (n)
+                      setNatMeta((m) => ({
+                        ...m,
+                        [v]: {
+                          label: `${n.code} — ${n.libelle}`,
+                          compteNum: n.natureComptable?.codeComptableSap ?? undefined,
+                          compteFull: n.natureComptable?.codeComptableSap
+                            ? `${n.natureComptable.codeComptableSap} — ${n.natureComptable.libelle}`
+                            : undefined,
+                        },
+                      }));
+                  }}
+                  fetcher={fetchNatures}
+                  queryKey="bon-nature"
+                  placeholder="— Choisir une nature —"
+                />
+                {(() => {
+                  const nid = watch(`soubons.${index}.natureOperationId`);
+                  const nm = nid ? natMeta[nid] : null;
+                  if (!nid) return null;
+                  return (
+                    <p className="text-[11px] text-muted-foreground">
+                      {nm?.compteFull ? (
+                        <>Compte PCGG : <span className="font-mono text-[#0F172A]">{nm.compteFull}</span></>
+                      ) : (
+                        <span className="text-[#B45309]">Aucun compte PCGG rattaché à cette nature.</span>
+                      )}
+                    </p>
+                  );
+                })()}
                 {perimeter && naturesOperation && naturesOperation.length === 0 && (
                   <p className="text-sm text-destructive">
-                    Aucune nature d'opération ne vous est autorisée. Contactez un administrateur.
+                    Aucune nature comptable ne vous est autorisée. Contactez un administrateur.
                   </p>
                 )}
                 {errors.soubons?.[index]?.natureOperationId && (
@@ -578,42 +736,32 @@ export function BonCreatePage() {
                   </p>
                 )}
               </div>
-              {/* Toujours affiché ; obligatoire seulement si le type l'exige (requiertBl). */}
-              <div className="space-y-2">
-                <Label>
-                  N° Document{' '}
-                  {!reqBl && <span className="text-xs font-normal text-muted-foreground">(optionnel)</span>}
-                </Label>
-                <Input {...register(`soubons.${index}.numeroBl`)} />
-                {errors.soubons?.[index]?.numeroBl && (
-                  <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
-                )}
-                <SapCommandeVerify numero={watch(`soubons.${index}.numeroBl`) ?? ''} />
-              </div>
+              {/* N° Document optionnel : uniquement si le type NE l'exige PAS (sinon il est dans le bloc SAP en tête). */}
+              {!reqBl && (
+                <div className="space-y-2">
+                  <Label>
+                    N° Document <span className="text-xs font-normal text-muted-foreground">(optionnel)</span>
+                  </Label>
+                  <Input {...register(`soubons.${index}.numeroBl`)} />
+                  {errors.soubons?.[index]?.numeroBl && (
+                    <p className="text-sm text-destructive">{errors.soubons[index]?.numeroBl?.message}</p>
+                  )}
+                  <SapCommandeVerify numero={watch(`soubons.${index}.numeroBl`) ?? ''} />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Code manutention</Label>
                 <Input {...register(`soubons.${index}.codeManutention`)} />
               </div>
-              {reqNumeroClient && (
-                <div className="space-y-2">
-                  <Label>N° client</Label>
-                  <Input {...register(`soubons.${index}.numeroClient`)} />
-                  {errors.soubons?.[index]?.numeroClient && (
-                    <p className="text-sm text-destructive">{errors.soubons[index]?.numeroClient?.message}</p>
-                  )}
-                  <SapClientVerify
-                    code={watch(`soubons.${index}.numeroClient`) ?? ''}
-                    onResolved={(nom) => setValue(`soubons.${index}.nomClient`, nom, { shouldValidate: true })}
-                  />
-                </div>
-              )}
               <div className="space-y-2 sm:col-span-2">
                 <Label>Description (optionnel)</Label>
                 <Input {...register(`soubons.${index}.description`)} />
               </div>
+              </fieldset>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
 
         {perimeter && !perimeter.isAdmin && !perimeter.hasMultiCc && fields.length > 1 && (
           <p className="flex items-start gap-1.5 text-xs text-[#92400E]">
@@ -627,7 +775,10 @@ export function BonCreatePage() {
           <Button type="button" variant="outline" onClick={() => append({ ...emptySousBon })}>
             <Plus className="h-4 w-4" /> Ajouter un sous-bon
           </Button>
-          <Button type="submit" disabled={createBon.isPending || sapCheck.checking}>
+          <Button
+            type="submit"
+            disabled={createBon.isPending || sapCheck.checking || !fields.every((f) => isUnlocked(f.id))}
+          >
             {sapCheck.checking
               ? 'Vérification SAP…'
               : createBon.isPending
@@ -636,6 +787,9 @@ export function BonCreatePage() {
                   ? 'Créer & demander extension'
                   : 'Créer le bon'}
           </Button>
+          {gateActive && !fields.every((f) => isUnlocked(f.id)) && (
+            <p className="text-sm text-[#B45309]">Vérifiez d'abord les numéros dans SAP pour débloquer la création.</p>
+          )}
           {sapCheck.error && <p className="text-sm text-destructive">{sapCheck.error}</p>}
           {createBon.isError && (
             <p className="text-sm text-destructive">{apiErrorMessage(createBon.error, 'Création impossible')}</p>

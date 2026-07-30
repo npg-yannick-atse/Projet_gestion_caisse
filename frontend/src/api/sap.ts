@@ -49,6 +49,65 @@ export async function verifierCommandeSap(numero: string): Promise<SapCommandeIn
   return data;
 }
 
+export interface SapFournisseurInfo {
+  code: string;
+  existe: boolean;
+  nom?: string;
+  ville?: string;
+  pays?: string;
+  telephone?: string;
+  messages: string[];
+  details?: Record<string, unknown>;
+}
+
+export async function verifierFournisseurSap(code: string): Promise<SapFournisseurInfo> {
+  const { data } = await api.get<SapFournisseurInfo>(`/sap/fournisseur/${encodeURIComponent(code)}`);
+  return data;
+}
+
+export function useVerifierFournisseurSap() {
+  return useMutation({ mutationFn: verifierFournisseurSap });
+}
+
+export interface SyncComptesResult {
+  comptesAjoutes: number;
+  naturesAjoutees: number;
+}
+
+export async function syncComptesSap(): Promise<SyncComptesResult> {
+  const { data } = await api.post<SyncComptesResult>('/sap/sync/comptes', {});
+  return data;
+}
+
+export function useSyncComptesSap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: syncComptesSap,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['natures-operation'] });
+      qc.invalidateQueries({ queryKey: ['natures-comptable'] });
+    },
+  });
+}
+
+export interface SyncFournisseursResult {
+  ajoutes: number;
+  totalSap: number;
+}
+
+export async function syncFournisseursSap(): Promise<SyncFournisseursResult> {
+  const { data } = await api.post<SyncFournisseursResult>('/sap/sync/fournisseurs', {});
+  return data;
+}
+
+export function useSyncFournisseursSap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: syncFournisseursSap,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['partenaires'] }),
+  });
+}
+
 export interface LigneEcriture {
   compteGL: string;
   sens: 'D' | 'C';
@@ -180,6 +239,20 @@ export async function setSapCostCenterMapping(
 ): Promise<SapCcMappingRow[]> {
   const { data } = await api.post<SapCcMappingRow[]>('/sap/cost-centers', { costCenterApp, costCenterSap });
   return data;
+}
+
+export interface SapCostCenter {
+  code: string;
+  libelle?: string;
+}
+
+export async function searchCostCentersSap(q?: string): Promise<SapCostCenter[]> {
+  const { data } = await api.get<SapCostCenter[]>('/sap/cost-centers/search', { params: { q: q || undefined } });
+  return data;
+}
+
+export function useSearchCostCentersSap() {
+  return useMutation({ mutationFn: (q?: string) => searchCostCentersSap(q) });
 }
 
 export function useSapCostCenterMapping() {

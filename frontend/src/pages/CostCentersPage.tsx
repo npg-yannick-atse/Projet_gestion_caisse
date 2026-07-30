@@ -282,7 +282,7 @@ export function CostCentersPage() {
         title={pendingDelete ? `Désactiver le centre ${pendingDelete.code} ?` : ''}
         description={
           pendingDelete
-            ? `« ${pendingDelete.libelle} » n'apparaîtra plus dans les listes de sélection. Les bons et natures d'opération existants ne sont pas affectés.`
+            ? `« ${pendingDelete.libelle} » n'apparaîtra plus dans les listes de sélection. Les bons et natures comptables existants ne sont pas affectés.`
             : undefined
         }
         confirmLabel="Désactiver"

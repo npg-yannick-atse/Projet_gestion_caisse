@@ -29,6 +29,24 @@ export class SapController {
     return this.sap.verifierCommande(numero);
   }
 
+  @Get('fournisseur/:code')
+  @ApiOperation({ summary: 'Vérifier un fournisseur par son code (LIFNR)' })
+  fournisseur(@Param('code') code: string) {
+    return this.sap.verifierFournisseur(code);
+  }
+
+  @Post('sync/comptes')
+  @ApiOperation({ summary: 'Synchroniser le plan comptable PCGG depuis SAP (ajoute les nouveaux)' })
+  syncComptes() {
+    return this.sap.synchroniserComptes();
+  }
+
+  @Post('sync/fournisseurs')
+  @ApiOperation({ summary: 'Synchroniser les fournisseurs depuis SAP (ajoute les nouveaux)' })
+  syncFournisseurs() {
+    return this.sap.synchroniserFournisseurs();
+  }
+
   @Get('comptes')
   @ApiOperation({ summary: 'Lister les comptes généraux postables (société, plan PCGG)' })
   comptes(@Query('q') q?: string, @Query('societe') societe?: string) {
@@ -75,6 +93,12 @@ export class SapController {
   @ApiOperation({ summary: 'Mapping des centres de coût (app → SAP)' })
   getCostCenters() {
     return this.sap.getCostCenterMapping();
+  }
+
+  @Get('cost-centers/search')
+  @ApiOperation({ summary: 'Lister/rechercher les centres de coût SAP (domaine 2251)' })
+  searchCostCentersSap(@Query('q') q?: string) {
+    return this.sap.getCostCentersSap(q);
   }
 
   @Post('cost-centers')

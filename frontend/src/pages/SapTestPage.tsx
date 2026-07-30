@@ -12,6 +12,7 @@ import {
   useSetSapMapping,
   useSapCostCenterMapping,
   useSetSapCostCenterMapping,
+  useSearchCostCentersSap,
   type LigneEcriture,
   type SapClientInfo,
   type SapCommandeInfo,
@@ -129,8 +130,69 @@ function CostCenterMappingPanel() {
             )}
           </div>
         ))}
+        <CostCentersSapBrowser />
       </div>
     </Panel>
+  );
+}
+
+/** Recherche des vrais centres de coût SAP (domaine 2251) → clic pour copier. */
+function CostCentersSapBrowser() {
+  const search = useSearchCostCentersSap();
+  const [q, setQ] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
+  const cls =
+    'flex h-8 rounded-[7px] border border-[rgba(15,76,129,0.12)] bg-white px-2 text-xs outline-none focus:border-[#1A6DB5]';
+  return (
+    <details className="mt-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#FBFCFE] p-2">
+      <summary className="cursor-pointer text-[11px] font-medium text-[#0F4C81]">
+        Trouver un centre de coût SAP (domaine 2251)
+      </summary>
+      <div className="mt-2 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <input
+            className={cls + ' flex-1'}
+            placeholder="code ou libellé (ex : DSI, usine, 22100)"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') search.mutate(q);
+            }}
+          />
+          <Button onClick={() => search.mutate(q)} disabled={search.isPending}>
+            {search.isPending ? '…' : 'Chercher'}
+          </Button>
+        </div>
+        {search.isError && (
+          <p className="text-[11px] text-[#B42318]">{apiErrorMessage(search.error, 'Centres indisponibles')}</p>
+        )}
+        {search.data &&
+          (search.data.length === 0 ? (
+            <p className="text-[11px] text-[#64748B]">Aucun centre trouvé.</p>
+          ) : (
+            <div className="max-h-52 overflow-y-auto rounded-[7px] border border-[rgba(15,76,129,0.08)]">
+              {search.data.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(c.code);
+                    setCopied(c.code);
+                  }}
+                  className="flex w-full items-center gap-2 border-b border-[rgba(15,76,129,0.05)] px-2 py-1 text-left text-[11px] hover:bg-[#EFF6FF]"
+                >
+                  <span className="font-medium text-[#0F172A]">{c.code}</span>
+                  <span className="flex-1 truncate text-[#64748B]">{c.libelle}</span>
+                  {copied === c.code && <span className="text-[10px] text-[#047857]">copié ✓</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        <p className="text-[10px] text-[#94A3B8]">
+          Clique un centre pour le copier, puis colle-le dans la ligne du centre appli à mapper.
+        </p>
+      </div>
+    </details>
   );
 }
 

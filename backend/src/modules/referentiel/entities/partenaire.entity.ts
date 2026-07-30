@@ -30,6 +30,10 @@ export class Partenaire extends AuditableEntity {
   @Column({ name: 'numero_client', type: 'nvarchar', length: 50, nullable: true })
   numeroClient?: string | null;
 
+  @ApiProperty({ required: false, description: 'N° fournisseur SAP (LIFNR) — pour les partenaires fournisseurs' })
+  @Column({ name: 'numero_fournisseur', type: 'nvarchar', length: 50, nullable: true })
+  numeroFournisseur?: string | null;
+
   @ApiProperty({ required: false })
   @Column({ type: 'nvarchar', length: 500, nullable: true })
   adresse?: string | null;

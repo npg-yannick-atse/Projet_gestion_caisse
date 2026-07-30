@@ -79,6 +79,24 @@ export class CaissesService {
     if (caisse.statut === 'OUVERTE') {
       throw new BadRequestException('Impossible de supprimer une caisse ouverte. Clôturez-la d\'abord.');
     }
+    // Garde-fou : refus si la caisse est encore rattachée à des éléments actifs.
+    const m = this.caisseRepo.manager;
+    const checks: Array<[string, string]> = [
+      ['portefeuille(s) rattaché(s)', `SELECT COUNT(*) n FROM dbo.fin_portefeuille WHERE caisse_source_id=@0 AND est_actif=1`],
+      ['session(s) de caisse ouverte(s)', `SELECT COUNT(*) n FROM dbo.fin_session_caisse WHERE caisse_id=@0 AND statut='OUVERTE'`],
+      ['transfert(s) en cours', `SELECT COUNT(*) n FROM dbo.fin_demande_transfert WHERE statut IN ('CREE','VALIDE') AND deleted_at IS NULL AND ((source_type='CAISSE' AND source_id=@0) OR (destination_type='CAISSE' AND destination_id=@0))`],
+    ];
+    const bloquants: string[] = [];
+    for (const [label, sql] of checks) {
+      const r = await m.query(sql, [id]);
+      const n = Number(r?.[0]?.n ?? 0);
+      if (n > 0) bloquants.push(`${n} ${label}`);
+    }
+    if (bloquants.length) {
+      throw new ConflictException(
+        `Impossible de supprimer cette caisse : encore rattachée à ${bloquants.join(', ')}. Détachez-les d'abord.`,
+      );
+    }
     caisse.deletedAt = new Date();
     caisse.deletedById = userId as any;
     await this.caisseRepo.save(caisse);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Ban, Banknote, CalendarRange, CheckCircle2, Pencil, Plus, Send, X, XCircle } from 'lucide-react';
+import { AlertTriangle, Ban, Banknote, CalendarRange, CheckCircle2, Clock, Pencil, Plus, Send, X, XCircle } from 'lucide-react';
 import {
   useCredits,
   useCreateCredit,
@@ -10,7 +10,7 @@ import {
   useAnnulerCredit,
   useTraiterCredit,
 } from '@/api/credits';
-import { useEmployes } from '@/api/employes';
+import { useEmployesSelectionnables } from '@/api/employes';
 import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useUserRoles, useMyPermissions } from '@/api/users';
@@ -79,6 +79,9 @@ export function CreditsPage() {
   const today = todayLocal();
   const [dateFrom, setDateFrom] = useState(() => todayLocal());
   const [dateTo, setDateTo] = useState(() => todayLocal());
+  // Filtres client-side (sur la liste déjà chargée pour la période) : statut + recherche employé.
+  const [statutFilter, setStatutFilter] = useState<CreditStatut | 'TOUTES'>('TOUTES');
+  const [search, setSearch] = useState('');
   const sort = useTableSort<CreditSortCol>('/credits', CREDIT_SORT_COLUMNS);
   const { data: credits } = useCredits({
     dateFrom: dateFrom || undefined,
@@ -90,7 +93,7 @@ export function CreditsPage() {
   // même s'il date d'un autre jour que celui affiché.
   const { data: allCredits } = useCredits();
   const [formOpen, setFormOpen] = useState(false);
-  const { data: employes } = useEmployes();
+  const { data: employes } = useEmployesSelectionnables();
   const { data: caisses } = useCaisses();
   const { data: portefeuilles } = usePortefeuilles();
   const { data: devises } = useDevises();
@@ -115,6 +118,8 @@ export function CreditsPage() {
   >(null);
   const [rejectTarget, setRejectTarget] = useState<Credit | null>(null);
   const [rejectComment, setRejectComment] = useState('');
+  // Échéancier d'un crédit (double-clic sur une ligne).
+  const [scheduleCredit, setScheduleCredit] = useState<Credit | null>(null);
 
   // Employés proposés : ceux de la direction de l'utilisateur (tous pour un admin).
   const employesList = useMemo(() => {
@@ -184,6 +189,16 @@ export function CreditsPage() {
     setCommentaire('');
   };
 
+  // Ouvre le formulaire en repartant à ZÉRO (l'état vit dans la page → sinon la
+  // saisie précédente reste quand on ferme puis rouvre).
+  const openForm = () => {
+    setEmployeId('');
+    setSourceType('CAISSE');
+    resetForm();
+    create.reset();
+    setFormOpen(true);
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) return;
@@ -201,6 +216,22 @@ export function CreditsPage() {
     if (c.sourceType === 'CAISSE') return (caisses ?? []).find((x) => x.id === c.sourceId)?.code ?? 'Caisse';
     return (portefeuilles ?? []).find((x) => x.id === c.sourceId)?.code ?? 'Portefeuille';
   };
+
+  // Filtrage : statut + recherche. Dès qu'un statut (≠ Tous) ou une recherche est
+  // actif, on cherche dans TOUT l'historique (on ignore la date, comme la page
+  // Opérations) → pas besoin de régler la date d'abord. Sinon, on reste sur la
+  // période choisie.
+  const rechercheGlobale = statutFilter !== 'TOUTES' || search.trim().length > 0;
+  const filteredCredits = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const base = rechercheGlobale ? (allCredits ?? []) : (credits ?? []);
+    return base.filter(
+      (c) =>
+        (statutFilter === 'TOUTES' || c.statut === statutFilter) &&
+        (!q || empLabel(c.employeId).toLowerCase().includes(q) || sourceLabel(c).toLowerCase().includes(q)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [credits, allCredits, rechercheGlobale, statutFilter, search, employeById, caisses, portefeuilles]);
 
   type ConfirmType = 'APPROUVER' | 'DECAISSER' | 'ANNULER' | 'SOLDER';
   const ACTION_LABELS: Record<ConfirmType, { title: string; desc: string; label: string }> = {
@@ -369,7 +400,7 @@ export function CreditsPage() {
           {perms.canDemander && (
             <button
               type="button"
-              onClick={() => setFormOpen(true)}
+              onClick={openForm}
               className="ml-auto flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5]"
             >
               <Plus className="h-4 w-4" /> Nouvelle demande
@@ -412,9 +443,48 @@ export function CreditsPage() {
               Aujourd'hui
             </button>
           )}
-          <span className="ml-auto text-[11px] text-[#64748B]">
-            {credits?.length ?? 0} résultat{(credits?.length ?? 0) > 1 ? 's' : ''}
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher (employé, source)…"
+            className="w-52 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+          />
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-[#64748B]">
+            {rechercheGlobale && (
+              <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 font-medium text-[#1A6DB5]">
+                tout l'historique (date ignorée)
+              </span>
+            )}
+            {filteredCredits.length} résultat{filteredCredits.length > 1 ? 's' : ''}
           </span>
+        </div>
+
+        {/* Filtre par statut */}
+        <div className="flex flex-wrap gap-1.5 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-2.5">
+          {(
+            [
+              ['TOUTES', 'Tous'],
+              ['EN_ATTENTE', STATUT_META.EN_ATTENTE.label],
+              ['APPROUVEE', STATUT_META.APPROUVEE.label],
+              ['EN_COURS', STATUT_META.EN_COURS.label],
+              ['SOLDE', STATUT_META.SOLDE.label],
+              ['REJETEE', STATUT_META.REJETEE.label],
+              ['ANNULEE', STATUT_META.ANNULEE.label],
+            ] as [CreditStatut | 'TOUTES', string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatutFilter(key)}
+              className={
+                statutFilter === key
+                  ? 'rounded-full bg-[#0F4C81] px-3 py-1 text-[11px] font-medium text-white'
+                  : 'rounded-full border border-[rgba(15,76,129,0.15)] px-3 py-1 text-[11px] font-medium text-[#475569] hover:bg-[#F1F5F9]'
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <table className="w-full text-xs">
@@ -432,15 +502,24 @@ export function CreditsPage() {
             </tr>
           </thead>
           <tbody>
-            {(credits ?? []).length === 0 && (
+            {filteredCredits.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-10 text-center text-[#64748B]">
-                  {dateFrom !== today || dateTo !== today ? 'Aucun crédit pour ces dates.' : "Aucun crédit aujourd'hui."}
+                  {search || statutFilter !== 'TOUTES'
+                    ? 'Aucun crédit ne correspond aux filtres.'
+                    : dateFrom !== today || dateTo !== today
+                      ? 'Aucun crédit pour ces dates.'
+                      : "Aucun crédit aujourd'hui."}
                 </td>
               </tr>
             )}
-            {(credits ?? []).map((c) => (
-              <tr key={c.id} className="border-t border-[rgba(15,76,129,0.07)]">
+            {filteredCredits.map((c) => (
+              <tr
+                key={c.id}
+                onDoubleClick={() => setScheduleCredit(c)}
+                title="Double-cliquez pour voir l'échéancier"
+                className="cursor-pointer border-t border-[rgba(15,76,129,0.07)] hover:bg-[#F8FAFC]"
+              >
                 <td className="px-4 py-3 whitespace-nowrap text-[#64748B]">{new Date(c.dateDebut).toLocaleDateString('fr-FR')}</td>
                 <td className="px-4 py-3">{empLabel(c.employeId)}</td>
                 <td className="px-4 py-3 text-right font-medium">{formatMontant(c.montant)} {codeOf(c.deviseId)}</td>
@@ -532,6 +611,21 @@ export function CreditsPage() {
 
       {editing && <EditCreditModal credit={editing} onClose={() => setEditing(null)} />}
 
+      {scheduleCredit && (
+        <CreditScheduleModal
+          credit={scheduleCredit}
+          employeLabel={empLabel(scheduleCredit.employeId)}
+          deviseCode={codeOf(scheduleCredit.deviseId)}
+          sourceLabel={sourceLabel(scheduleCredit)}
+          autres={(allCredits ?? credits ?? []).filter(
+            (x) => x.employeId === scheduleCredit.employeId && x.id !== scheduleCredit.id,
+          )}
+          codeOf={codeOf}
+          onSelect={setScheduleCredit}
+          onClose={() => setScheduleCredit(null)}
+        />
+      )}
+
       <ConfirmDialog
         open={!!confirmAction}
         title={confirmAction ? ACTION_LABELS[confirmAction.type].title : ''}
@@ -600,6 +694,214 @@ export function CreditsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* --------------------------- Échéancier d'un crédit --------------------------- */
+
+type EcheanceStatut = 'SOLDE' | 'EN_COURS' | 'A_VENIR';
+interface Echeance {
+  index: number;
+  date: Date;
+  montant: number;
+  statut: EcheanceStatut;
+}
+
+/**
+ * Construit l'échéancier mois par mois. Aucun remboursement n'est stocké en base :
+ * on déduit le statut de chaque mensualité de la date d'échéance vs aujourd'hui.
+ *  - crédit SOLDE   → toutes les mensualités soldées ;
+ *  - crédit EN_COURS → échéance passée = soldée, la 1re à venir = « en cours », le reste = à venir ;
+ *  - crédit non décaissé (attente/approuvé) → prévisionnel, tout « à venir ».
+ */
+function buildEcheancier(c: Credit): Echeance[] {
+  const start = new Date(c.dateDebut);
+  const mens = mensualite(c.montant, c.nbMois);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const rows: Echeance[] = [];
+  let enCoursMarque = false;
+  for (let i = 1; i <= c.nbMois; i++) {
+    const d = new Date(start);
+    d.setMonth(d.getMonth() + i);
+    let statut: EcheanceStatut = 'A_VENIR';
+    if (c.statut === 'SOLDE') {
+      statut = 'SOLDE';
+    } else if (c.statut === 'EN_COURS') {
+      if (d.getTime() <= now.getTime()) statut = 'SOLDE';
+      else if (!enCoursMarque) {
+        statut = 'EN_COURS';
+        enCoursMarque = true;
+      }
+    }
+    rows.push({ index: i, date: d, montant: mens, statut });
+  }
+  return rows;
+}
+
+const ECH_META: Record<EcheanceStatut, { label: string; cls: string; dot: string }> = {
+  SOLDE: { label: 'Soldé', cls: 'text-[#047857]', dot: 'bg-[#047857]' },
+  EN_COURS: { label: 'En cours', cls: 'text-[#1A6DB5]', dot: 'bg-[#1A6DB5]' },
+  A_VENIR: { label: 'À solder', cls: 'text-[#94A3B8]', dot: 'bg-[#CBD5E1]' },
+};
+
+function CreditScheduleModal({
+  credit,
+  employeLabel,
+  deviseCode,
+  sourceLabel,
+  autres,
+  codeOf,
+  onSelect,
+  onClose,
+}: {
+  credit: Credit;
+  employeLabel: string;
+  deviseCode: string;
+  sourceLabel: string;
+  autres: Credit[];
+  codeOf: (deviseId?: string | null) => string;
+  onSelect: (c: Credit) => void;
+  onClose: () => void;
+}) {
+  const decaisse = credit.statut === 'EN_COURS' || credit.statut === 'SOLDE';
+  const ech = useMemo(() => (decaisse ? buildEcheancier(credit) : []), [credit, decaisse]);
+  const mens = mensualite(credit.montant, credit.nbMois);
+  const nbSoldes = ech.filter((e) => e.statut === 'SOLDE').length;
+  const rembourse = nbSoldes * mens;
+  const restant = Number(credit.montant || 0) - rembourse;
+  const pct = credit.nbMois > 0 ? Math.round((nbSoldes / credit.nbMois) * 100) : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-5 py-3">
+          <div>
+            <div className="font-display text-sm font-semibold text-[#0F172A]">Échéancier du crédit</div>
+            <div className="text-[11px] text-[#64748B]">{employeLabel}</div>
+          </div>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUT_META[credit.statut].cls}`}>
+            {STATUT_META[credit.statut].label}
+          </span>
+          <button type="button" aria-label="Fermer" onClick={onClose} className="ml-2 text-[#94A3B8] hover:text-[#0F172A]">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          {/* Résumé */}
+          <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+            <Info label="Montant" value={`${formatMontant(credit.montant)} ${deviseCode}`} />
+            <Info label="Mensualité" value={`${formatMontant(mens)} ${deviseCode}`} />
+            <Info label="Durée" value={`${credit.nbMois} mois`} />
+            <Info label="Source" value={sourceLabel} />
+            <Info label="Début" value={new Date(credit.dateDebut).toLocaleDateString('fr-FR')} />
+            <Info label="Fin prévue" value={dateFin(credit.dateDebut, credit.nbMois)} />
+          </div>
+
+          {decaisse ? (
+            <>
+              {/* Progression */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-[#64748B]">
+                  <span>
+                    <strong className="text-[#0F172A]">{nbSoldes}</strong> / {credit.nbMois} mois soldés
+                  </span>
+                  <span>
+                    Remboursé <strong className="text-[#047857]">{formatMontant(rembourse)}</strong> · Reste{' '}
+                    <strong className="text-[#B45309]">{formatMontant(restant)}</strong> {deviseCode}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[#F1F5F9]">
+                  <div className="h-full rounded-full bg-[#047857]" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+
+              {/* Détail mois par mois */}
+              <div className="max-h-64 overflow-y-auto rounded-[9px] border border-[rgba(15,76,129,0.08)]">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-[#F8FAFC]">
+                    <tr className="text-left text-[10px] uppercase tracking-[0.6px] text-[#64748B]">
+                      <th className="px-3 py-2 font-semibold">Mois</th>
+                      <th className="px-3 py-2 font-semibold">Échéance</th>
+                      <th className="px-3 py-2 text-right font-semibold">Montant</th>
+                      <th className="px-3 py-2 font-semibold">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ech.map((e) => {
+                      const m = ECH_META[e.statut];
+                      return (
+                        <tr key={e.index} className="border-t border-[rgba(15,76,129,0.06)]">
+                          <td className="px-3 py-2 text-[#64748B]">{e.index}</td>
+                          <td className="px-3 py-2 capitalize text-[#0F172A]">
+                            {e.date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[#64748B]">{formatMontant(e.montant)}</td>
+                          <td className={`px-3 py-2 font-medium ${m.cls}`}>
+                            <span className="inline-flex items-center gap-1.5">
+                              {e.statut === 'SOLDE' ? (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              ) : e.statut === 'EN_COURS' ? (
+                                <Clock className="h-3.5 w-3.5" />
+                              ) : (
+                                <span className={`h-2 w-2 rounded-full ${m.dot}`} />
+                              )}
+                              {m.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-[9px] border border-[#FDE68A] bg-[#FEF9C3] px-3 py-2.5 text-[12px] text-[#92400E]">
+              Ce crédit n'est pas encore décaissé ({STATUT_META[credit.statut].label}) — l'échéancier démarrera au
+              décaissement.
+            </div>
+          )}
+
+          {/* Autres crédits de l'employé */}
+          {autres.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+                Autres crédits de cet employé ({autres.length})
+              </div>
+              <div className="flex flex-col gap-1">
+                {autres.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => onSelect(a)}
+                    className="flex items-center justify-between rounded-[8px] border border-[rgba(15,76,129,0.08)] px-3 py-1.5 text-left text-xs hover:bg-[#F8FAFC]"
+                  >
+                    <span className="text-[#64748B]">{new Date(a.dateDebut).toLocaleDateString('fr-FR')}</span>
+                    <span className="font-medium text-[#0F172A]">
+                      {formatMontant(a.montant)} {codeOf(a.deviseId)} · {a.nbMois} mois
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUT_META[a.statut].cls}`}>
+                      {STATUT_META[a.statut].label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[9px] bg-[#F8FAFC] px-3 py-2">
+      <div className="text-[10px] uppercase tracking-[0.6px] text-[#94A3B8]">{label}</div>
+      <div className="mt-0.5 truncate font-medium text-[#0F172A]" title={value}>{value}</div>
     </div>
   );
 }

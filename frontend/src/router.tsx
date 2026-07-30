@@ -32,6 +32,7 @@ import { EmployesPage } from '@/pages/EmployesPage';
 import { TypesBeneficePage } from '@/pages/TypesBeneficePage';
 import { OperationsPage } from '@/pages/OperationsPage';
 import { NaturesOperationPage } from '@/pages/NaturesOperationPage';
+import { NaturesComptablePage } from '@/pages/NaturesComptablePage';
 import { DemandesExtensionPage } from '@/pages/DemandesExtensionPage';
 import { DemandesTransfertPage } from '@/pages/DemandesTransfertPage';
 import { DemandesRechargePage } from '@/pages/DemandesRechargePage';
@@ -239,7 +240,7 @@ const employesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/employes',
   component: () => (
-    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']} permission="EMPLOYE_VOIR">
       <EmployesPage />
     </RoleGuard>
   ),
@@ -259,6 +260,12 @@ const naturesOperationRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/natures-operation',
   component: NaturesOperationPage,
+});
+
+const naturesComptableRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/natures-comptable',
+  component: NaturesComptablePage,
 });
 
 const extensionsRoute = createRoute({
@@ -315,6 +322,7 @@ const routeTree = rootRoute.addChildren([
     paysDivisionsRoute,
     operationsRoute,
     naturesOperationRoute,
+    naturesComptableRoute,
     extensionsRoute,
     transfertsRoute,
     bonsManuelsRoute,

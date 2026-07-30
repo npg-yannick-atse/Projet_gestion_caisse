@@ -118,6 +118,16 @@ export function useEmployes(filters: EmployesFilters = {}) {
   return useQuery({ queryKey: ['employes', filters], queryFn: () => listEmployes(filters) });
 }
 
+/** Employés sélectionnables (picker crédit) : scopés à la direction, sans salaire. */
+export async function listEmployesSelectionnables(): Promise<Employe[]> {
+  const { data } = await api.get<Employe[]>('/employes/selectionnables');
+  return data;
+}
+
+export function useEmployesSelectionnables() {
+  return useQuery({ queryKey: ['employes', 'selectionnables'], queryFn: listEmployesSelectionnables });
+}
+
 export function useImportEmployes() {
   const qc = useQueryClient();
   return useMutation({

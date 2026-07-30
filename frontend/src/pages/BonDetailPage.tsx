@@ -407,7 +407,7 @@ export function BonDetailPage() {
                     <th className="px-4 py-2 font-medium">BL</th>
                     <th className="px-4 py-2 font-medium">Manutention</th>
                     <th className="px-4 py-2 font-medium">Centre de coût</th>
-                    <th className="px-4 py-2 font-medium">Nature d'opération</th>
+                    <th className="px-4 py-2 font-medium">Nature comptable</th>
                     <th className="px-4 py-2 text-right font-medium">Montant</th>
                     <th className="px-4 py-2 font-medium">Statut</th>
                     {bon.statut === 'VALIDE' && (

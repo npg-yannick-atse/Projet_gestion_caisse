@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { ReferentielService } from './referentiel.service';
 import { TypePartenaire } from './entities/partenaire.entity';
 import { CreatePartenaireDto } from './dto/create-partenaire.dto';
+import { UpdatePartenaireDto } from './dto/update-partenaire.dto';
 import { CreateCostCenterDto } from './dto/create-cost-center.dto';
 import { UpdateCostCenterDto } from './dto/update-cost-center.dto';
 import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
@@ -27,11 +28,13 @@ export class ReferentielController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.referentiel.listPartenaires(type, {
       search,
       sortBy,
       sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      limit: limit ? Number(limit) : undefined,
     });
   }
 
@@ -46,6 +49,13 @@ export class ReferentielController {
   @ApiOperation({ summary: 'Obtenir un partenaire' })
   findPartenaire(@Param('id') id: string) {
     return this.referentiel.findPartenaire(id);
+  }
+
+  @Patch('partenaires/:id')
+  @Roles('ADMINISTRATEUR')
+  @ApiOperation({ summary: 'Modifier un partenaire' })
+  updatePartenaire(@Param('id') id: string, @Body() dto: UpdatePartenaireDto, @CurrentUser() user: JwtPayload) {
+    return this.referentiel.updatePartenaire(id, dto, user.sub);
   }
 
   @Delete('partenaires/:id')
@@ -100,11 +110,17 @@ export class ReferentielController {
 
   @Get('natures-operation')
   @ApiOperation({ summary: 'Lister les natures d\'opération actives' })
-  listNaturesOperation(@Query('search') search?: string, @Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+  listNaturesOperation(
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+    @Query('limit') limit?: string,
+  ) {
     return this.referentiel.listNaturesOperation({
       search,
       sortBy,
       sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      limit: limit ? Number(limit) : undefined,
     });
   }
 

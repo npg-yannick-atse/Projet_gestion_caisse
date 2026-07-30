@@ -76,6 +76,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   const [clientNom, setClientNom] = useState('');
   const [clientNumero, setClientNumero] = useState('');
   const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
+  const [clientSapStatus, setClientSapStatus] = useState<'idle' | 'checking' | 'found' | 'notfound' | 'error'>('idle');
   const [encMotif, setEncMotif] = useState('');
 
   // Champs recharge.
@@ -120,6 +121,33 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
       .sort((a, b) => b.total - a.total);
     return { totals, last: list[0], count: list.length };
   }, [ops]);
+
+  // Remise à zéro des champs (saisie + sélections + états de vérif/résultat).
+  const resetFields = () => {
+    setMontant('');
+    setClientNom('');
+    setClientNumero('');
+    setEncMotif('');
+    setRechMotif('');
+    setEncCaisseId('');
+    setRechCaisseId('');
+    setPortefeuilleId('');
+    setSens('CAISSE_VERS_PORTEFEUILLE');
+    setSapCheck({ checking: false, error: null });
+    setClientSapStatus('idle');
+    setDone(false);
+    encaissement.reset();
+    recharge.reset();
+  };
+  // On réinitialise À L'OUVERTURE et À LA FERMETURE → formulaire toujours vierge.
+  const openForm = () => {
+    resetFields();
+    setFormOpen(true);
+  };
+  const closeForm = () => {
+    resetFields();
+    setFormOpen(false);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,10 +240,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
           )}
           <button
             type="button"
-            onClick={() => {
-              setDone(false);
-              setFormOpen(true);
-            }}
+            onClick={openForm}
             className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5]"
           >
             <Plus className="h-4 w-4" /> {isEnc ? 'Nouvel encaissement' : 'Nouvelle recharge'}
@@ -265,7 +290,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
       {formOpen && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
-          onClick={() => setFormOpen(false)}
+          onClick={closeForm}
         >
           <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
             <Panel>
@@ -273,7 +298,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                 <button
                   type="button"
                   aria-label="Fermer"
-                  onClick={() => setFormOpen(false)}
+                  onClick={closeForm}
                   className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
                 >
                   <X className="h-4 w-4" />
@@ -349,7 +374,13 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   onChange={(e) => setClientNumero(e.target.value)}
                   placeholder="Identifiant client (optionnel)"
                 />
-                {isEnc && <SapClientVerify code={clientNumero} onResolved={(nom) => setClientNom(nom)} />}
+                {isEnc && (
+                  <SapClientVerify
+                    code={clientNumero}
+                    onResolved={(nom) => setClientNom(nom)}
+                    onStatus={setClientSapStatus}
+                  />
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -514,10 +545,21 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             )}
             <button
               type="submit"
-              disabled={!valid || busy || sapCheck.checking}
+              disabled={
+                !valid ||
+                busy ||
+                sapCheck.checking ||
+                (isEnc && (clientSapStatus === 'checking' || clientSapStatus === 'notfound'))
+              }
               className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#1A6DB5] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {sapCheck.checking ? 'Vérification SAP…' : busy ? 'Traitement…' : isEnc ? 'Encaisser' : 'Valider la recharge'}
+              {sapCheck.checking || (isEnc && clientSapStatus === 'checking')
+                ? 'Vérification SAP…'
+                : busy
+                  ? 'Traitement…'
+                  : isEnc
+                    ? 'Encaisser'
+                    : 'Valider la recharge'}
             </button>
           </div>
         </form>

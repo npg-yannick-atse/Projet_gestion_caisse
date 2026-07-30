@@ -1,27 +1,35 @@
 import { Link } from '@tanstack/react-router';
 import { Lock } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
-import { useUserRoles } from '@/api/users';
+import { useUserRoles, useMyPermissions } from '@/api/users';
 import type { RoleCode } from '@/types/api';
 
 interface Props {
   allow: RoleCode[];
   children: React.ReactNode;
   fallbackHref?: string;
+  /**
+   * Permission alternative : si l'utilisateur la détient, l'accès est accordé
+   * MÊME s'il n'a aucun des rôles de `allow`. Permet d'ouvrir une page à une
+   * personne précise (ex. un validateur avec EMPLOYE_VOIR) sans changer de code.
+   */
+  permission?: string;
 }
 
 /**
- * Protège une route en vérifiant que l'utilisateur connecté possède au moins
- * un des rôles autorisés. Sinon affiche une page d'accès refusé.
+ * Protège une route : accès accordé si l'utilisateur a un des rôles autorisés
+ * OU (optionnel) la permission indiquée. Sinon page d'accès refusé.
  *
- * Note : c'est un garde-fou de DEFENSE EN PROFONDEUR — le backend doit aussi
- * valider les permissions sur chaque endpoint. Ne pas s'y fier seul.
+ * Note : c'est un garde-fou de DEFENSE EN PROFONDEUR — le backend valide aussi
+ * les permissions sur chaque endpoint. Ne pas s'y fier seul.
  */
-export function RoleGuard({ allow, children, fallbackHref = '/' }: Props) {
+export function RoleGuard({ allow, children, fallbackHref = '/', permission }: Props) {
   const user = useAuthStore((s) => s.user);
   const { data: roles, isLoading } = useUserRoles(user?.id ?? null);
+  // Chargé uniquement si une permission alternative est demandée.
+  const { data: perms, isLoading: permsLoading } = useMyPermissions(permission ? user?.id ?? null : null);
 
-  if (!user || isLoading || roles === undefined) {
+  if (!user || isLoading || roles === undefined || (permission && (permsLoading || perms === undefined))) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-[#64748B]">
         Vérification des permissions…
@@ -30,7 +38,7 @@ export function RoleGuard({ allow, children, fallbackHref = '/' }: Props) {
   }
 
   const userCodes = new Set<RoleCode>(roles.map((r) => r.code));
-  const ok = allow.some((r) => userCodes.has(r));
+  const ok = allow.some((r) => userCodes.has(r)) || (!!permission && (perms ?? []).includes(permission));
 
   if (ok) return <>{children}</>;
 

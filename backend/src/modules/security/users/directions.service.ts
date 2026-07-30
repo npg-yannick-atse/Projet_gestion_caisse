@@ -56,6 +56,27 @@ export class DirectionsService {
 
   async remove(id: string): Promise<void> {
     const direction = await this.findOne(id);
+    // Garde-fou : on refuse de désactiver une direction encore rattachée à des
+    // éléments actifs (portefeuille, centre de coût, employés, sites, utilisateurs).
+    const m = this.directionRepo.manager;
+    const checks: Array<[string, string]> = [
+      ['portefeuille(s)', `SELECT COUNT(*) n FROM dbo.fin_portefeuille WHERE proprietaire_type='DIRECTION' AND proprietaire_id=@0 AND est_actif=1`],
+      ['centre(s) de coût', `SELECT COUNT(*) n FROM dbo.ref_cost_center WHERE direction_id=@0 AND est_actif=1`],
+      ['employé(s)', `SELECT COUNT(*) n FROM dbo.ref_employe WHERE direction_id=@0 AND est_actif=1`],
+      ['site(s)', `SELECT COUNT(*) n FROM dbo.ref_site WHERE direction_id=@0 AND est_actif=1`],
+      ['utilisateur(s)', `SELECT COUNT(*) n FROM dbo.sec_user WHERE direction_id=@0 AND est_actif=1`],
+    ];
+    const bloquants: string[] = [];
+    for (const [label, sql] of checks) {
+      const r = await m.query(sql, [id]);
+      const n = Number(r?.[0]?.n ?? 0);
+      if (n > 0) bloquants.push(`${n} ${label}`);
+    }
+    if (bloquants.length) {
+      throw new ConflictException(
+        `Impossible de désactiver cette direction : encore rattachée à ${bloquants.join(', ')}. Détachez-les d'abord.`,
+      );
+    }
     direction.estActif = false;
     await this.directionRepo.save(direction);
   }

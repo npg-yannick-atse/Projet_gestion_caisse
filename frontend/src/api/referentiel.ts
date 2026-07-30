@@ -18,6 +18,7 @@ export interface RefFilters {
   search?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  limit?: number;
 }
 
 function refParams(filters: RefFilters = {}): Record<string, string> {
@@ -25,6 +26,7 @@ function refParams(filters: RefFilters = {}): Record<string, string> {
   if (filters.search) p.search = filters.search;
   if (filters.sortBy) p.sortBy = filters.sortBy;
   if (filters.sortDir) p.sortDir = filters.sortDir;
+  if (filters.limit) p.limit = String(filters.limit);
   return p;
 }
 
@@ -35,6 +37,14 @@ export async function listPartenaires(filters: RefFilters = {}): Promise<Partena
 
 export async function createPartenaire(payload: CreatePartenairePayload): Promise<Partenaire> {
   const { data } = await api.post<Partenaire>('/partenaires', payload);
+  return data;
+}
+
+export async function updatePartenaire(
+  id: string,
+  payload: Partial<CreatePartenairePayload>,
+): Promise<Partenaire> {
+  const { data } = await api.patch<Partenaire>(`/partenaires/${id}`, payload);
   return data;
 }
 
@@ -77,6 +87,15 @@ export function useCreatePartenaire() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createPartenaire,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['partenaires'] }),
+  });
+}
+
+export function useUpdatePartenaire() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<CreatePartenairePayload> }) =>
+      updatePartenaire(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['partenaires'] }),
   });
 }
@@ -208,6 +227,7 @@ export interface CreateNatureOperationPayload {
   libelle: string;
   costCenterId?: string;
   planComptableId?: string;
+  natureComptableId?: string;
 }
 
 export async function createNatureOperation(payload: CreateNatureOperationPayload): Promise<NatureOperation> {

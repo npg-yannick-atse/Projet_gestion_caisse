@@ -30,6 +30,7 @@ import { DemandesRechargeController } from './demandes-recharge.controller';
 import { CaisseAutoCloseJob } from './jobs/caisse-auto-close.job';
 import { TransactionnelModule } from '@modules/transactionnel/transactionnel.module';
 import { SecurityModule } from '@modules/security/security.module';
+import { ReferentielModule } from '@modules/referentiel/referentiel.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { SecurityModule } from '@modules/security/security.module';
     ]),
     TransactionnelModule,
     SecurityModule,
+    ReferentielModule,
   ],
   providers: [
     CaissesService,

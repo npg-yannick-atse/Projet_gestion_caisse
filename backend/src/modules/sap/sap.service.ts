@@ -37,6 +37,17 @@ export interface SapClientInfo {
   details?: Record<string, unknown>;
 }
 
+export interface SapFournisseurInfo {
+  code: string;
+  existe: boolean;
+  nom?: string;
+  ville?: string;
+  pays?: string;
+  telephone?: string;
+  messages: string[];
+  details?: Record<string, unknown>;
+}
+
 export interface SapCommandeInfo {
   numero: string;
   existe: boolean;
@@ -189,6 +200,41 @@ export class SapService {
         telephone: this.pick(addr, 'TELEPHONE', 'TELEPHONE2'),
         messages,
         details: this.flatten(r),
+      };
+    });
+  }
+
+  /** Vérifie un fournisseur par son code (LIFNR) et récupère nom / ville / pays. */
+  async verifierFournisseur(code: string): Promise<SapFournisseurInfo> {
+    const lifnr = /^\d+$/.test(code) ? code.padStart(10, '0') : code;
+    return this.withClient(async (c) => {
+      let r: any;
+      try {
+        r = await c.call('BAPI_VENDOR_GETDETAIL', { VENDORNO: lifnr });
+      } catch (e: any) {
+        const msg = String(e?.message ?? '');
+        // Fournisseur inexistant : la BAPI lève une exception → on le signale
+        // proprement (introuvable) plutôt que « SAP indisponible ».
+        if (/exist|not found|introuv|trouv|invalid|no data|aucun|does not/i.test(msg)) {
+          return { code: lifnr, existe: false, messages: [`[E] ${msg}`] };
+        }
+        throw e;
+      }
+      const flat = this.flatten(r);
+      const messages = this.messagesFromReturn(r?.RETURN);
+      const byRe = (re: RegExp) => {
+        const k = Object.keys(flat).find((x) => re.test(x));
+        return k ? String(flat[k]).trim() || undefined : undefined;
+      };
+      return {
+        code: lifnr,
+        existe: !this.hasError(messages),
+        nom: byRe(/(^|\.)NAME(_?1)?$/i) ?? byRe(/NAME/i),
+        ville: byRe(/(^|\.)CITY(_?1)?$/i),
+        pays: byRe(/(^|\.)COUNTRY(ISO)?$/i),
+        telephone: byRe(/(^|\.)TEL(EPHONE|_NO)?/i),
+        messages,
+        details: flat,
       };
     });
   }
@@ -423,6 +469,158 @@ export class SapService {
       `SELECT cost_center_app, cost_center_sap FROM dbo.sap_cost_center_mapping WHERE est_actif = 1 ORDER BY cost_center_app`,
     );
     return rows.map((r) => ({ costCenterApp: r.cost_center_app, costCenterSap: r.cost_center_sap ?? null }));
+  }
+
+  /** Liste des centres de coût SAP (domaine de contrôle 2251) avec libellé, filtrable. */
+  async getCostCentersSap(recherche?: string): Promise<Array<{ code: string; libelle?: string }>> {
+    return this.withClient(async (c) => {
+      let csk: any;
+      try {
+        csk = await c.call('RFC_READ_TABLE', {
+          QUERY_TABLE: 'CSKT',
+          DELIMITER: '|',
+          ROWCOUNT: 6000,
+          FIELDS: [{ FIELDNAME: 'KOSTL' }, { FIELDNAME: 'KTEXT' }],
+          OPTIONS: [{ TEXT: `KOKRS EQ '2251'` }, { TEXT: `AND SPRAS EQ 'F'` }],
+        });
+      } catch (e: any) {
+        throw new ServiceUnavailableException(
+          `Lecture des centres de coût (RFC_READ_TABLE) refusée : ${e?.message ?? 'non autorisée'}.`,
+        );
+      }
+      const seen = new Set<string>();
+      let out: Array<{ code: string; libelle?: string }> = [];
+      for (const d of csk?.DATA ?? []) {
+        const [k, t] = String(d.WA).split('|');
+        const code = (k ?? '').trim();
+        if (!code || seen.has(code)) continue;
+        seen.add(code);
+        out.push({ code, libelle: (t ?? '').trim() || undefined });
+      }
+      const q = (recherche ?? '').trim().toLowerCase();
+      if (q) out = out.filter((x) => x.code.toLowerCase().includes(q) || (x.libelle ?? '').toLowerCase().includes(q));
+      return out.slice(0, 80);
+    });
+  }
+
+  /**
+   * Synchronise le plan comptable PCGG depuis SAP : ajoute les comptes absents
+   * dans ref_nature_comptable, et crée une nature comptable pour chaque nouveau
+   * compte de charge (classe 6). N'écrase rien d'existant.
+   */
+  async synchroniserComptes(): Promise<{ comptesAjoutes: number; naturesAjoutees: number }> {
+    const accounts = await this.withClient(async (c) => {
+      const r = await c.call('RFC_READ_TABLE', {
+        QUERY_TABLE: 'SKAT',
+        DELIMITER: '|',
+        ROWCOUNT: 0,
+        FIELDS: [{ FIELDNAME: 'SAKNR' }, { FIELDNAME: 'TXT50' }, { FIELDNAME: 'TXT20' }],
+        OPTIONS: [{ TEXT: `KTOPL EQ 'PCGG'` }, { TEXT: `AND SPRAS EQ 'F'` }],
+      });
+      const map = new Map<string, string>();
+      for (const d of (r as any)?.DATA ?? []) {
+        const [saknr, txt50, txt20] = String(d.WA).split('|');
+        const code = (saknr ?? '').trim().replace(/^0+/, '') || (saknr ?? '').trim();
+        const lib = (txt50 ?? '').trim() || (txt20 ?? '').trim();
+        if (code && !map.has(code)) map.set(code, lib);
+      }
+      return [...map.entries()].map(([code, lib]) => ({ code, lib }));
+    });
+
+    const existingCodes = new Set(
+      (await this.dataSource.query(`SELECT code_comptable_sap c FROM dbo.ref_nature_comptable WHERE code_comptable_sap IS NOT NULL`)).map(
+        (r: any) => String(r.c),
+      ),
+    );
+    const usedLibs = new Set(
+      (await this.dataSource.query(`SELECT LOWER(libelle) l FROM dbo.ref_nature_comptable`)).map((r: any) => String(r.l)),
+    );
+
+    let comptesAjoutes = 0;
+    for (const a of accounts) {
+      if (existingCodes.has(a.code)) continue;
+      let lib = a.lib || a.code;
+      if (usedLibs.has(lib.toLowerCase())) lib = `${a.lib || a.code} (${a.code})`;
+      lib = lib.slice(0, 200);
+      usedLibs.add(lib.toLowerCase());
+      existingCodes.add(a.code);
+      await this.dataSource.query(
+        `INSERT INTO dbo.ref_nature_comptable(libelle, code_comptable_sap, est_actif, created_at, version) VALUES (@0, @1, 1, SYSUTCDATETIME(), 1)`,
+        [lib, a.code],
+      );
+      comptesAjoutes++;
+    }
+
+    // Nouvelle nature comptable pour chaque nouveau compte de charge (classe 6).
+    const inserted = await this.dataSource.query(`
+      INSERT INTO dbo.ref_nature_operation(code, libelle, nature_comptable_id, est_actif, created_at, version)
+      OUTPUT INSERTED.id
+      SELECT nc.code_comptable_sap, nc.libelle, nc.id, 1, SYSUTCDATETIME(), 1
+      FROM dbo.ref_nature_comptable nc
+      WHERE nc.code_comptable_sap LIKE '6%'
+        AND NOT EXISTS (SELECT 1 FROM dbo.ref_nature_operation n1 WHERE n1.code = nc.code_comptable_sap)
+        AND NOT EXISTS (SELECT 1 FROM dbo.ref_nature_operation n2 WHERE n2.nature_comptable_id = nc.id)`);
+    const naturesAjoutees = Array.isArray(inserted) ? inserted.length : 0;
+    return { comptesAjoutes, naturesAjoutees };
+  }
+
+  /**
+   * Synchronise les fournisseurs depuis SAP (LFA1) : ajoute comme partenaires
+   * (type FOURNISSEUR) ceux dont le n° fournisseur n'existe pas encore. Par lots.
+   */
+  async synchroniserFournisseurs(): Promise<{ ajoutes: number; totalSap: number }> {
+    const vendors = await this.withClient(async (c) => {
+      const r = await c.call('RFC_READ_TABLE', {
+        QUERY_TABLE: 'LFA1',
+        DELIMITER: '|',
+        ROWCOUNT: 0,
+        FIELDS: [{ FIELDNAME: 'LIFNR' }, { FIELDNAME: 'NAME1' }, { FIELDNAME: 'ORT01' }, { FIELDNAME: 'LAND1' }],
+      });
+      return ((r as any)?.DATA ?? [])
+        .map((d: any) => {
+          const [lifnr, name1, ort01, land1] = String(d.WA).split('|');
+          const num = (lifnr ?? '').trim().replace(/^0+/, '') || (lifnr ?? '').trim();
+          return { num, nom: (name1 ?? '').trim(), ville: (ort01 ?? '').trim(), pays: (land1 ?? '').trim() };
+        })
+        .filter((v: any) => v.num);
+    });
+
+    const existingNums = new Set(
+      (await this.dataSource.query(`SELECT numero_fournisseur f FROM dbo.ref_partenaire WHERE numero_fournisseur IS NOT NULL`)).map(
+        (r: any) => String(r.f),
+      ),
+    );
+    const existingCodes = new Set(
+      (await this.dataSource.query(`SELECT code FROM dbo.ref_partenaire`)).map((r: any) => String(r.code)),
+    );
+
+    const esc = (s: string) => (s ?? '').replace(/'/g, "''");
+    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string }> = [];
+    for (const v of vendors) {
+      if (existingNums.has(v.num)) continue;
+      let code = v.num;
+      if (existingCodes.has(code)) code = `F${v.num}`;
+      if (existingCodes.has(code)) continue;
+      existingCodes.add(code);
+      existingNums.add(v.num);
+      toInsert.push({ code, nom: (v.nom || code).slice(0, 255), num: v.num, ville: v.ville.slice(0, 100), pays: v.pays.slice(0, 100) });
+    }
+
+    let ajoutes = 0;
+    for (let i = 0; i < toInsert.length; i += 200) {
+      const chunk = toInsert.slice(i, i + 200);
+      const values = chunk
+        .map(
+          (v) =>
+            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'FOURNISSEUR', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
+        )
+        .join(', ');
+      await this.dataSource.query(
+        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_fournisseur, ville, pays, est_actif, created_at, version) VALUES ${values}`,
+      );
+      ajoutes += chunk.length;
+    }
+    return { ajoutes, totalSap: vendors.length };
   }
 
   private async getCostCenterMap(): Promise<Map<string, string>> {

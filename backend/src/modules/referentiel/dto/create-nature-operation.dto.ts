@@ -23,4 +23,9 @@ export class CreateNatureOperationDto {
   @IsOptional()
   @IsNumberString()
   planComptableId?: string;
+
+  @ApiProperty({ required: false, description: 'Compte comptable PCGG rattaché (ref_nature_comptable)' })
+  @IsOptional()
+  @IsNumberString()
+  natureComptableId?: string;
 }

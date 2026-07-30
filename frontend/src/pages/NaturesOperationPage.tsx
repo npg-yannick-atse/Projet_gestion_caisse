@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { useSyncComptesSap } from '@/api/sap';
 import {
   useNaturesOperation,
   useCreateNatureOperation,
@@ -10,6 +11,7 @@ import {
   useDeleteNatureOperation,
   useCostCenters,
   usePlanComptable,
+  useNaturesComptable,
 } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/utils';
 import type { NatureOperation } from '@/types/api';
@@ -25,6 +27,8 @@ import { useTableSort } from '@/hooks/useTableSort';
 const NO_SORT_COLUMNS = ['code', 'libelle'] as const;
 type NoSortCol = (typeof NO_SORT_COLUMNS)[number];
 
+const PAGE_SIZES = [10, 20, 50] as const;
+
 const selectClass =
   'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
@@ -33,6 +37,7 @@ const schema = z.object({
   libelle: z.string().trim().min(1, 'Requis'),
   costCenterId: z.string().optional(),
   planComptableId: z.string().optional(),
+  natureComptableId: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -42,6 +47,7 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
   const update = useUpdateNatureOperation();
   const { data: costCenters } = useCostCenters();
   const { data: planComptable } = usePlanComptable();
+  const { data: naturesComptable } = useNaturesComptable();
   const {
     register,
     handleSubmit,
@@ -53,6 +59,7 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
       libelle: editing?.libelle ?? '',
       costCenterId: editing?.costCenterId ?? '',
       planComptableId: editing?.planComptableId ?? '',
+      natureComptableId: editing?.natureComptableId ?? '',
     },
   });
 
@@ -65,6 +72,7 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
       libelle: values.libelle,
       costCenterId: values.costCenterId || undefined,
       planComptableId: values.planComptableId || undefined,
+      natureComptableId: values.natureComptableId || undefined,
     };
     const opts = { onSuccess: () => onDone() };
     if (editing) update.mutate({ id: editing.id, payload }, opts);
@@ -73,7 +81,7 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
 
   return (
     <Panel>
-      <PanelHeader title={editing ? `Modifier — ${editing.code}` : "Nouvelle nature d'opération"} />
+      <PanelHeader title={editing ? `Modifier — ${editing.code}` : 'Nouvelle nature comptable'} />
       <form onSubmit={onSubmit} className="grid gap-4 p-[18px] sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="code">Code</Label>
@@ -96,10 +104,24 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
             ))}
           </select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="planComptableId">Compte comptable par défaut (optionnel)</Label>
-          <select id="planComptableId" className={selectClass} {...register('planComptableId')}>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="natureComptableId">Compte comptable PCGG (SAP)</Label>
+          <select id="natureComptableId" className={selectClass} {...register('natureComptableId')}>
             <option value="">— Aucun —</option>
+            {(naturesComptable ?? []).map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.codeComptableSap ? `${n.codeComptableSap} — ` : ''}{n.libelle}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-[#94A3B8]">
+            Le compte du plan PCGG sur lequel s'impute cette nature (utilisé pour l'envoi comptable SAP).
+          </p>
+        </div>
+        <div className="hidden">
+          {/* Ancien « compte du plan interne » conservé mais masqué (déprécié au profit du compte PCGG). */}
+          <select {...register('planComptableId')}>
+            <option value="">—</option>
             {planComptable?.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.numeroCompte} — {p.libelle}
@@ -138,9 +160,25 @@ function NaturesOperationPageInner() {
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
   const remove = useDeleteNatureOperation();
+  const sync = useSyncComptesSap();
+  const { data: naturesComptable } = useNaturesComptable();
+  const compteById = new Map(
+    (naturesComptable ?? []).map((n) => [String(n.id), n.codeComptableSap ? `${n.codeComptableSap} — ${n.libelle}` : n.libelle]),
+  );
   // null = formulaire fermé ; { } = création ; un objet = édition de cette nature.
   const [form, setForm] = useState<{ editing: NatureOperation | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NatureOperation | null>(null);
+
+  // Pagination client.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(20);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, pageSize, sort.state.by, sort.state.dir]);
+  const list = natures ?? [];
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const pageSafe = Math.min(page, totalPages);
+  const pagedNatures = list.slice((pageSafe - 1) * pageSize, pageSafe * pageSize);
 
   return (
     <div className="flex flex-col gap-4">
@@ -157,30 +195,65 @@ function NaturesOperationPageInner() {
       )}
 
       <Panel>
-        <PanelHeader title="Natures d'opération" badge={`${natures?.length ?? 0}`}>
+        <PanelHeader title="Natures comptables" badge={`${natures?.length ?? 0}`}>
           {!form && (
-            <button
-              type="button"
-              onClick={() => setForm({ editing: null })}
-              className="ml-auto flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5]"
-            >
-              <Plus className="h-4 w-4" /> Nouvelle nature
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              {sync.data && !sync.isPending && (
+                <span className="text-[11px] font-medium text-[#047857]">
+                  +{sync.data.comptesAjoutes} compte(s), +{sync.data.naturesAjoutees} nature(s)
+                </span>
+              )}
+              {sync.isError && (
+                <span className="text-[11px] text-[#B42318]">{apiErrorMessage(sync.error, 'Sync impossible')}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => sync.mutate()}
+                disabled={sync.isPending}
+                title="Récupérer les nouveaux comptes/natures depuis SAP"
+                className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.2)] px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${sync.isPending ? 'animate-spin' : ''}`} />
+                {sync.isPending ? 'Synchronisation…' : 'Synchronisation'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm({ editing: null })}
+                className="flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5]"
+              >
+                <Plus className="h-4 w-4" /> Nouvelle nature
+              </button>
+            </div>
           )}
         </PanelHeader>
 
-        <div className="flex items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
           <Search className="h-4 w-4 text-[#64748B]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher (libellé ou code)…"
-            className="w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5] focus:bg-white"
+            className="min-w-[200px] flex-1 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5] focus:bg-white"
           />
+          <label className="flex items-center gap-1.5 text-[11px] text-[#64748B]">
+            Afficher
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-[7px] border border-[rgba(15,76,129,0.12)] bg-white px-2 py-1 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-[11px] text-[#64748B]">{list.length} au total</span>
         </div>
 
         {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
-        {isError && <div className="px-[18px] py-8 text-sm text-[#EF4444]">Impossible de charger les natures d'opération.</div>}
+        {isError && <div className="px-[18px] py-8 text-sm text-[#EF4444]">Impossible de charger les natures comptables.</div>}
 
         {natures && (
           <table className="w-full text-xs">
@@ -188,6 +261,7 @@ function NaturesOperationPageInner() {
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
+                <th className="px-4 py-2.5 font-semibold">Compte PCGG</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -196,15 +270,22 @@ function NaturesOperationPageInner() {
             <tbody>
               {natures && natures.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-[#64748B]">
-                    Aucune nature d'opération. Créez-en une pour pouvoir créer des bons.
+                  <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
+                    Aucune nature comptable. Créez-en une pour pouvoir créer des bons.
                   </td>
                 </tr>
               )}
-              {(natures ?? []).map((n) => (
+              {pagedNatures.map((n) => (
                 <tr key={n.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{n.code}</td>
                   <td className="px-4 py-3">{n.libelle}</td>
+                  <td className="px-4 py-3 text-[#64748B]">
+                    {n.natureComptableId ? (
+                      <span className="font-mono text-[11px]">{compteById.get(String(n.natureComptableId)) ?? '—'}</span>
+                    ) : (
+                      <span className="text-[11px] text-[#B45309]">non rattaché</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -230,6 +311,35 @@ function NaturesOperationPageInner() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {list.length > pageSize && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(15,76,129,0.07)] px-4 py-2.5 text-xs">
+            <span className="text-[#64748B]">
+              {(pageSafe - 1) * pageSize + 1}–{Math.min(pageSafe * pageSize, list.length)} sur {list.length}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={pageSafe <= 1}
+                className="inline-flex h-7 items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 font-medium text-[#475569] hover:bg-[#F1F5F9] disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Précédent
+              </button>
+              <span className="px-1 text-[#64748B]">
+                Page {pageSafe} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={pageSafe >= totalPages}
+                className="inline-flex h-7 items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 font-medium text-[#475569] hover:bg-[#F1F5F9] disabled:opacity-40"
+              >
+                Suivant <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
         )}
       </Panel>
 

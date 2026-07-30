@@ -749,10 +749,14 @@ function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; devise
         description="Cette action est irréversible. Le portefeuille sera retiré de la liste."
         confirmLabel="Supprimer"
         busy={remove.isPending}
-        onCancel={() => setPfToDelete(null)}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Suppression impossible') : undefined}
+        onCancel={() => {
+          remove.reset();
+          setPfToDelete(null);
+        }}
         onConfirm={() => {
           if (!pfToDelete) return;
-          remove.mutate(pfToDelete.id, { onSettled: () => setPfToDelete(null) });
+          remove.mutate(pfToDelete.id, { onSuccess: () => setPfToDelete(null) });
         }}
       />
 
@@ -881,8 +885,12 @@ function CaisseCard({
           description={`« ${caisse.libelle} » sera retirée de la liste. Cette action est irréversible.`}
           confirmLabel="Supprimer"
           busy={del.isPending}
-          onCancel={() => setConfirmDeleteOpen(false)}
-          onConfirm={() => del.mutate(caisse.id, { onSettled: () => setConfirmDeleteOpen(false) })}
+          error={del.isError ? apiErrorMessage(del.error, 'Suppression impossible') : undefined}
+          onCancel={() => {
+            del.reset();
+            setConfirmDeleteOpen(false);
+          }}
+          onConfirm={() => del.mutate(caisse.id, { onSuccess: () => setConfirmDeleteOpen(false) })}
         />
       </span>
       {/* décors */}

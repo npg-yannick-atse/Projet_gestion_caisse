@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Scale, User as UserIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDownCircle, ArrowUpCircle, CalendarRange, ChevronLeft, ChevronRight, Scale, User as UserIcon } from 'lucide-react';
 import { useOperations } from '@/api/ledger';
 import { useUsers } from '@/api/users';
 import { formatMontant } from '@/lib/utils';
@@ -27,10 +27,22 @@ function sensOf(t: TypeOperation): 'CREDIT' | 'DEBIT' | null {
   return null;
 }
 
+const PAGE_SIZE = 20;
+
 export function ReleveAgentPage() {
   const { data: users } = useUsers();
   const [userId, setUserId] = useState('');
-  const { data: ops } = useOperations(userId ? { userId } : {});
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
+  const { data: ops } = useOperations(
+    userId ? { userId, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined } : {},
+  );
+
+  // Retour à la page 1 dès qu'un filtre change (agent ou période).
+  useEffect(() => {
+    setPage(1);
+  }, [userId, dateFrom, dateTo]);
 
   const usersList = useMemo(
     () => (users ?? []).slice().sort((a, b) => `${a.nom}`.localeCompare(`${b.nom}`)),
@@ -59,10 +71,15 @@ export function ReleveAgentPage() {
     return { lignes: lignes.reverse(), totalDebit, totalCredit, solde };
   }, [ops]);
 
+  // Pagination (côté client, sur la liste déjà filtrée par période côté serveur).
+  const totalPages = Math.max(1, Math.ceil(releve.lignes.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const pagedLignes = releve.lignes.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-4">
       <Panel>
-        <PanelHeader title="Relevé Débit / Crédit par agent" />
+        <PanelHeader title="Relevé Entrées / Sorties par agent" />
         <div className="flex flex-wrap items-center gap-2 p-[18px]">
           <UserIcon className="h-4 w-4 text-[#64748B]" />
           <select
@@ -77,8 +94,42 @@ export function ReleveAgentPage() {
               </option>
             ))}
           </select>
+
+          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-xs">
+            <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
+            <input
+              type="date"
+              aria-label="Du"
+              title="Du"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+            <span className="text-[#64748B]">au</span>
+            <input
+              type="date"
+              aria-label="Au"
+              title="Au"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+            />
+          </div>
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
+            >
+              Effacer les dates
+            </button>
+          )}
+
           <span className="text-[11px] text-[#94A3B8]">
-            Crédit = encaissements + recharges · Débit = décaissements
+            Entrées = encaissements + recharges · Sorties = décaissements + crédits
           </span>
         </div>
       </Panel>
@@ -86,14 +137,14 @@ export function ReleveAgentPage() {
       {userId && (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard tone="green" icon={ArrowUpCircle} label="Total Crédit" value={formatMontant(releve.totalCredit)} sub="Entrées" />
-            <StatCard tone="amber" icon={ArrowDownCircle} label="Total Débit" value={formatMontant(releve.totalDebit)} sub="Sorties" />
+            <StatCard tone="green" icon={ArrowUpCircle} label="Total Entrées" value={formatMontant(releve.totalCredit)} sub="Encaissements + recharges" />
+            <StatCard tone="amber" icon={ArrowDownCircle} label="Total Sorties" value={formatMontant(releve.totalDebit)} sub="Décaissements + crédits" />
             <StatCard
               tone={releve.solde >= 0 ? 'blue' : 'amber'}
               icon={Scale}
-              label="Solde"
+              label="Net"
               value={formatMontant(releve.solde)}
-              sub="Crédit − Débit"
+              sub="Entrées − Sorties"
             />
           </div>
 
@@ -104,9 +155,9 @@ export function ReleveAgentPage() {
                 <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                   <th className="px-4 py-2.5 font-semibold">Date</th>
                   <th className="px-4 py-2.5 font-semibold">Type</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Débit</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Crédit</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Solde</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Sorties</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Entrées</th>
+                  <th className="px-4 py-2.5 font-semibold text-right">Net</th>
                 </tr>
               </thead>
               <tbody>
@@ -117,7 +168,7 @@ export function ReleveAgentPage() {
                     </td>
                   </tr>
                 )}
-                {releve.lignes.map(({ op, debit, credit, solde }) => (
+                {pagedLignes.map(({ op, debit, credit, solde }) => (
                   <tr key={op.id} className="border-t border-[rgba(15,76,129,0.07)]">
                     <td className="px-4 py-3 text-[#64748B]">
                       {new Date(op.dateOperation).toLocaleDateString('fr-FR')}
@@ -134,6 +185,36 @@ export function ReleveAgentPage() {
                 ))}
               </tbody>
             </table>
+
+            {releve.lignes.length > PAGE_SIZE && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(15,76,129,0.07)] px-4 py-2.5 text-xs">
+                <span className="text-[#64748B]">
+                  {(pageSafe - 1) * PAGE_SIZE + 1}–{Math.min(pageSafe * PAGE_SIZE, releve.lignes.length)} sur{' '}
+                  {releve.lignes.length}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={pageSafe <= 1}
+                    className="inline-flex h-7 items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 font-medium text-[#475569] hover:bg-[#F1F5F9] disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" /> Précédent
+                  </button>
+                  <span className="px-1 text-[#64748B]">
+                    Page {pageSafe} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={pageSafe >= totalPages}
+                    className="inline-flex h-7 items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 font-medium text-[#475569] hover:bg-[#F1F5F9] disabled:opacity-40"
+                  >
+                    Suivant <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </Panel>
         </>
       )}

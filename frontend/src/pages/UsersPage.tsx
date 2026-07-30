@@ -467,7 +467,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           {tab === 'natures' && (
             <div className="space-y-2">
               <p className="mb-1 text-[11px] text-[#94A3B8]">
-                Limite les natures d'opération utilisables à la création d'un bon.{' '}
+                Limite les natures comptables utilisables à la création d'un bon.{' '}
                 <strong>Sans aucune coche, l'utilisateur ne peut créer aucun bon</strong> (les administrateurs ne sont pas concernés).
               </p>
               <div className="grid grid-cols-2 gap-1">
