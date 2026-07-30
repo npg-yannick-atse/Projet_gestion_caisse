@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useCreateBon } from '@/api/bons';
-import { useMyBonPerimeter, usePartenaires, useTypeBons, usePays, useDivisions } from '@/api/referentiel';
+import { useMyBonPerimeter, listPartenaires, useTypeBons, usePays, useDivisions } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
+import { RemoteSelect } from '@/components/RemoteSelect';
 import { useAuthStore } from '@/store/auth';
 import type { CostCenter, Division, NatureOperation, Partenaire, Pays, Portefeuille, TypeBon } from '@/types';
 
@@ -27,7 +28,6 @@ export default function NouvelleDemandeScreen() {
 
   const { data: perimeter, isLoading: loadingPerim } = useMyBonPerimeter();
   const { data: typeBons } = useTypeBons();
-  const { data: partenaires } = usePartenaires();
   const create = useCreateBon();
 
   const [typeBonId, setTypeBonId] = useState('');
@@ -35,6 +35,7 @@ export default function NouvelleDemandeScreen() {
   const [costCenterId, setCostCenterId] = useState('');
   const [natureOperationId, setNatureOperationId] = useState('');
   const [partenaireId, setPartenaireId] = useState('');
+  const [partenaireLabel, setPartenaireLabel] = useState('');
   const [libelle, setLibelle] = useState('');
   const [montant, setMontant] = useState('');
   const [numeroBl, setNumeroBl] = useState('');
@@ -50,7 +51,6 @@ export default function NouvelleDemandeScreen() {
   const portefeuilles: Portefeuille[] = perimeter?.portefeuilles ?? [];
   const costCenters: CostCenter[] = perimeter?.costCenters ?? [];
   const typeBonsList: TypeBon[] = typeBons ?? [];
-  const partenairesList: Partenaire[] = partenaires ?? [];
   // Natures d'opération = celles autorisées à l'utilisateur (déjà filtrées côté serveur).
   const naturesList: NatureOperation[] = perimeter?.naturesOperation ?? [];
 
@@ -102,10 +102,11 @@ export default function NouvelleDemandeScreen() {
     value: n.id,
     label: `${n.code} — ${n.libelle}`,
   }));
-  const partenaireOptions: SelectOption[] = [
-    { value: '', label: '— Aucun —' },
-    ...partenairesList.map((p) => ({ value: p.id, label: p.raisonSociale, sublabel: p.code })),
-  ];
+  // Recherche EN BASE des partenaires (débouncée côté RemoteSelect) — pas de préchargement.
+  const fetchPartenaires = async (q: string): Promise<SelectOption[]> => {
+    const list = await listPartenaires({ search: q || undefined, limit: 30 });
+    return list.map((p) => ({ value: p.id, label: p.raisonSociale, sublabel: p.code }));
+  };
 
   const montantValid = montantRegex.test(montant) && Number(montant) > 0;
   const canSubmit =
@@ -134,6 +135,7 @@ export default function NouvelleDemandeScreen() {
     setDivisionId('');
     setPorteur('');
     setPartenaireId('');
+    setPartenaireLabel('');
     setNatureOperationId('');
     setEstRecurrent(false);
   }
@@ -225,12 +227,16 @@ export default function NouvelleDemandeScreen() {
               />
             </Field>
 
-            <Select
+            <RemoteSelect
               label="Partenaire"
-              searchable
               value={partenaireId}
-              options={partenaireOptions}
-              onChange={setPartenaireId}
+              selectedLabel={partenaireLabel}
+              onChange={(v, opt) => {
+                setPartenaireId(v);
+                setPartenaireLabel(opt?.label ?? '');
+              }}
+              fetcher={fetchPartenaires}
+              queryKey="mobile-partenaires"
               placeholder="— Aucun —"
             />
 

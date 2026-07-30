@@ -21,13 +21,15 @@ export function useTypeBons() {
   return useQuery<TypeBon[]>({ queryKey: ['type-bons'], queryFn: listTypeBons });
 }
 
-export async function listPartenaires(): Promise<Partenaire[]> {
-  const { data } = await api.get<Partenaire[]>('/partenaires');
+export async function listPartenaires(params: { search?: string; limit?: number } = {}): Promise<Partenaire[]> {
+  const { data } = await api.get<Partenaire[]>('/partenaires', {
+    params: { search: params.search || undefined, limit: params.limit || undefined },
+  });
   return data;
 }
 
 export function usePartenaires() {
-  return useQuery<Partenaire[]>({ queryKey: ['partenaires'], queryFn: listPartenaires });
+  return useQuery<Partenaire[]>({ queryKey: ['partenaires'], queryFn: () => listPartenaires() });
 }
 
 export async function listCostCenters(): Promise<CostCenter[]> {

@@ -64,8 +64,14 @@ function PartenaireForm({ editing, onDone }: { editing?: Partenaire; onDone: () 
           code: editing.code,
           raisonSociale: editing.raisonSociale,
           typePartenaire: editing.typePartenaire,
+          sigle: editing.sigle ?? '',
           numeroClient: editing.numeroClient ?? '',
           numeroFournisseur: editing.numeroFournisseur ?? '',
+          adresse: editing.adresse ?? '',
+          telephone: editing.telephone ?? '',
+          email: editing.email ?? '',
+          pays: editing.pays ?? '',
+          ville: editing.ville ?? '',
         }
       : { typePartenaire: 'CLIENT' },
   });

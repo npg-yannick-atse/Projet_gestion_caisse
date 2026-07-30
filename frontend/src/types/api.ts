@@ -297,8 +297,14 @@ export interface Partenaire {
   code: string;
   raisonSociale: string;
   typePartenaire: TypePartenaire;
+  sigle?: string | null;
   numeroClient?: string | null;
   numeroFournisseur?: string | null;
+  adresse?: string | null;
+  telephone?: string | null;
+  email?: string | null;
+  pays?: string | null;
+  ville?: string | null;
   estActif: boolean;
 }
 
