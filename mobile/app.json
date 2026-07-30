@@ -17,7 +17,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.npgandour.fdc",
       "infoPlist": {
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -41,7 +44,11 @@
       "apiUrl": "http://10.10.32.2:8080/api/v1",
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "2e3aca4e-ad91-4b27-bd83-88a0a49cabaa"
       }
-    }
+    },
+    "owner": "yannick.atse"
   }
 }
