@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import type { SelectOption } from './Select';
 
@@ -54,7 +55,7 @@ export function RemoteSelect({ label, value, selectedLabel, onChange, fetcher, q
         <Text style={[styles.fieldText, !value && styles.placeholder]} numberOfLines={1}>
           {value ? selectedLabel ?? '…' : placeholder}
         </Text>
-        <Text style={styles.chevron}>▾</Text>
+        <Ionicons name="chevron-down" size={18} color="#64748B" style={{ marginLeft: 8 }} />
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
@@ -96,7 +97,7 @@ export function RemoteSelect({ label, value, selectedLabel, onChange, fetcher, q
                         <Text style={[styles.optionLabel, isSel && styles.optionLabelSel]}>{item.label}</Text>
                         {item.sublabel ? <Text style={styles.optionSub}>{item.sublabel}</Text> : null}
                       </View>
-                      {isSel ? <Text style={styles.check}>✓</Text> : null}
+                      {isSel ? <Ionicons name="checkmark" size={18} color="#0F4C81" /> : null}
                     </Pressable>
                   );
                 }}

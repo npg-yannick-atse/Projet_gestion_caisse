@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const MONTHS = [
@@ -75,7 +76,7 @@ export function DateField({ label, value, onChange }: Props) {
       <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.field} onPress={openCal}>
         <Text style={styles.value}>{displayFr(value)}</Text>
-        <Text style={styles.cal}>📅</Text>
+        <Ionicons name="calendar-outline" size={18} color="#64748B" />
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -83,13 +84,13 @@ export function DateField({ label, value, onChange }: Props) {
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.header}>
               <Pressable onPress={prevMonth} hitSlop={10}>
-                <Text style={styles.nav}>‹</Text>
+                <Ionicons name="chevron-back" size={24} color="#0F4C81" />
               </Pressable>
               <Text style={styles.title}>
                 {MONTHS[viewM]} {viewY}
               </Text>
               <Pressable onPress={nextMonth} hitSlop={10}>
-                <Text style={styles.nav}>›</Text>
+                <Ionicons name="chevron-forward" size={24} color="#0F4C81" />
               </Pressable>
             </View>
 

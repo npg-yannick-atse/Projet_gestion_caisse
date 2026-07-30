@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useBon, useSousBons, useValidateBon } from '@/api/bons';
 import { useCostCenters, useNaturesOperation, usePartenaires } from '@/api/referentiel';
@@ -113,7 +114,8 @@ export default function BonDetailScreen() {
                       <Text style={[styles.badgeSmText, { color: sm.fg }]}>{sm.label}</Text>
                     </View>
                   </View>
-                  <Text style={styles.chev}>{open ? '▴' : '▾'}</Text>
+                  <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" style={{ marginLeft: 8 }} />
+
                 </Pressable>
 
                 {open ? (

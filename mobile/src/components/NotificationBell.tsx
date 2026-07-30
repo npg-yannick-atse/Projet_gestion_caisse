@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useBonsAValider } from '@/api/bons';
 import { useCanValidate } from '@/lib/roles';
@@ -25,7 +26,7 @@ export function NotificationBell() {
       style={styles.wrap}
       accessibilityLabel={`Notifications : ${count} bon(s) à valider`}
     >
-      <Text style={styles.bell}>🔔</Text>
+      <Ionicons name={count > 0 ? 'notifications' : 'notifications-outline'} size={22} color="#fff" />
       {count > 0 ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
