@@ -190,8 +190,9 @@ export default function NouvelleDemandeScreen() {
             )}
             <Select label="Centre de coût" required value={costCenterId} options={ccOptions} onChange={setCostCenterId} />
             <Select
-              label="Nature d'opération"
+              label="Nature comptable"
               required
+              searchable
               value={natureOperationId}
               options={natureOptions}
               onChange={setNatureOperationId}
@@ -226,6 +227,7 @@ export default function NouvelleDemandeScreen() {
 
             <Select
               label="Partenaire"
+              searchable
               value={partenaireId}
               options={partenaireOptions}
               onChange={setPartenaireId}

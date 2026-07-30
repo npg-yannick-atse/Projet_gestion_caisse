@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export interface SelectOption {
   value: string;
@@ -14,12 +14,28 @@ interface Props {
   onChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  /** Affiche une barre de recherche filtrant les options (listes longues). */
+  searchable?: boolean;
 }
 
 /** Sélecteur simple : un bouton qui ouvre une liste modale d'options. */
-export function Select({ label, value, options, onChange, placeholder = 'Sélectionner…', required }: Props) {
+export function Select({ label, value, options, onChange, placeholder = 'Sélectionner…', required, searchable }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selected = options.find((o) => o.value === value);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(
+      (o) => o.label.toLowerCase().includes(q) || (o.sublabel ?? '').toLowerCase().includes(q),
+    );
+  }, [options, query]);
+
+  const close = () => {
+    setOpen(false);
+    setQuery('');
+  };
 
   return (
     <View style={styles.wrap}>
@@ -35,13 +51,25 @@ export function Select({ label, value, options, onChange, placeholder = 'Sélect
         <Text style={styles.chevron}>▾</Text>
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+        <Pressable style={styles.backdrop} onPress={close}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.sheetTitle}>{label}</Text>
+            {searchable ? (
+              <TextInput
+                style={styles.search}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Rechercher…"
+                placeholderTextColor="#94A3B8"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+            ) : null}
             <FlatList
-              data={options}
+              data={filtered}
               keyExtractor={(o) => o.value}
+              keyboardShouldPersistTaps="handled"
               ItemSeparatorComponent={() => <View style={styles.sep} />}
               renderItem={({ item }) => {
                 const isSel = item.value === value;
@@ -50,7 +78,7 @@ export function Select({ label, value, options, onChange, placeholder = 'Sélect
                     style={styles.option}
                     onPress={() => {
                       onChange(item.value);
-                      setOpen(false);
+                      close();
                     }}
                   >
                     <View style={styles.optionTextWrap}>
@@ -61,7 +89,7 @@ export function Select({ label, value, options, onChange, placeholder = 'Sélect
                   </Pressable>
                 );
               }}
-              ListEmptyComponent={<Text style={styles.empty}>Aucune option.</Text>}
+              ListEmptyComponent={<Text style={styles.empty}>Aucun résultat.</Text>}
             />
           </Pressable>
         </Pressable>
@@ -91,6 +119,17 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
   sheet: { backgroundColor: '#fff', borderRadius: 16, maxHeight: '70%', padding: 16 },
   sheetTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 },
+  search: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    height: 42,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    marginBottom: 10,
+  },
   sep: { height: 1, backgroundColor: '#F1F5F9' },
   option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
   optionTextWrap: { flex: 1 },
