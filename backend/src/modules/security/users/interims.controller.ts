@@ -16,13 +16,33 @@ import { InterimsService } from './interims.service';
 import { CreateInterimDto, UpdateInterimDto } from './dto/interim.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { AuthorizationService } from '../authorization.service';
 
+/**
+ * Sécurité (cf. migration 0040) :
+ *  - CRÉER un intérim reste ouvert à tout utilisateur authentifié : le service impose
+ *    que l'initiateur soit l'utilisateur courant et qu'il ne délègue QUE des droits
+ *    qu'il détient déjà (assertCanDelegate). Chacun doit pouvoir se faire remplacer.
+ *  - LISTER tous les intérims (vision transverse) exige INTERIM_VOIR ; les vues
+ *    personnelles « mes délégations » / « je remplace » restent libres.
+ *  - MODIFIER / RÉVOQUER : réservé à l'initiateur de l'intérim, ou à INTERIM_REVOQUER.
+ */
 @ApiTags('Security / Intérims')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('interims')
 export class InterimsController {
-  constructor(private readonly interimsService: InterimsService) {}
+  constructor(
+    private readonly interimsService: InterimsService,
+    private readonly authz: AuthorizationService,
+  ) {}
+
+  /** Autorise l'initiateur de l'intérim, sinon exige INTERIM_REVOQUER. */
+  private async assertPeutAgirSur(id: string, user: JwtPayload, action: string) {
+    const interim = await this.interimsService.findOne(id);
+    if (String(interim.initiateurId) === String(user.sub)) return;
+    await this.authz.assertPermission(user.sub, 'INTERIM_REVOQUER', action);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Créer un intérim (initiateur = utilisateur courant ; délégation limitée à ses propres droits)' })
@@ -31,8 +51,13 @@ export class InterimsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lister les intérims' })
-  findAll(@Query('statut') statut?: string) {
+  @ApiOperation({ summary: 'Lister les intérims (vision transverse — permission INTERIM_VOIR)' })
+  async findAll(@CurrentUser() user: JwtPayload, @Query('statut') statut?: string) {
+    await this.authz.assertPermission(
+      user.sub,
+      'INTERIM_VOIR',
+      'consulter les intérims de tous les utilisateurs',
+    );
     return this.interimsService.findAll(statut);
   }
 
@@ -50,27 +75,45 @@ export class InterimsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtenir un intérim par id' })
-  findOne(@Param('id') id: string) {
-    return this.interimsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    const interim = await this.interimsService.findOne(id);
+    const concerne =
+      String(interim.initiateurId) === String(user.sub) ||
+      String(interim.remplacantId) === String(user.sub);
+    if (!concerne) {
+      await this.authz.assertPermission(user.sub, 'INTERIM_VOIR', 'consulter cet intérim');
+    }
+    return interim;
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour un intérim' })
-  update(@Param('id') id: string, @Body() dto: UpdateInterimDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateInterimDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.assertPeutAgirSur(id, user, 'modifier cet intérim');
     return this.interimsService.update(id, dto);
   }
 
   @Post(':id/revoke')
   @ApiOperation({ summary: 'Révoquer un intérim' })
-  revoke(@Param('id') id: string) {
+  async revoke(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutAgirSur(id, user, 'révoquer cet intérim');
     return this.interimsService.revoke(id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Supprimer un intérim' })
-  async remove(@Param('id') id: string) {
-    await this.interimsService.findOne(id);
-    // Soft delete would be handled here if needed
+  @ApiOperation({
+    summary:
+      "Supprimer un intérim — NON IMPLÉMENTÉ : ne supprime rien, utiliser /revoke (route conservée pour compatibilité)",
+  })
+  async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutAgirSur(id, user, 'supprimer cet intérim');
+    // Volontairement sans effet : un intérim ne se supprime pas, il se révoque
+    // (traçabilité). Le contrôle d'accès ci-dessus évite qu'un appelant non
+    // habilité obtienne un 204 laissant croire à une suppression.
   }
 }

@@ -3,12 +3,15 @@ import { api } from '@/lib/api';
 import type { CreateUserPayload, Profil, Role, User } from '@/types/api';
 
 export interface UsersFilters {
+  /** Recherche en base sur nom, prénom, matricule et email. */
+  search?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
 
 export async function listUsers(filters: UsersFilters = {}): Promise<User[]> {
   const params: Record<string, string> = {};
+  if (filters.search) params.search = filters.search;
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;
   const { data } = await api.get<User[]>('/users', { params });

@@ -37,7 +37,11 @@ export class EncaissementService {
     }
 
     // Autorisation : encaissement réservé aux caissiers (+ admins), sur une caisse de son périmètre.
-    await this.authz.assertAnyRole(input.userId, ['CAISSIER'], 'effectuer un encaissement');
+    await this.authz.assertPermission(
+      input.userId,
+      'ENCAISSEMENT_CREER',
+      'effectuer un encaissement',
+    );
     await this.authz.assertCaisseInPerimeter(input.userId, input.caisseId);
 
     return this.dataSource.transaction(async (manager) => {

@@ -200,15 +200,31 @@ export class UsersService {
     estActif: 'estActif',
   };
 
-  findAll(opts: { sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<User[]> {
+  findAll(
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+  ): Promise<User[]> {
     const col = UsersService.USER_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
-    return this.userRepo.find({
-      where: { deletedAt: IsNull() },
-      order: col
-        ? ({ [col]: direction } as any)
-        : { nom: 'ASC', prenom: 'ASC' },
-    });
+    const qb = this.userRepo.createQueryBuilder('u').where('u.deleted_at IS NULL');
+
+    // Recherche EN BASE sur nom, prénom (dans les deux ordres), matricule et email.
+    if (opts.search && opts.search.trim()) {
+      const q = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        "(u.nom LIKE :q ESCAPE :e OR u.prenom LIKE :q ESCAPE :e " +
+          "OR (u.prenom + ' ' + u.nom) LIKE :q ESCAPE :e " +
+          "OR (u.nom + ' ' + u.prenom) LIKE :q ESCAPE :e " +
+          'OR u.matricule LIKE :q ESCAPE :e OR u.email LIKE :q ESCAPE :e)',
+        { q, e: '\\' },
+      );
+    }
+
+    if (col) {
+      qb.orderBy(`u.${col}`, direction);
+    } else {
+      qb.orderBy('u.nom', 'ASC').addOrderBy('u.prenom', 'ASC');
+    }
+    return qb.getMany();
   }
 
   async findOne(id: string): Promise<User> {

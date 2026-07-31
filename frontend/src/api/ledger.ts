@@ -18,6 +18,8 @@ export interface OperationsFilters {
   costCenterId?: string;
   /** Filtre avancé : agent qui a effectué l'opération. */
   userId?: string;
+  /** Limite le nombre de lignes renvoyées (TOP en base) — aperçus « récents ». */
+  limit?: number;
 }
 
 function operationParams(filters: OperationsFilters): Record<string, string> {
@@ -31,6 +33,7 @@ function operationParams(filters: OperationsFilters): Record<string, string> {
   if (filters.portefeuilleId) params.portefeuilleId = filters.portefeuilleId;
   if (filters.costCenterId) params.costCenterId = filters.costCenterId;
   if (filters.userId) params.userId = filters.userId;
+  if (filters.limit) params.limit = String(filters.limit);
   return params;
 }
 
@@ -50,30 +53,51 @@ export async function exportOperationsXlsx(filters: OperationsFilters = {}): Pro
   return data as Blob;
 }
 
-export async function listOperationsByCaisse(caisseId: string): Promise<Operation[]> {
-  const { data } = await api.get<Operation[]>(`/ledger/operations/caisse/${caisseId}`);
+export async function listOperationsByCaisse(caisseId: string, limit?: number): Promise<Operation[]> {
+  const { data } = await api.get<Operation[]>(`/ledger/operations/caisse/${caisseId}`, {
+    params: limit ? { limit: String(limit) } : undefined,
+  });
   return data;
 }
 
-/** Opérations (mouvements) d'une caisse — pour l'historique. Désactivable via `enabled`. */
-export function useOperationsByCaisse(caisseId: string | null | undefined, enabled = true) {
+/**
+ * Opérations (mouvements) d'une caisse — pour l'historique. Désactivable via `enabled`.
+ * `limit` tronque EN BASE (TOP), pour les vues qui n'affichent que les N dernières.
+ */
+export function useOperationsByCaisse(
+  caisseId: string | null | undefined,
+  enabled = true,
+  limit?: number,
+) {
   return useQuery({
-    queryKey: ['operations', 'caisse', caisseId],
-    queryFn: () => listOperationsByCaisse(caisseId as string),
+    queryKey: ['operations', 'caisse', caisseId, limit ?? 'all'],
+    queryFn: () => listOperationsByCaisse(caisseId as string, limit),
     enabled: !!caisseId && enabled,
   });
 }
 
-export async function listOperationsByPortefeuille(portefeuilleId: string): Promise<Operation[]> {
-  const { data } = await api.get<Operation[]>(`/ledger/operations/portefeuille/${portefeuilleId}`);
+export async function listOperationsByPortefeuille(
+  portefeuilleId: string,
+  limit?: number,
+): Promise<Operation[]> {
+  const { data } = await api.get<Operation[]>(`/ledger/operations/portefeuille/${portefeuilleId}`, {
+    params: limit ? { limit: String(limit) } : undefined,
+  });
   return data;
 }
 
-/** Opérations (mouvements) d'un portefeuille — pour l'historique. Désactivable via `enabled`. */
-export function useOperationsByPortefeuille(portefeuilleId: string | null | undefined, enabled = true) {
+/**
+ * Opérations (mouvements) d'un portefeuille — pour l'historique. Désactivable via `enabled`.
+ * `limit` tronque EN BASE (TOP), pour les vues qui n'affichent que les N dernières.
+ */
+export function useOperationsByPortefeuille(
+  portefeuilleId: string | null | undefined,
+  enabled = true,
+  limit?: number,
+) {
   return useQuery({
-    queryKey: ['operations', 'portefeuille', portefeuilleId],
-    queryFn: () => listOperationsByPortefeuille(portefeuilleId as string),
+    queryKey: ['operations', 'portefeuille', portefeuilleId, limit ?? 'all'],
+    queryFn: () => listOperationsByPortefeuille(portefeuilleId as string, limit),
     enabled: !!portefeuilleId && enabled,
   });
 }

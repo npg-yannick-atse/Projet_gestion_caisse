@@ -17,7 +17,6 @@ import { LedgerService, type OperationScope } from './ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
 
 interface CreateOperationRequest {
   typeOperation: 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT';
@@ -51,17 +50,26 @@ export class LedgerController {
   ) {}
 
   @Get('integrite')
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: "Vérifier la chaîne d'intégrité des écritures (recalcul + chaînage des hash) — Super Admin" })
-  async verifierIntegrite(@Query('transactionUuid') transactionUuid?: string) {
+  @ApiOperation({ summary: "Vérifier la chaîne d'intégrité des écritures (recalcul + chaînage des hash) — permission LEDGER_INTEGRITE" })
+  async verifierIntegrite(
+    @CurrentUser() user: JwtPayload,
+    @Query('transactionUuid') transactionUuid?: string,
+  ) {
+    // Strict (sans bypass admin) : le contrôle d'intégrité était réservé au Super
+    // Admin, un administrateur ordinaire ne doit pas y accéder implicitement.
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'LEDGER_INTEGRITE',
+      "vérifier l'intégrité des écritures",
+    );
     return this.ledgerService.verifyEcrituresChain(transactionUuid);
   }
 
   // Opérations
   @Post('operations')
-  @Roles('ADMINISTRATEUR')
-  @ApiOperation({ summary: 'Créer une opération (mouvement caisse/portefeuille) — réservé admin' })
+  @ApiOperation({ summary: 'Créer une opération (mouvement caisse/portefeuille) — permission OPERATION_CREER' })
   async createOperation(@Body() dto: CreateOperationRequest, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'OPERATION_CREER', 'créer une opération');
     return this.ledgerService.createOperation({
       ...dto,
       userId: user.sub,
@@ -114,6 +122,7 @@ export class LedgerController {
     @Query('portefeuilleId') portefeuilleId?: string,
     @Query('costCenterId') costCenterId?: string,
     @Query('userId') userId?: string,
+    @Query('limit') limit?: string,
   ) {
     const scope = await this.resolveOperationScope(user.sub);
     return this.ledgerService.findAllOperations({
@@ -126,6 +135,7 @@ export class LedgerController {
       portefeuilleId,
       costCenterId,
       userId,
+      limit: limit ? Number(limit) : undefined,
       scope,
     });
   }
@@ -164,29 +174,37 @@ export class LedgerController {
   }
 
   @Get('operations/caisse/:caisseId')
-  @ApiOperation({ summary: 'Lister les opérations d\'une caisse' })
-  async getCaisseOperations(@Param('caisseId') caisseId: string) {
-    return this.ledgerService.getCaisseOperations(caisseId);
+  @ApiOperation({ summary: 'Lister les opérations d\'une caisse (limit = TOP en base)' })
+  async getCaisseOperations(@Param('caisseId') caisseId: string, @Query('limit') limit?: string) {
+    return this.ledgerService.getCaisseOperations(caisseId, limit ? Number(limit) : undefined);
   }
 
   @Get('operations/portefeuille/:portefeuilleId')
-  @ApiOperation({ summary: 'Lister les opérations d\'un portefeuille' })
-  async getPortefeuilleOperations(@Param('portefeuilleId') portefeuilleId: string) {
-    return this.ledgerService.getPortefeuilleOperations(portefeuilleId);
+  @ApiOperation({ summary: 'Lister les opérations d\'un portefeuille (limit = TOP en base)' })
+  async getPortefeuilleOperations(
+    @Param('portefeuilleId') portefeuilleId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.ledgerService.getPortefeuilleOperations(
+      portefeuilleId,
+      limit ? Number(limit) : undefined,
+    );
   }
 
   // Écritures Comptables (Partie Double)
   @Post('ecritures')
-  @Roles('ADMINISTRATEUR')
-  @ApiOperation({ summary: 'Créer une écriture comptable (immuable) — réservé admin' })
+  @ApiOperation({ summary: 'Créer une écriture comptable (immuable) — permission ECRITURE_CREER' })
   @HttpCode(HttpStatus.CREATED)
-  async createEcriture(@Body() dto: CreateEcritureRequest & { transactionUuid: string }) {
+  async createEcriture(
+    @Body() dto: CreateEcritureRequest & { transactionUuid: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ECRITURE_CREER', 'créer une écriture comptable');
     return this.ledgerService.createEcriture(dto, dto.transactionUuid);
   }
 
   @Post('ecritures/paired')
-  @Roles('ADMINISTRATEUR')
-  @ApiOperation({ summary: 'Créer une paire d\'écritures (débit + crédit) équilibrée — réservé admin' })
+  @ApiOperation({ summary: 'Créer une paire d\'écritures (débit + crédit) équilibrée — permission ECRITURE_CREER' })
   async createPaired(
     @Body()
     dto: {
@@ -195,7 +213,9 @@ export class LedgerController {
       montant: string;
       transactionUuid: string;
     },
+    @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'ECRITURE_CREER', 'créer des écritures comptables');
     return this.ledgerService.createPairedEcritures(
       dto.debit as any,
       dto.credit as any,

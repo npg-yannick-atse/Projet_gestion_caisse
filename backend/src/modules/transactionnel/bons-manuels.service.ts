@@ -30,11 +30,9 @@ export class BonsManuelsService {
 
   // ========================= CARNETS =========================
 
-  /** Création d'un carnet : réservée aux admins (assigne caisse + caissier + plage). */
+  /** Création d'un carnet : permission CARNET_GERER (assigne caisse + caissier + plage). */
   async createCarnet(dto: CreateCarnetDto, userId: string): Promise<Carnet> {
-    if (!(await this.authz.isAdmin(userId))) {
-      throw new ForbiddenException('Seul un administrateur peut créer un carnet.');
-    }
+    await this.authz.assertPermission(userId, 'CARNET_GERER', 'créer un carnet');
     if (dto.numeroFin < dto.numeroDebut) {
       throw new BadRequestException('Le numéro de fin doit être ≥ au numéro de début.');
     }
@@ -82,11 +80,9 @@ export class BonsManuelsService {
     return carnet;
   }
 
-  /** Clôture manuelle d'un carnet (admin). */
+  /** Clôture manuelle d'un carnet : permission CARNET_GERER. */
   async cloturerCarnet(id: string, userId: string): Promise<Carnet> {
-    if (!(await this.authz.isAdmin(userId))) {
-      throw new ForbiddenException('Seul un administrateur peut clôturer un carnet.');
-    }
+    await this.authz.assertPermission(userId, 'CARNET_GERER', 'clôturer un carnet');
     const carnet = await this.findCarnet(id);
     carnet.statut = 'CLOTURE';
     carnet.updatedById = userId as any;
@@ -109,11 +105,25 @@ export class BonsManuelsService {
 
   async findBonsManuels(
     userId: string,
-    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+    opts: {
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+    } = {},
   ): Promise<BonManuel[]> {
     const isAdmin = await this.authz.isAdmin(userId);
     const qb = this.bonManuelRepo.createQueryBuilder('bm');
     if (!isAdmin) qb.where('bm.caissier_id = :uid', { uid: userId });
+    // Bornes de dates appliquées EN BASE sur la date de décaissement (jour inclus
+    // des deux côtés), pour ne pas rapatrier tout l'historique avant de filtrer.
+    if (opts.dateFrom) {
+      qb.andWhere('bm.date_decaissement >= :df', { df: `${opts.dateFrom}T00:00:00.000` });
+    }
+    if (opts.dateTo) {
+      qb.andWhere('bm.date_decaissement <= :dt', { dt: `${opts.dateTo}T23:59:59.997` });
+    }
     if (opts.search) {
       // Recherche BD : n° système / n° carnet / bénéficiaire / montant + donneur d'ordre
       // (nom libre OU nom de l'utilisateur via join sec_user).
@@ -137,8 +147,8 @@ export class BonsManuelsService {
    * + opération comptable (DECAISSEMENT), + avancement du carnet.
    */
   async createBonManuel(dto: CreateBonManuelDto, caissierId: string): Promise<BonManuel> {
-    // Rôle requis : caissier (admins/DAF passent).
-    await this.authz.assertAnyRole(caissierId, ['CAISSIER'], 'créer un bon manuel');
+    // Permission requise : BON_MANUEL_CREER (attribuée au caissier ; admins passent).
+    await this.authz.assertPermission(caissierId, 'BON_MANUEL_CREER', 'créer un bon manuel');
     const isAdmin = await this.authz.isAdmin(caissierId);
 
     return this.dataSource.transaction(async (manager) => {

@@ -13,9 +13,11 @@ import {
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 
-// Rôles habilités (les admins passent toujours, gérés dans AuthorizationService).
-const ROLES_ACTION_TRANSFERT = ['CAISSIER', 'GESTIONNAIRE_PORTEFEUILLE'];
-const ROLES_APPROBATION_TRANSFERT = ['GESTIONNAIRE_PORTEFEUILLE'];
+// Habilitations désormais portées par des permissions (migration 0040) :
+//   TRANSFERT_INITIER  → caissier + gestionnaire de portefeuille
+//   TRANSFERT_VALIDER  → gestionnaire de portefeuille
+//   TRANSFERT_EXECUTER → caissier + gestionnaire de portefeuille
+// Les admins passent toujours (bypass géré dans AuthorizationService).
 
 @Injectable()
 export class DemandesTransfertService {
@@ -61,8 +63,8 @@ export class DemandesTransfertService {
       throw new BadRequestException('Source et destination doivent être différentes');
     }
 
-    // Autorisation : créer un transfert (caissier / gestionnaire + admins), source dans son périmètre.
-    await this.authz.assertAnyRole(userId, ROLES_ACTION_TRANSFERT, 'créer un transfert');
+    // Autorisation : TRANSFERT_INITIER (caissier / gestionnaire + admins), source dans son périmètre.
+    await this.authz.assertPermission(userId, 'TRANSFERT_INITIER', 'créer un transfert');
     await this.assertSourceInPerimeter(userId, dto.sourceType, dto.sourceId);
 
     const dt = this.repo.create({
@@ -97,11 +99,16 @@ export class DemandesTransfertService {
   findAll(opts: {
     statut?: DemandeTransfertStatut;
     search?: string;
+    dateFrom?: string;
+    dateTo?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
   } = {}): Promise<DemandeTransfert[]> {
     const qb = this.repo.createQueryBuilder('dt').where('dt.deleted_at IS NULL');
     if (opts.statut) qb.andWhere('dt.statut = :statut', { statut: opts.statut });
+    // Bornes de dates EN BASE sur la date de création (jour inclus des deux côtés).
+    if (opts.dateFrom) qb.andWhere('dt.created_at >= :df', { df: `${opts.dateFrom}T00:00:00.000` });
+    if (opts.dateTo) qb.andWhere('dt.created_at <= :dt2', { dt2: `${opts.dateTo}T23:59:59.997` });
     if (opts.search) {
       // Recherche BD : numéro / motif / montant + nom du demandeur (join sec_user).
       qb.leftJoin('sec_user', 'u', 'u.id = dt.demandeur_id').andWhere(
@@ -117,6 +124,42 @@ export class DemandesTransfertService {
     return qb.getMany();
   }
 
+  /**
+   * Compteurs par statut (GROUP BY en base), calculés en appliquant la recherche et
+   * les bornes de dates mais PAS le filtre de statut : les onglets doivent afficher
+   * le total de chaque statut, y compris ceux qui ne sont pas sélectionnés.
+   */
+  async statsParStatut(
+    opts: { search?: string; dateFrom?: string; dateTo?: string } = {},
+  ): Promise<{ total: number; parStatut: Record<string, number> }> {
+    const qb = this.repo
+      .createQueryBuilder('dt')
+      .select('dt.statut', 'statut')
+      .addSelect('COUNT(*)', 'n')
+      .where('dt.deleted_at IS NULL');
+    if (opts.dateFrom) qb.andWhere('dt.created_at >= :df', { df: `${opts.dateFrom}T00:00:00.000` });
+    if (opts.dateTo) qb.andWhere('dt.created_at <= :dt2', { dt2: `${opts.dateTo}T23:59:59.997` });
+    if (opts.search) {
+      qb.leftJoin('sec_user', 'u', 'u.id = dt.demandeur_id').andWhere(
+        "(dt.numero LIKE :q OR dt.motif LIKE :q OR CAST(dt.montant AS nvarchar(50)) LIKE :q " +
+          "OR (u.prenom + ' ' + u.nom) LIKE :q OR (u.nom + ' ' + u.prenom) LIKE :q)",
+        { q: `%${opts.search}%` },
+      );
+    }
+    const rows: Array<{ statut: string; n: string | number }> = await qb
+      .groupBy('dt.statut')
+      .getRawMany();
+
+    const parStatut: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) {
+      const n = Number(r.n);
+      parStatut[r.statut] = n;
+      total += n;
+    }
+    return { total, parStatut };
+  }
+
   async decision(
     id: string,
     dto: DecisionDemandeTransfertDto,
@@ -128,8 +171,8 @@ export class DemandesTransfertService {
         `Décision impossible : la demande est déjà ${dt.statut.toLowerCase()}.`,
       );
     }
-    // Autorisation : approbation réservée aux gestionnaires de portefeuille (+ admins).
-    await this.authz.assertAnyRole(validateurId, ROLES_APPROBATION_TRANSFERT, 'approuver un transfert');
+    // Autorisation : TRANSFERT_VALIDER (gestionnaire de portefeuille + admins).
+    await this.authz.assertPermission(validateurId, 'TRANSFERT_VALIDER', 'approuver un transfert');
     if (String(dt.demandeurId) === String(validateurId)) {
       throw new ForbiddenException(
         'Vous ne pouvez pas approuver / rejeter votre propre demande.',
@@ -170,8 +213,8 @@ export class DemandesTransfertService {
         `La demande doit être APPROUVEE pour être exécutée (statut actuel : ${dt.statut}).`,
       );
     }
-    // Autorisation : exécution réservée aux caissiers / gestionnaires (+ admins).
-    await this.authz.assertAnyRole(executeurId, ROLES_ACTION_TRANSFERT, 'exécuter un transfert');
+    // Autorisation : TRANSFERT_EXECUTER (caissiers / gestionnaires + admins).
+    await this.authz.assertPermission(executeurId, 'TRANSFERT_EXECUTER', 'exécuter un transfert');
     const transactionUuid = uuidv4();
     // On enregistre une opération TRANSFERT côté Ledger.
     // Note : pour un transfert caisse → portefeuille (et vice-versa), on émet l'opération sur la source.

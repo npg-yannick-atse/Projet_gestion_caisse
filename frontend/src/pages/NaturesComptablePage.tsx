@@ -1,33 +1,48 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { useNaturesComptable } from '@/api/referentiel';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
 
 const PAGE_SIZES = [10, 20, 50, 100] as const;
+const NC_SORT_COLUMNS = ['codeComptableSap', 'libelle'] as const;
+type NcSortCol = (typeof NC_SORT_COLUMNS)[number];
 
 /**
  * Référentiel des natures comptables = comptes généraux du plan PCGG (extraits de
  * SAP). Consultation seule : ces comptes viennent de SAP, on ne les crée pas ici.
+ *
+ * Recherche et tri sont exécutés EN BASE (LIKE + ORDER BY) : le catalogue PCGG
+ * compte plusieurs centaines de comptes, les filtrer côté client obligeait à tout
+ * charger. Seule la pagination reste côté client, sur le jeu déjà filtré.
  */
 export function NaturesComptablePage() {
-  const { data: natures, isLoading, isError } = useNaturesComptable();
+  const sort = useTableSort<NcSortCol>('/natures-comptable', NC_SORT_COLUMNS, {
+    by: 'libelle',
+    dir: 'asc',
+  });
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: natures, isLoading, isError } = useNaturesComptable({
+    search: debouncedSearch || undefined,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(50);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = natures ?? [];
-    if (!q) return list;
-    return list.filter(
-      (n) => (n.codeComptableSap ?? '').toLowerCase().includes(q) || n.libelle.toLowerCase().includes(q),
-    );
-  }, [natures, search]);
+  const filtered = natures ?? [];
 
   // Retour page 1 quand la recherche ou la taille de page change.
   useEffect(() => {
     setPage(1);
-  }, [search, pageSize]);
+  }, [debouncedSearch, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageSafe = Math.min(page, totalPages);
@@ -77,8 +92,12 @@ export function NaturesComptablePage() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">N° compte</th>
-                <th className="px-4 py-2.5 font-semibold">Libellé</th>
+                <SortableHeader column="codeComptableSap" state={sort.state} onSort={sort.setSort}>
+                  N° compte
+                </SortableHeader>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>
+                  Libellé
+                </SortableHeader>
               </tr>
             </thead>
             <tbody>

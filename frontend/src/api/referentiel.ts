@@ -150,13 +150,16 @@ export function useTypeBons() {
   return useQuery({ queryKey: ['type-bons'], queryFn: listTypeBons });
 }
 
-export async function listNaturesComptable(): Promise<NatureComptable[]> {
-  const { data } = await api.get<NatureComptable[]>('/natures-comptable');
+export async function listNaturesComptable(filters: RefFilters = {}): Promise<NatureComptable[]> {
+  const { data } = await api.get<NatureComptable[]>('/natures-comptable', { params: refParams(filters) });
   return data;
 }
 
-export function useNaturesComptable() {
-  return useQuery({ queryKey: ['natures-comptable'], queryFn: listNaturesComptable });
+export function useNaturesComptable(filters: RefFilters = {}) {
+  return useQuery({
+    queryKey: ['natures-comptable', filters],
+    queryFn: () => listNaturesComptable(filters),
+  });
 }
 
 // ---------- Pays / Division ----------
@@ -184,8 +187,10 @@ export function useDeletePays() {
   return useMutation({ mutationFn: deletePays, onSuccess: () => qc.invalidateQueries({ queryKey: ['pays'] }) });
 }
 
-export async function listDivisions(paysId?: string): Promise<Division[]> {
-  const { data } = await api.get<Division[]>('/divisions', { params: paysId ? { paysId } : undefined });
+export async function listDivisions(paysId?: string, filters: RefFilters = {}): Promise<Division[]> {
+  const { data } = await api.get<Division[]>('/divisions', {
+    params: { ...refParams(filters), ...(paysId ? { paysId } : {}) },
+  });
   return data;
 }
 export async function createDivision(payload: {
@@ -199,8 +204,11 @@ export async function createDivision(payload: {
 export async function deleteDivision(id: string): Promise<void> {
   await api.delete(`/divisions/${id}`);
 }
-export function useDivisions(paysId?: string) {
-  return useQuery({ queryKey: ['divisions', paysId ?? 'all'], queryFn: () => listDivisions(paysId) });
+export function useDivisions(paysId?: string, filters: RefFilters = {}) {
+  return useQuery({
+    queryKey: ['divisions', paysId ?? 'all', filters],
+    queryFn: () => listDivisions(paysId, filters),
+  });
 }
 export function useCreateDivision() {
   const qc = useQueryClient();
@@ -278,8 +286,15 @@ export function useDeleteNatureOperation() {
 
 // Plan comptable
 
-export async function listPlanComptable(): Promise<PlanComptable[]> {
-  const { data } = await api.get<PlanComptable[]>('/plan-comptable');
+export interface PlanComptableFilters extends RefFilters {
+  /** Filtre exact sur le type de compte (CAISSE, PORTEFEUILLE, CHARGE…). */
+  typeCompte?: string;
+}
+
+export async function listPlanComptable(filters: PlanComptableFilters = {}): Promise<PlanComptable[]> {
+  const { data } = await api.get<PlanComptable[]>('/plan-comptable', {
+    params: { ...refParams(filters), ...(filters.typeCompte ? { typeCompte: filters.typeCompte } : {}) },
+  });
   return data;
 }
 
@@ -292,15 +307,40 @@ export async function deletePlanComptable(id: string): Promise<void> {
   await api.delete(`/plan-comptable/${id}`);
 }
 
-export function usePlanComptable() {
-  return useQuery({ queryKey: ['plan-comptable'], queryFn: listPlanComptable });
+export function usePlanComptable(filters: PlanComptableFilters = {}) {
+  return useQuery({
+    queryKey: ['plan-comptable', filters],
+    queryFn: () => listPlanComptable(filters),
+  });
+}
+
+export interface PlanComptableStats {
+  total: number;
+  parType: Record<string, number>;
+}
+
+export async function getPlanComptableStats(): Promise<PlanComptableStats> {
+  const { data } = await api.get<PlanComptableStats>('/plan-comptable/stats');
+  return data;
+}
+
+/** Compteurs par type (GROUP BY en base) : indépendants du filtre affiché. */
+export function usePlanComptableStats() {
+  return useQuery({ queryKey: ['plan-comptable-stats'], queryFn: getPlanComptableStats });
+}
+
+// Les compteurs par type vivent dans une requête séparée : toute mutation du plan
+// doit invalider les DEUX, sinon les onglets de filtre restent sur l'ancien total.
+function invalidatePlanComptable(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['plan-comptable'] });
+  qc.invalidateQueries({ queryKey: ['plan-comptable-stats'] });
 }
 
 export function useCreatePlanComptable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createPlanComptable,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan-comptable'] }),
+    onSuccess: () => invalidatePlanComptable(qc),
   });
 }
 
@@ -308,6 +348,6 @@ export function useDeletePlanComptable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deletePlanComptable,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan-comptable'] }),
+    onSuccess: () => invalidatePlanComptable(qc),
   });
 }

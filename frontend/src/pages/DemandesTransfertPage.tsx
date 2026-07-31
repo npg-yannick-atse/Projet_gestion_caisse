@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import {
   useDemandesTransfert,
+  useDemandesTransfertStats,
   useCreateDemandeTransfert,
   useDecisionDemandeTransfert,
   useCancelDemandeTransfert,
@@ -434,9 +435,12 @@ export function DemandesTransfertPage() {
 
   // Tri serveur URL-synced
   const sort = useTableSort<DtSortCol>('/transferts', DT_SORT_COLUMNS);
+  // Statut, recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: demandes, isLoading } = useDemandesTransfert({
     statut: statutFilter === 'ALL' ? undefined : statutFilter,
     search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
@@ -462,12 +466,7 @@ export function DemandesTransfertPage() {
     return p ? `${p.code} · ${p.libelle}` : id;
   };
 
-  // Filtre par dates (client-side, sur la liste déjà filtrée par statut + recherche BD).
-  const filtered = (demandes ?? []).filter((d) => {
-    if (dateFrom && new Date(d.createdAt) < new Date(`${dateFrom}T00:00:00`)) return false;
-    if (dateTo && new Date(d.createdAt) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    return true;
-  });
+  const filtered = demandes ?? [];
   const isDefaultView = !search && dateFrom === today && dateTo === today;
   const resetFilters = () => {
     setSearch('');
@@ -475,22 +474,21 @@ export function DemandesTransfertPage() {
     setDateTo(today);
   };
 
-  // Compteurs pour les onglets
-  const counts = useMemo(() => {
-    const init: Record<'ALL' | DemandeTransfertStatut, number> = {
-      ALL: 0,
-      CREE: 0,
-      APPROUVEE: 0,
-      EXECUTEE: 0,
-      REJETEE: 0,
-      ANNULEE: 0,
-    };
-    for (const d of demandes ?? []) {
-      init.ALL += 1;
-      init[d.statut] += 1;
-    }
-    return init;
-  }, [demandes]);
+  // Compteurs des onglets : GROUP BY en base, sans le filtre de statut — sinon
+  // sélectionner un onglet remettrait tous les autres compteurs à zéro.
+  const { data: stats } = useDemandesTransfertStats({
+    search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  });
+  const counts: Record<'ALL' | DemandeTransfertStatut, number> = {
+    ALL: stats?.total ?? 0,
+    CREE: stats?.parStatut.CREE ?? 0,
+    APPROUVEE: stats?.parStatut.APPROUVEE ?? 0,
+    EXECUTEE: stats?.parStatut.EXECUTEE ?? 0,
+    REJETEE: stats?.parStatut.REJETEE ?? 0,
+    ANNULEE: stats?.parStatut.ANNULEE ?? 0,
+  };
 
   return (
     <div className="flex flex-col gap-4">

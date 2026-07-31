@@ -26,19 +26,33 @@ export class DemandesTransfertController {
   constructor(private readonly service: DemandesTransfertService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Lister les demandes de transfert (tri + filtres BD)' })
+  @ApiOperation({ summary: 'Lister les demandes de transfert (tri + filtres + dates BD)' })
   findAll(
     @Query('statut') statut?: string,
     @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
     return this.service.findAll({
       statut: statut as any,
       search,
+      dateFrom,
+      dateTo,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
+  }
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Compteurs par statut (GROUP BY en base, hors filtre de statut)' })
+  stats(
+    @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.service.statsParStatut({ search, dateFrom, dateTo });
   }
 
   @Get(':id')

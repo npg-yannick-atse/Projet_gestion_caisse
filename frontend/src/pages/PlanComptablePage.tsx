@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { BookOpen, Plus, Search, Trash2 } from 'lucide-react';
 import {
   usePlanComptable,
+  usePlanComptableStats,
   useCreatePlanComptable,
   useDeletePlanComptable,
 } from '@/api/referentiel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
 import { apiErrorMessage } from '@/lib/utils';
 import type { PlanComptable, TypeCompte } from '@/types/api';
 import { Button } from '@/components/ui/button';
@@ -34,6 +37,9 @@ const TYPE_OPTIONS: { value: TypeCompte; label: string }[] = [
   { value: 'CHARGE', label: 'Charge' },
   { value: 'PRODUIT', label: 'Produit' },
 ];
+
+const PC_SORT_COLUMNS = ['numeroCompte', 'libelle', 'typeCompte'] as const;
+type PcSortCol = (typeof PC_SORT_COLUMNS)[number];
 
 const schema = z.object({
   numeroCompte: z
@@ -140,41 +146,40 @@ function CreatePlanComptableForm({ onDone }: { onDone: () => void }) {
 }
 
 function PlanComptablePageInner() {
-  const { data: comptes, isLoading, isError } = usePlanComptable();
+  const sort = useTableSort<PcSortCol>('/plan-comptable', PC_SORT_COLUMNS, {
+    by: 'numeroCompte',
+    dir: 'asc',
+  });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const [typeFilter, setTypeFilter] = useState<TypeCompte | 'ALL'>('ALL');
+
+  // Recherche, filtre par type et tri sont exécutés EN BASE.
+  const { data: comptes, isLoading, isError } = usePlanComptable({
+    search: debouncedSearch || undefined,
+    typeCompte: typeFilter === 'ALL' ? undefined : typeFilter,
+    sortBy: sort.state.by ?? undefined,
+    sortDir: sort.state.by ? sort.state.dir : undefined,
+  });
+  // Compteurs des onglets : GROUP BY en base, donc indépendants du filtre courant.
+  const { data: stats } = usePlanComptableStats();
   const remove = useDeletePlanComptable();
   const [showForm, setShowForm] = useState(false);
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TypeCompte | 'ALL'>('ALL');
   const [pendingDelete, setPendingDelete] = useState<PlanComptable | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (comptes ?? []).filter((c) => {
-      if (typeFilter !== 'ALL' && c.typeCompte !== typeFilter) return false;
-      if (!q) return true;
-      return (
-        c.numeroCompte.toLowerCase().includes(q) || c.libelle.toLowerCase().includes(q)
-      );
-    });
-  }, [comptes, search, typeFilter]);
+  const filtered = comptes ?? [];
 
-  // Compteurs par type
-  const counts = useMemo(() => {
-    const init: Record<TypeCompte | 'ALL', number> = {
-      ALL: 0,
-      ACTIF: 0,
-      PASSIF: 0,
-      CHARGE: 0,
-      PRODUIT: 0,
-    };
-    for (const c of comptes ?? []) {
-      init.ALL += 1;
-      init[c.typeCompte] += 1;
-    }
-    return init;
-  }, [comptes]);
-
-  const comptesById = new Map((comptes ?? []).map((c) => [c.id, c]));
+  const counts: Record<TypeCompte | 'ALL', number> = {
+    ALL: stats?.total ?? 0,
+    ACTIF: stats?.parType.ACTIF ?? 0,
+    PASSIF: stats?.parType.PASSIF ?? 0,
+    CHARGE: stats?.parType.CHARGE ?? 0,
+    PRODUIT: stats?.parType.PRODUIT ?? 0,
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -187,7 +192,7 @@ function PlanComptablePageInner() {
       )}
 
       <Panel>
-        <PanelHeader title="Plan comptable" badge={`${comptes?.length ?? 0}`}>
+        <PanelHeader title="Plan comptable" badge={`${stats?.total ?? comptes?.length ?? 0}`}>
           {!showForm && (
             <button
               type="button"
@@ -240,9 +245,15 @@ function PlanComptablePageInner() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">N° compte</th>
-                <th className="px-4 py-2.5 font-semibold">Libellé</th>
-                <th className="px-4 py-2.5 font-semibold">Type</th>
+                <SortableHeader column="numeroCompte" state={sort.state} onSort={sort.setSort}>
+                  N° compte
+                </SortableHeader>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>
+                  Libellé
+                </SortableHeader>
+                <SortableHeader column="typeCompte" state={sort.state} onSort={sort.setSort}>
+                  Type
+                </SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Parent</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
@@ -256,15 +267,15 @@ function PlanComptablePageInner() {
                     <div className="mb-2 flex justify-center text-[#94A3B8]">
                       <BookOpen className="h-8 w-8" />
                     </div>
-                    {(comptes ?? []).length === 0
-                      ? 'Aucun compte créé. Cliquez sur « Nouveau compte ».'
-                      : 'Aucun compte ne correspond à votre filtre.'}
+                    {search || typeFilter !== 'ALL'
+                      ? 'Aucun compte ne correspond à votre filtre.'
+                      : 'Aucun compte créé. Cliquez sur « Nouveau compte ».'}
                   </td>
                 </tr>
               )}
               {filtered.map((c) => {
                 const t = TYPE_TONE[c.typeCompte];
-                const parent = c.parentId ? comptesById.get(c.parentId) : undefined;
+                const parent = c.parent ?? undefined;
                 return (
                   <tr key={c.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                     <td className="px-4 py-3 font-mono font-semibold text-[#0F172A]">

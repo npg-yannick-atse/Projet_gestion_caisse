@@ -522,14 +522,21 @@ function UsersPageInner() {
     by: 'nom',
     dir: 'asc',
   });
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  // Recherche (nom, prénom, matricule, email) et tri exécutés EN BASE.
   const { data: users, isLoading, isError } = useUsers({
+    search: debouncedSearch || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
   const deleteUser = useDeleteUser();
   const [pendingDelete, setPendingDelete] = useState<User | null>(null);
   const [showPicker, setShowPicker] = useState(false);
-  const [search, setSearch] = useState('');
   const [manageUser, setManageUser] = useState<User | null>(null);
   // On ré-aligne le panneau de gestion sur la donnée LIVE (refetch après mutation),
   // sinon le <select> Direction garde la valeur figée capturée à l'ouverture.
@@ -547,17 +554,7 @@ function UsersPageInner() {
     [users],
   );
 
-  const filtered = useMemo(() => {
-    const list = users ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
-      (u) =>
-        `${u.prenom} ${u.nom}`.toLowerCase().includes(q) ||
-        u.matricule.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q),
-    );
-  }, [users, search]);
+  const filtered = users ?? [];
 
   return (
     <div className="flex flex-col gap-4">

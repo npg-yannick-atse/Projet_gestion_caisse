@@ -11,6 +11,10 @@ export interface CreateDemandeRechargePayload {
 export interface DemandesRechargeFilters {
   statut?: DemandeRechargeStatut;
   search?: string;
+  /** Date de création minimale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateFrom?: string;
+  /** Date de création maximale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateTo?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
@@ -24,6 +28,8 @@ export async function listDemandesRecharge(
   } else {
     if (filters.statut) params.statut = filters.statut;
     if (filters.search) params.search = filters.search;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.sortBy) params.sortBy = filters.sortBy;
     if (filters.sortDir) params.sortDir = filters.sortDir;
   }

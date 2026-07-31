@@ -41,7 +41,7 @@ export class RechargeService {
     }
 
     // Autorisation : recharge réservée aux caissiers (+ admins), sur une caisse de son périmètre.
-    await this.authz.assertAnyRole(input.userId, ['CAISSIER'], 'effectuer une recharge');
+    await this.authz.assertPermission(input.userId, 'RECHARGE_EXECUTER', 'effectuer une recharge');
     await this.authz.assertCaisseInPerimeter(input.userId, input.caisseId);
 
     return this.dataSource.transaction(async (manager) => {

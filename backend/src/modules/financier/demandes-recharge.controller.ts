@@ -41,6 +41,8 @@ export class DemandesRechargeController {
     @CurrentUser() user: JwtPayload,
     @Query('statut') statut?: string,
     @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
@@ -50,6 +52,8 @@ export class DemandesRechargeController {
       statut: statut as DemandeRechargeStatut,
       demandeurId: peutToutVoir ? undefined : user.sub,
       search,
+      dateFrom,
+      dateTo,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });

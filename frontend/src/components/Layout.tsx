@@ -99,7 +99,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/bons', label: 'Bons', icon: Receipt, exact: false },
       { to: '/bons-manuels', label: 'Bons manuels', icon: BookText, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'DAF'] },
       { to: '/extensions', label: "Demandes d'extension", icon: TrendingUp, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'], permission: 'EXTENSION_APPROUVER' },
-      { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'INTERIM_VOIR' },
     ],
   },
   {
@@ -113,22 +113,22 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Administration',
     items: [
-      { to: '/users', label: 'Utilisateurs', icon: Users, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/roles', label: 'Rôles', icon: ShieldCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/parametres', label: 'Paramètres', icon: Settings, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'] },
-      { to: '/sap', label: 'SAP (test)', icon: Plug, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/users', label: 'Utilisateurs', icon: Users, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'UTILISATEUR_VOIR' },
+      { to: '/roles', label: 'Rôles', icon: ShieldCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'ADMIN_ROLE' },
+      { to: '/profils', label: 'Profils', icon: BadgeCheck, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PROFIL_GERER' },
+      { to: '/parametres', label: 'Paramètres', icon: Settings, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PARAMETRE_MODIFIER' },
+      { to: '/audit', label: 'Log', icon: History, exact: false, roles: ['SUPER_ADMIN'], permission: 'AUDIT_VOIR' },
+      { to: '/sap', label: 'SAP (test)', icon: Plug, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'SAP_CONSULTER' },
     ],
   },
   {
     title: 'Master Data',
     items: [
-      { to: '/directions', label: 'Directions', icon: Network, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/partenaires', label: 'Partenaires', icon: Building2, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/natures-operation', label: 'Natures comptables', icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
-      { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'] },
+      { to: '/directions', label: 'Directions', icon: Network, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'DIRECTION_GERER' },
+      { to: '/partenaires', label: 'Partenaires', icon: Building2, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PARTENAIRE_GERER' },
+      { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'COST_CENTER_GERER' },
+      { to: '/natures-operation', label: 'Natures comptables', icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'NATURE_OPERATION_GERER' },
+      { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PAYS_GERER' },
     ],
   },
 ];

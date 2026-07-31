@@ -197,11 +197,13 @@ function CreatePortefeuilleForm({ onDone }: { onDone: () => void }) {
 export function PortefeuillesPage() {
   const { data: portefeuilles, isLoading } = usePortefeuilles();
   const { data: devises } = useDevises();
-  const { data: operations } = useOperations();
+  // Aperçu « mouvements récents » : la troncature à 8 lignes est faite EN BASE
+  // (TOP 8 sur un ORDER BY date décroissante), pas après avoir tout rapatrié.
+  const { data: operations } = useOperations({ limit: 8 });
   const [showForm, setShowForm] = useState(false);
 
   const deviseCode = useMemo(() => new Map((devises ?? []).map((d) => [d.id, d.code])), [devises]);
-  const recentOps = (operations ?? []).slice(0, 8);
+  const recentOps = operations ?? [];
 
   return (
     <div className="flex flex-col gap-4">

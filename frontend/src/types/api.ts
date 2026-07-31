@@ -620,6 +620,8 @@ export interface PlanComptable {
   libelle: string;
   typeCompte: TypeCompte;
   parentId?: string | null;
+  /** Compte parent, joint par la liste (évite de charger tout le plan côté client). */
+  parent?: Pick<PlanComptable, 'id' | 'numeroCompte' | 'libelle'> | null;
   estActif: boolean;
 }
 

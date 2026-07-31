@@ -4,7 +4,7 @@ import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { ParametresService } from './parametres.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { AuthorizationService } from '@modules/security/authorization.service';
 
 class UpdateParametreDto {
   @IsNotEmpty()
@@ -18,8 +18,16 @@ class UpdateParametreDto {
 @UseGuards(JwtAuthGuard)
 @Controller('parametres')
 export class ParametresController {
-  constructor(private readonly parametres: ParametresService) {}
+  constructor(
+    private readonly parametres: ParametresService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
+  /**
+   * La lecture reste ouverte : les règles d'avance (AVANCE_JOUR_MIN,
+   * AVANCE_POURCENTAGE_MAX) sont nécessaires côté client pour valider un
+   * formulaire. Seule la modification exige PARAMETRE_MODIFIER (migration 0040).
+   */
   @Get()
   @ApiOperation({ summary: 'Lister les paramètres applicatifs' })
   list() {
@@ -27,9 +35,9 @@ export class ParametresController {
   }
 
   @Patch(':cle')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Modifier un paramètre' })
-  update(@Param('cle') cle: string, @Body() dto: UpdateParametreDto, @CurrentUser() user: JwtPayload) {
+  async update(@Param('cle') cle: string, @Body() dto: UpdateParametreDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PARAMETRE_MODIFIER', 'modifier un paramètre');
     return this.parametres.set(cle, dto.valeur, user.sub);
   }
 }

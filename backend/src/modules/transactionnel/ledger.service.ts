@@ -72,6 +72,9 @@ export interface OperationQueryOptions {
   userId?: string;
   /** Filtre avancé : centre de coût imputé (via les écritures de charge). */
   costCenterId?: string;
+  /** Nombre maximum de lignes renvoyées (TOP en base), pour les aperçus type
+   *  « mouvements récents » qui n'affichent que les N premières opérations. */
+  limit?: number;
   /** Contexte de sécurité (rôle + périmètre). */
   scope?: OperationScope;
 }
@@ -595,6 +598,7 @@ export class LedgerService {
     } else {
       query.orderBy('operation.date_operation', 'DESC');
     }
+    if (opts.limit && opts.limit > 0) query.take(Math.min(opts.limit, 500));
     return query.getMany();
   }
 
@@ -662,20 +666,22 @@ export class LedgerService {
   /**
    * Récupère les opérations d'une caisse
    */
-  async getCaisseOperations(caisseId: string): Promise<Operation[]> {
+  async getCaisseOperations(caisseId: string, limit?: number): Promise<Operation[]> {
     return this.operationRepo.find({
       where: { caisseId: caisseId as any },
       order: { dateOperation: 'DESC' },
+      ...(limit && limit > 0 ? { take: Math.min(limit, 500) } : {}),
     });
   }
 
   /**
    * Récupère les opérations d'un portefeuille
    */
-  async getPortefeuilleOperations(portefeuilleId: string): Promise<Operation[]> {
+  async getPortefeuilleOperations(portefeuilleId: string, limit?: number): Promise<Operation[]> {
     return this.operationRepo.find({
       where: { portefeuilleId: portefeuilleId as any },
       order: { dateOperation: 'DESC' },
+      ...(limit && limit > 0 ? { take: Math.min(limit, 500) } : {}),
     });
   }
 }

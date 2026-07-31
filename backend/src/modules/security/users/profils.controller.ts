@@ -16,19 +16,27 @@ import { ProfilsService } from './profils.service';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { AuthorizationService } from '../authorization.service';
 
+/**
+ * Sécurité : gestion des profils sur PROFIL_GERER, composition d'un profil (ajout /
+ * retrait de permissions) sur ADMIN_ROLE — attribuer une permission reste un acte
+ * d'administration du référentiel de droits (cf. migration 0040).
+ */
 @ApiTags('Security / Profils')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('profils')
 export class ProfilsController {
-  constructor(private readonly profilsService: ProfilsService) {}
+  constructor(
+    private readonly profilsService: ProfilsService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   @Post()
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un profil' })
-  createProfil(@Body() dto: CreateProfilDto) {
+  async createProfil(@Body() dto: CreateProfilDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'créer un profil');
     return this.profilsService.createProfil(dto);
   }
 
@@ -45,17 +53,21 @@ export class ProfilsController {
   }
 
   @Patch(':id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un profil' })
-  updateProfil(@Param('id') id: string, @Body() dto: UpdateProfilDto) {
+  async updateProfil(
+    @Param('id') id: string,
+    @Body() dto: UpdateProfilDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'modifier un profil');
     return this.profilsService.updateProfil(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer (désactiver) un profil' })
-  async removeProfil(@Param('id') id: string) {
+  async removeProfil(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'supprimer un profil');
     await this.profilsService.removeProfil(id);
   }
 
@@ -67,19 +79,22 @@ export class ProfilsController {
   }
 
   @Post(':profilId/permissions/:permissionId')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Assigner une permission à un profil' })
-  assignPermission(
+  async assignPermission(
     @Param('profilId') profilId: string,
     @Param('permissionId') permissionId: string,
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'ADMIN_ROLE',
+      'assigner une permission à un profil',
+    );
     return this.profilsService.assignPermissionToProfil(profilId, permissionId, user.sub, ip);
   }
 
   @Delete(':profilId/permissions/:permissionId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer une permission d'un profil" })
   async removePermission(
@@ -88,6 +103,11 @@ export class ProfilsController {
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'ADMIN_ROLE',
+      "retirer une permission d'un profil",
+    );
     await this.profilsService.removePermissionFromProfil(profilId, permissionId, user.sub, ip);
   }
 }

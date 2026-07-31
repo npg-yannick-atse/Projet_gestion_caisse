@@ -134,7 +134,7 @@ const parametresRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/parametres',
   component: () => (
-    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="PARAMETRE_MODIFIER">
       <ParametresPage />
     </RoleGuard>
   ),
@@ -165,38 +165,60 @@ const demandesRechargeRoute = createRoute({
 const usersRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/users',
-  component: UsersPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="UTILISATEUR_VOIR">
+      <UsersPage />
+    </RoleGuard>
+  ),
 });
 
 const rolesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/roles',
-  component: RolesPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="ADMIN_ROLE">
+      <RolesPage />
+    </RoleGuard>
+  ),
 });
 
 const profilsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/profils',
-  component: ProfilsPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="PROFIL_GERER">
+      <ProfilsPage />
+    </RoleGuard>
+  ),
 });
 
 const interimsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/interims',
-  component: InterimsPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="INTERIM_VOIR">
+      <InterimsPage />
+    </RoleGuard>
+  ),
 });
 
+// Le journal d'audit reste strictement Super Admin (le backend l'exige sans
+// bypass administrateur) ; AUDIT_VOIR permet de le déléguer à un auditeur.
 const auditRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/audit',
-  component: AuditPage,
+  component: () => (
+    <RoleGuard allow={['SUPER_ADMIN']} permission="AUDIT_VOIR">
+      <AuditPage />
+    </RoleGuard>
+  ),
 });
 
 const sapTestRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/sap',
   component: () => (
-    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']} permission="SAP_CONSULTER">
       <SapTestPage />
     </RoleGuard>
   ),
@@ -205,26 +227,38 @@ const sapTestRoute = createRoute({
 const partenairesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/partenaires',
-  component: PartenairesPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="PARTENAIRE_GERER">
+      <PartenairesPage />
+    </RoleGuard>
+  ),
 });
 
 const costCentersRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/cost-centers',
-  component: CostCentersPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="COST_CENTER_GERER">
+      <CostCentersPage />
+    </RoleGuard>
+  ),
 });
 
 const directionsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/directions',
-  component: DirectionsPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="DIRECTION_GERER">
+      <DirectionsPage />
+    </RoleGuard>
+  ),
 });
 
 const paysDivisionsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/pays-divisions',
   component: () => (
-    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']}>
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="PAYS_GERER">
       <PaysDivisionsPage />
     </RoleGuard>
   ),
@@ -259,13 +293,21 @@ const typesBeneficeRoute = createRoute({
 const naturesOperationRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/natures-operation',
-  component: NaturesOperationPage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="NATURE_OPERATION_GERER">
+      <NaturesOperationPage />
+    </RoleGuard>
+  ),
 });
 
 const naturesComptableRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/natures-comptable',
-  component: NaturesComptablePage,
+  component: () => (
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']} permission="PLAN_COMPTABLE_GERER">
+      <NaturesComptablePage />
+    </RoleGuard>
+  ),
 });
 
 const extensionsRoute = createRoute({

@@ -10,6 +10,10 @@ import type {
 export interface DemandesTransfertFilters {
   statut?: DemandeTransfertStatut;
   search?: string;
+  /** Date de création minimale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateFrom?: string;
+  /** Date de création maximale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateTo?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
@@ -23,6 +27,8 @@ export async function listDemandesTransfert(
   } else {
     if (filters.statut) params.statut = filters.statut;
     if (filters.search) params.search = filters.search;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
     if (filters.sortBy) params.sortBy = filters.sortBy;
     if (filters.sortDir) params.sortDir = filters.sortDir;
   }
@@ -75,11 +81,48 @@ export function useDemandesTransfert(
   });
 }
 
+export interface DemandesTransfertStats {
+  total: number;
+  parStatut: Record<string, number>;
+}
+
+export async function getDemandesTransfertStats(
+  filters: Pick<DemandesTransfertFilters, 'search' | 'dateFrom' | 'dateTo'> = {},
+): Promise<DemandesTransfertStats> {
+  const params: Record<string, string> = {};
+  if (filters.search) params.search = filters.search;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
+  const { data } = await api.get<DemandesTransfertStats>('/demandes-transfert/stats', { params });
+  return data;
+}
+
+/**
+ * Compteurs des onglets de statut : calculés en base sur la recherche et les dates
+ * courantes, mais SANS le filtre de statut — sinon l'onglet sélectionné écraserait
+ * les compteurs des autres à zéro.
+ */
+export function useDemandesTransfertStats(
+  filters: Pick<DemandesTransfertFilters, 'search' | 'dateFrom' | 'dateTo'> = {},
+) {
+  return useQuery({
+    queryKey: ['demandes-transfert-stats', filters],
+    queryFn: () => getDemandesTransfertStats(filters),
+  });
+}
+
+// Liste et compteurs sont deux requêtes distinctes : toute mutation doit invalider
+// les deux, sinon les onglets restent sur d'anciens totaux.
+function invalidateTransfert(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['demandes-transfert'] });
+  qc.invalidateQueries({ queryKey: ['demandes-transfert-stats'] });
+}
+
 export function useCreateDemandeTransfert() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createDemandeTransfert,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['demandes-transfert'] }),
+    onSuccess: () => invalidateTransfert(qc),
   });
 }
 
@@ -88,7 +131,7 @@ export function useDecisionDemandeTransfert() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: DecisionDemandeTransfertPayload }) =>
       decisionDemandeTransfert(id, payload),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['demandes-transfert'] }),
+    onSuccess: () => invalidateTransfert(qc),
   });
 }
 
@@ -96,7 +139,7 @@ export function useCancelDemandeTransfert() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: cancelDemandeTransfert,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['demandes-transfert'] }),
+    onSuccess: () => invalidateTransfert(qc),
   });
 }
 
@@ -106,6 +149,7 @@ export function useExecuteDemandeTransfert() {
     mutationFn: executeDemandeTransfert,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['demandes-transfert'] });
+      qc.invalidateQueries({ queryKey: ['demandes-transfert-stats'] });
       qc.invalidateQueries({ queryKey: ['operations'] });
       qc.invalidateQueries({ queryKey: ['caisses'] });
       qc.invalidateQueries({ queryKey: ['portefeuilles'] });

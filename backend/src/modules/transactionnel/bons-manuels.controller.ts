@@ -7,6 +7,13 @@ import { CarnetStatut } from './entities/carnet.entity';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 
+/**
+ * Sécurité : les contrôles sont portés par le service (BonsManuelsService), qui a
+ * besoin du contexte métier — CARNET_GERER pour créer/clôturer un carnet,
+ * BON_MANUEL_CREER pour émettre un bon manuel, plus la vérification que le carnet
+ * appartient bien au caissier. Les lectures sont scopées : un non-admin ne voit
+ * que ses propres carnets et bons manuels.
+ */
 @ApiTags('Transactionnel / Bons manuels')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -50,15 +57,21 @@ export class BonsManuelsController {
   }
 
   @Get('bons-manuels')
-  @ApiOperation({ summary: 'Lister les bons manuels (recherche + tri BD ; tous pour admin, sinon les siens)' })
+  @ApiOperation({ summary: 'Lister les bons manuels (recherche + dates + tri BD ; tous pour admin, sinon les siens)' })
+  @ApiQuery({ name: 'dateFrom', required: false, description: 'Date de décaissement min (YYYY-MM-DD, incluse)' })
+  @ApiQuery({ name: 'dateTo', required: false, description: 'Date de décaissement max (YYYY-MM-DD, incluse)' })
   findBonsManuels(
     @CurrentUser() user: JwtPayload,
     @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
     return this.service.findBonsManuels(user.sub, {
       search,
+      dateFrom,
+      dateTo,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });

@@ -67,18 +67,16 @@ export function BonsManuelsPage() {
   const [formOpen, setFormOpen] = useState(false);
 
   const sort = useTableSort<BmSortCol>('/bons-manuels', BM_SORT_COLUMNS);
+  // Recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: bonsManuels } = useBonsManuels({
     search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
 
-  // Le filtre par dates reste client-side (la recherche texte est faite en BD).
-  const filteredBons = (bonsManuels ?? []).filter((b) => {
-    if (dateFrom && new Date(b.dateDecaissement) < new Date(`${dateFrom}T00:00:00`)) return false;
-    if (dateTo && new Date(b.dateDecaissement) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    return true;
-  });
+  const filteredBons = bonsManuels ?? [];
   const isDefaultView = !search && !dateFrom && !dateTo;
   const resetFilters = () => {
     setSearch('');

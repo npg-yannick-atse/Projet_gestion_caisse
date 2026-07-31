@@ -15,19 +15,28 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DirectionsService } from './directions.service';
 import { CreateDirectionDto, UpdateDirectionDto } from './dto/direction.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { AuthorizationService } from '../authorization.service';
 
+/**
+ * Sécurité : mutations sur DIRECTION_GERER (cf. migration 0040). La liste des
+ * directions reste lisible par tout utilisateur authentifié — elle sert de
+ * sélecteur dans les écrans caisses, portefeuilles, employés, centres de coût.
+ */
 @ApiTags('Security / Directions')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('directions')
 export class DirectionsController {
-  constructor(private readonly directionsService: DirectionsService) {}
+  constructor(
+    private readonly directionsService: DirectionsService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   @Post()
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer une direction' })
-  create(@Body() dto: CreateDirectionDto) {
+  async create(@Body() dto: CreateDirectionDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'DIRECTION_GERER', 'créer une direction');
     return this.directionsService.create(dto);
   }
 
@@ -48,17 +57,21 @@ export class DirectionsController {
   }
 
   @Patch(':id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour une direction' })
-  update(@Param('id') id: string, @Body() dto: UpdateDirectionDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDirectionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'DIRECTION_GERER', 'modifier une direction');
     return this.directionsService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer une direction' })
-  async remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'DIRECTION_GERER', 'supprimer une direction');
     await this.directionsService.remove(id);
   }
 }

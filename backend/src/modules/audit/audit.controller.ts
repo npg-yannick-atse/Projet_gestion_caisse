@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
@@ -16,7 +16,7 @@ export class AuditController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Journal d'audit (Super Admin uniquement)" })
+  @ApiOperation({ summary: "Journal d'audit (permission AUDIT_VOIR — Super Admin par défaut)" })
   async findAll(
     @CurrentUser() user: JwtPayload,
     @Query('userId') userId?: string,
@@ -27,10 +27,15 @@ export class AuditController {
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    if (!codes.has('SUPER_ADMIN')) {
-      throw new ForbiddenException("Le journal d'audit est réservé au Super Admin.");
-    }
+    // Strict (sans bypass admin) : le journal était réservé au Super Admin ; un
+    // administrateur ordinaire ne doit pas y accéder du seul fait de son rôle.
+    // AUDIT_VOIR n'est attribuée qu'à SUPER_ADMIN (migration 0040), mais peut
+    // désormais être déléguée à un auditeur sans lui donner le rôle entier.
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'AUDIT_VOIR',
+      "consulter le journal d'audit",
+    );
     return this.audit.findAll({
       userId,
       action,

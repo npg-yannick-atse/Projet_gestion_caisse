@@ -21,9 +21,18 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
 import { AuthorizationService } from '../authorization.service';
 
+/**
+ * Sécurité : modèle « une permission par action » (cf. migration 0040).
+ *  - Mutations (création, modification, suppression, attribution de droits) : ADMIN_USER.
+ *  - Lecture des droits d'AUTRUI (profils, divisions, natures, permissions) : UTILISATEUR_VOIR.
+ *    Consulter SES PROPRES droits reste toujours autorisé (le front en a besoin partout
+ *    pour afficher menus et boutons).
+ *  - La liste des utilisateurs et leurs rôles restent lisibles par tout utilisateur
+ *    authentifié : ils servent d'annuaire (affichage des noms de demandeur, validateur,
+ *    caissier, gestionnaire…) dans presque tous les écrans.
+ */
 @ApiTags('Security / Users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -35,17 +44,28 @@ export class UsersController {
     private readonly authz: AuthorizationService,
   ) {}
 
+  /** Consulter les droits d'un utilisateur : soi-même toujours, autrui sur permission. */
+  private async assertPeutVoirDroits(cibleId: string, user: JwtPayload, action: string) {
+    if (String(cibleId) === String(user.sub)) return;
+    await this.authz.assertPermission(user.sub, 'UTILISATEUR_VOIR', action);
+  }
+
   @Post()
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Creer un utilisateur' })
-  create(@Body() dto: CreateUserDto) {
+  async create(@Body() dto: CreateUserDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'créer un utilisateur');
     return this.usersService.create(dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lister les utilisateurs actifs (tri serveur)' })
-  findAll(@Query('sortBy') sortBy?: string, @Query('sortDir') sortDir?: string) {
+  @ApiOperation({ summary: 'Lister les utilisateurs actifs (recherche + tri en base)' })
+  findAll(
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
     return this.usersService.findAll({
+      search,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
@@ -58,17 +78,21 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre a jour un utilisateur' })
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'modifier un utilisateur');
     return this.usersService.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Supprimer (soft-delete) un utilisateur' })
   async remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'supprimer un utilisateur');
     await this.usersService.softDelete(id, user.sub);
   }
 
@@ -88,12 +112,12 @@ export class UsersController {
 
   @Get(':id/permissions')
   @ApiOperation({ summary: 'Permissions effectives (rôles + profils + extra + intérim)' })
-  async getEffectivePermissions(@Param('id') id: string) {
+  async getEffectivePermissions(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutVoirDroits(id, user, "consulter les permissions d'un utilisateur");
     return [...(await this.authz.getEffectivePermissions(id))];
   }
 
   @Post(':id/roles/:roleId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Attribuer un rôle à un utilisateur' })
   async assignRole(
@@ -102,6 +126,7 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'attribuer un rôle');
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         "Vous ne pouvez pas modifier vos propres rôles. Demandez à un autre administrateur.",
@@ -111,7 +136,6 @@ export class UsersController {
   }
 
   @Delete(':id/roles/:roleId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer un rôle d'un utilisateur" })
   async removeRole(
@@ -120,6 +144,7 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'retirer un rôle');
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         "Vous ne pouvez pas modifier vos propres rôles. Demandez à un autre administrateur.",
@@ -132,12 +157,12 @@ export class UsersController {
 
   @Get(':id/profils')
   @ApiOperation({ summary: 'Lister les profils attribués à un utilisateur' })
-  getProfils(@Param('id') id: string) {
+  async getProfils(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutVoirDroits(id, user, "consulter les profils d'un utilisateur");
     return this.usersService.getProfils(id);
   }
 
   @Post(':id/profils/:profilId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Attribuer un profil à un utilisateur' })
   async assignProfil(
@@ -146,6 +171,7 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'attribuer un profil');
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         'Vous ne pouvez pas modifier vos propres profils. Demandez à un autre administrateur.',
@@ -155,7 +181,6 @@ export class UsersController {
   }
 
   @Delete(':id/profils/:profilId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer un profil d'un utilisateur" })
   async removeProfil(
@@ -164,6 +189,7 @@ export class UsersController {
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'retirer un profil');
     if (String(id) === String(user.sub)) {
       throw new ForbiddenException(
         'Vous ne pouvez pas modifier vos propres profils. Demandez à un autre administrateur.',
@@ -176,12 +202,12 @@ export class UsersController {
 
   @Get(':id/divisions')
   @ApiOperation({ summary: "Lister les divisions auxquelles l'utilisateur a accès" })
-  getDivisions(@Param('id') id: string) {
+  async getDivisions(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutVoirDroits(id, user, "consulter les divisions d'un utilisateur");
     return this.usersService.getDivisionAccess(id);
   }
 
   @Post(':id/divisions/:divisionId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Donner accès à une division' })
   async assignDivision(
@@ -189,14 +215,19 @@ export class UsersController {
     @Param('divisionId') divisionId: string,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'donner accès à une division');
     await this.usersService.assignDivision(id, divisionId, user.sub);
   }
 
   @Delete(':id/divisions/:divisionId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer l'accès à une division" })
-  async removeDivision(@Param('id') id: string, @Param('divisionId') divisionId: string) {
+  async removeDivision(
+    @Param('id') id: string,
+    @Param('divisionId') divisionId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', "retirer l'accès à une division");
     await this.usersService.removeDivision(id, divisionId);
   }
 
@@ -204,12 +235,12 @@ export class UsersController {
 
   @Get(':id/natures-operation')
   @ApiOperation({ summary: "Lister les natures d'opération autorisées pour l'utilisateur" })
-  getNatureOperations(@Param('id') id: string) {
+  async getNatureOperations(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutVoirDroits(id, user, "consulter les natures d'opération d'un utilisateur");
     return this.usersService.getNatureOperationAccess(id);
   }
 
   @Post(':id/natures-operation/:natureId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Autoriser une nature d'opération" })
   async assignNatureOperation(
@@ -217,14 +248,27 @@ export class UsersController {
     @Param('natureId') natureId: string,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'ADMIN_USER',
+      "autoriser une nature d'opération",
+    );
     await this.usersService.assignNatureOperation(id, natureId, user.sub);
   }
 
   @Delete(':id/natures-operation/:natureId')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer une nature d'opération autorisée" })
-  async removeNatureOperation(@Param('id') id: string, @Param('natureId') natureId: string) {
+  async removeNatureOperation(
+    @Param('id') id: string,
+    @Param('natureId') natureId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'ADMIN_USER',
+      "retirer une nature d'opération autorisée",
+    );
     await this.usersService.removeNatureOperation(id, natureId);
   }
 }

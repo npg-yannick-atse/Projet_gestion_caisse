@@ -71,11 +71,15 @@ export class ReferentielService {
   }
 
   // ---------- Division ----------
-  listDivisions(paysId?: string): Promise<Division[]> {
-    return this.divisionRepo.find({
-      where: { estActif: true, ...(paysId ? { paysId } : {}) },
-      order: { libelle: 'ASC' },
-    });
+  listDivisions(
+    paysId?: string,
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
+  ): Promise<Division[]> {
+    const qb = this.divisionRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true });
+    if (paysId) qb.andWhere('x.paysId = :p', { p: paysId });
+    return this.applyRefList(
+      qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+    );
   }
 
   async createDivision(dto: CreateDivisionDto, userId: string): Promise<Division> {
@@ -377,12 +381,62 @@ export class ReferentielService {
     await this.natureOperationRepo.save(n);
   }
 
-  listNaturesComptable(): Promise<NatureComptable[]> {
-    return this.natureComptableRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
+  listNaturesComptable(
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
+  ): Promise<NatureComptable[]> {
+    return this.applyRefList(
+      this.natureComptableRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
+      'x', opts, ['codeComptableSap', 'libelle'],
+      { codeComptableSap: 'codeComptableSap', libelle: 'libelle' }, 'libelle',
+    );
   }
 
-  listPlanComptable(): Promise<PlanComptable[]> {
-    return this.planComptableRepo.find({ where: { estActif: true }, order: { numeroCompte: 'ASC' } });
+  listPlanComptable(
+    opts: {
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      limit?: number;
+      typeCompte?: string;
+    } = {},
+  ): Promise<PlanComptable[]> {
+    const qb = this.planComptableRepo
+      .createQueryBuilder('x')
+      // Le parent est joint ici pour que la liste filtrée se suffise à elle-même :
+      // l'écran n'a plus besoin de charger tout le plan pour résoudre le libellé.
+      .leftJoinAndSelect('x.parent', 'parent')
+      .where('x.estActif = :a', { a: true });
+    if (opts.typeCompte && opts.typeCompte.trim()) {
+      qb.andWhere('x.typeCompte = :t', { t: opts.typeCompte.trim() });
+    }
+    return this.applyRefList(
+      qb, 'x', opts, ['numeroCompte', 'libelle'],
+      { numeroCompte: 'numeroCompte', libelle: 'libelle', typeCompte: 'typeCompte' }, 'numeroCompte',
+    );
+  }
+
+  /**
+   * Compteurs par type de compte, calculés EN BASE (GROUP BY) : les onglets de
+   * filtre affichent le total réel de chaque type même quand la liste affichée
+   * est restreinte par la recherche ou le filtre courant.
+   */
+  async statsPlanComptable(): Promise<{ total: number; parType: Record<string, number> }> {
+    const rows: Array<{ typeCompte: string; n: string | number }> = await this.planComptableRepo
+      .createQueryBuilder('x')
+      .select('x.typeCompte', 'typeCompte')
+      .addSelect('COUNT(*)', 'n')
+      .where('x.estActif = :a', { a: true })
+      .groupBy('x.typeCompte')
+      .getRawMany();
+
+    const parType: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) {
+      const n = Number(r.n);
+      parType[r.typeCompte] = n;
+      total += n;
+    }
+    return { total, parType };
   }
 
   async findPlanComptable(id: string): Promise<PlanComptable> {

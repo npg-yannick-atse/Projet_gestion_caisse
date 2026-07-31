@@ -44,6 +44,10 @@ export function useCloturerCarnet() {
 
 export interface BonsManuelsFilters {
   search?: string;
+  /** Date de décaissement minimale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateFrom?: string;
+  /** Date de décaissement maximale (YYYY-MM-DD, incluse) — filtrée en base. */
+  dateTo?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }
@@ -51,6 +55,8 @@ export interface BonsManuelsFilters {
 export async function listBonsManuels(filters: BonsManuelsFilters = {}): Promise<BonManuel[]> {
   const params: Record<string, string> = {};
   if (filters.search) params.search = filters.search;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;
   const { data } = await api.get<BonManuel[]>('/bons-manuels', { params });

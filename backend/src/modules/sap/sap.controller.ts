@@ -3,18 +3,34 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SapService } from './sap.service';
 import { PosterPieceDto } from './dto/poster-piece.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
+import { AuthorizationService } from '@modules/security/authorization.service';
 
+/**
+ * Sécurité (cf. migration 0040) — remplace les gardes @Roles('DAF') :
+ *   SAP_SYNCHRONISER     : synchronisation des référentiels depuis SAP
+ *   SAP_ECRITURE_ENVOYER : contrôle / post / contrepassation d'une pièce
+ *   SAP_MAPPING_GERER    : mapping comptes et centres de coût
+ *   SAP_CONSULTER        : diagnostic de connectivité
+ *
+ * Les VÉRIFICATIONS MÉTIER (client, commande, fournisseur, comptes, mapping en
+ * lecture) restent ouvertes : elles sont appelées pendant la saisie d'un bon et
+ * lors de la création d'un partenaire, y compris par un simple demandeur.
+ */
 @ApiTags('SAP')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('sap')
 export class SapController {
-  constructor(private readonly sap: SapService) {}
+  constructor(
+    private readonly sap: SapService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   @Get('ping')
   @ApiOperation({ summary: 'Test de connectivité SAP (STFC_CONNECTION)' })
-  ping() {
+  async ping(@CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'SAP_CONSULTER', 'tester la connexion SAP');
     return this.sap.ping();
   }
 
@@ -37,16 +53,24 @@ export class SapController {
   }
 
   @Post('sync/comptes')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Synchroniser le plan comptable PCGG depuis SAP (ajoute les nouveaux)' })
-  syncComptes() {
+  async syncComptes(@CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_SYNCHRONISER',
+      'synchroniser le plan comptable',
+    );
     return this.sap.synchroniserComptes();
   }
 
   @Post('sync/fournisseurs')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Synchroniser les fournisseurs depuis SAP (ajoute les nouveaux)' })
-  syncFournisseurs() {
+  async syncFournisseurs(@CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_SYNCHRONISER',
+      'synchroniser les fournisseurs',
+    );
     return this.sap.synchroniserFournisseurs();
   }
 
@@ -57,30 +81,49 @@ export class SapController {
   }
 
   @Post('ecriture/check')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Contrôler une pièce comptable SANS l’écrire (BAPI_ACC_DOCUMENT_CHECK)' })
-  checkEcriture(@Body() dto: PosterPieceDto) {
+  async checkEcriture(@Body() dto: PosterPieceDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_ECRITURE_ENVOYER',
+      'contrôler une pièce comptable',
+    );
     return this.sap.checkPiece(dto);
   }
 
   @Post('ecriture/post')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Poster réellement une pièce comptable (BAPI_ACC_DOCUMENT_POST + COMMIT)' })
-  posterEcriture(@Body() dto: PosterPieceDto) {
+  async posterEcriture(@Body() dto: PosterPieceDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_ECRITURE_ENVOYER',
+      'poster une pièce comptable',
+    );
     return this.sap.posterPiece(dto);
   }
 
   @Post('ecriture/contrepasser')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Contrepasser (annuler) une pièce postée (BAPI_ACC_DOCUMENT_REV_POST)' })
-  contrepasser(@Body() body: { objKey: string; motif?: string }) {
+  async contrepasser(
+    @Body() body: { objKey: string; motif?: string },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_ECRITURE_ENVOYER',
+      'contrepasser une pièce comptable',
+    );
     return this.sap.contrepasser(body.objKey, body.motif);
   }
 
   @Post('operations/:id/envoyer')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Envoyer une opération vers SAP (construit + poste la pièce, idempotent)' })
-  envoyerOperation(@Param('id') id: string) {
+  async envoyerOperation(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_ECRITURE_ENVOYER',
+      'envoyer une opération vers SAP',
+    );
     return this.sap.envoyerOperation(id);
   }
 
@@ -91,9 +134,16 @@ export class SapController {
   }
 
   @Post('mapping')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Définir le compte SAP d’un type de compte' })
-  setMapping(@Body() body: { typeCompte: string; compteSap: string | null }) {
+  async setMapping(
+    @Body() body: { typeCompte: string; compteSap: string | null },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_MAPPING_GERER',
+      'modifier le mapping comptable SAP',
+    );
     return this.sap.setMappingCompte(body.typeCompte, body.compteSap);
   }
 
@@ -110,9 +160,16 @@ export class SapController {
   }
 
   @Post('cost-centers')
-  @Roles('DAF')
   @ApiOperation({ summary: 'Définir le centre de coût SAP d’un centre de coût app' })
-  setCostCenter(@Body() body: { costCenterApp: string; costCenterSap: string | null }) {
+  async setCostCenter(
+    @Body() body: { costCenterApp: string; costCenterSap: string | null },
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'SAP_MAPPING_GERER',
+      'modifier le mapping des centres de coût SAP',
+    );
     return this.sap.setCostCenterMapping(body.costCenterApp, body.costCenterSap);
   }
 }

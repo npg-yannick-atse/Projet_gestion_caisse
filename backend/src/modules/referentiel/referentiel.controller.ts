@@ -12,14 +12,27 @@ import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
 import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
-import { Roles } from '@modules/auth/decorators/roles.decorator';
+import { AuthorizationService } from '@modules/security/authorization.service';
 
+/**
+ * Sécurité : une permission par objet de référentiel pour les mutations
+ * (PARTENAIRE_GERER, COST_CENTER_GERER, NATURE_OPERATION_GERER,
+ * PLAN_COMPTABLE_GERER, PAYS_GERER — cf. migration 0040).
+ *
+ * Les LECTURES restent volontairement ouvertes à tout utilisateur authentifié :
+ * partenaires, centres de coût, natures d'opération, pays, divisions et types de
+ * bon alimentent les sélecteurs du formulaire de création de bon, sur le web
+ * comme sur l'application mobile. Les verrouiller bloquerait les demandeurs.
+ */
 @ApiTags('Référentiel')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ReferentielController {
-  constructor(private readonly referentiel: ReferentielService) {}
+  constructor(
+    private readonly referentiel: ReferentielService,
+    private readonly authz: AuthorizationService,
+  ) {}
 
   @Get('partenaires')
   @ApiOperation({ summary: 'Lister les partenaires (clients/fournisseurs) actifs' })
@@ -39,9 +52,9 @@ export class ReferentielController {
   }
 
   @Post('partenaires')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un partenaire (client / fournisseur)' })
-  createPartenaire(@Body() dto: CreatePartenaireDto, @CurrentUser() user: JwtPayload) {
+  async createPartenaire(@Body() dto: CreatePartenaireDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PARTENAIRE_GERER', 'créer un partenaire');
     return this.referentiel.createPartenaire(dto, user.sub);
   }
 
@@ -52,17 +65,17 @@ export class ReferentielController {
   }
 
   @Patch('partenaires/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Modifier un partenaire' })
-  updatePartenaire(@Param('id') id: string, @Body() dto: UpdatePartenaireDto, @CurrentUser() user: JwtPayload) {
+  async updatePartenaire(@Param('id') id: string, @Body() dto: UpdatePartenaireDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PARTENAIRE_GERER', 'modifier un partenaire');
     return this.referentiel.updatePartenaire(id, dto, user.sub);
   }
 
   @Delete('partenaires/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un partenaire (soft-delete)' })
   async deletePartenaire(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PARTENAIRE_GERER', 'supprimer un partenaire');
     await this.referentiel.deletePartenaire(id, user.sub);
   }
 
@@ -77,28 +90,28 @@ export class ReferentielController {
   }
 
   @Post('cost-centers')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un centre de coût' })
-  createCostCenter(@Body() dto: CreateCostCenterDto, @CurrentUser() user: JwtPayload) {
+  async createCostCenter(@Body() dto: CreateCostCenterDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'COST_CENTER_GERER', 'créer un centre de coût');
     return this.referentiel.createCostCenter(dto, user.sub);
   }
 
   @Patch('cost-centers/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Mettre à jour un centre de coût (code non modifiable)' })
-  updateCostCenter(
+  async updateCostCenter(
     @Param('id') id: string,
     @Body() dto: UpdateCostCenterDto,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(user.sub, 'COST_CENTER_GERER', 'modifier un centre de coût');
     return this.referentiel.updateCostCenter(id, dto, user.sub);
   }
 
   @Delete('cost-centers/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un centre de coût (soft-delete)' })
   async deleteCostCenter(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'COST_CENTER_GERER', 'supprimer un centre de coût');
     await this.referentiel.deleteCostCenter(id, user.sub);
   }
 
@@ -125,55 +138,104 @@ export class ReferentielController {
   }
 
   @Post('natures-operation')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer une nature d\'opération' })
-  createNatureOperation(@Body() dto: CreateNatureOperationDto, @CurrentUser() user: JwtPayload) {
+  async createNatureOperation(@Body() dto: CreateNatureOperationDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'NATURE_OPERATION_GERER',
+      "créer une nature d'opération",
+    );
     return this.referentiel.createNatureOperation(dto, user.sub);
   }
 
   @Patch('natures-operation/:id')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Modifier une nature d\'opération' })
-  updateNatureOperation(
+  async updateNatureOperation(
     @Param('id') id: string,
     @Body() dto: UpdateNatureOperationDto,
     @CurrentUser() user: JwtPayload,
   ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'NATURE_OPERATION_GERER',
+      "modifier une nature d'opération",
+    );
     return this.referentiel.updateNatureOperation(id, dto, user.sub);
   }
 
   @Delete('natures-operation/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver une nature d\'opération (soft-delete)' })
   async deleteNatureOperation(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'NATURE_OPERATION_GERER',
+      "supprimer une nature d'opération",
+    );
     await this.referentiel.deleteNatureOperation(id, user.sub);
   }
 
   @Get('natures-comptable')
-  @ApiOperation({ summary: 'Lister les natures comptables actives' })
-  listNaturesComptable() {
-    return this.referentiel.listNaturesComptable();
+  @ApiOperation({ summary: 'Lister les natures comptables actives (recherche + tri en base)' })
+  listNaturesComptable(
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.referentiel.listNaturesComptable({
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('plan-comptable/stats')
+  @ApiOperation({ summary: 'Compteurs du plan comptable par type de compte (GROUP BY en base)' })
+  statsPlanComptable() {
+    return this.referentiel.statsPlanComptable();
   }
 
   @Get('plan-comptable')
-  @ApiOperation({ summary: 'Lister le plan comptable actif' })
-  listPlanComptable() {
-    return this.referentiel.listPlanComptable();
+  @ApiOperation({ summary: 'Lister le plan comptable actif (recherche + filtre type + tri en base)' })
+  @ApiQuery({ name: 'typeCompte', required: false })
+  listPlanComptable(
+    @Query('search') search?: string,
+    @Query('typeCompte') typeCompte?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.referentiel.listPlanComptable({
+      search,
+      typeCompte,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Post('plan-comptable')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un compte du plan comptable' })
-  createPlanComptable(@Body() dto: CreatePlanComptableDto, @CurrentUser() user: JwtPayload) {
+  async createPlanComptable(@Body() dto: CreatePlanComptableDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'PLAN_COMPTABLE_GERER',
+      'créer un compte du plan comptable',
+    );
     return this.referentiel.createPlanComptable(dto, user.sub);
   }
 
   @Delete('plan-comptable/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un compte (soft-delete)' })
   async deletePlanComptable(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(
+      user.sub,
+      'PLAN_COMPTABLE_GERER',
+      'supprimer un compte du plan comptable',
+    );
     await this.referentiel.deletePlanComptable(id, user.sub);
   }
 
@@ -195,40 +257,49 @@ export class ReferentielController {
   }
 
   @Post('pays')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer un pays' })
-  createPays(@Body() dto: CreatePaysDto, @CurrentUser() user: JwtPayload) {
+  async createPays(@Body() dto: CreatePaysDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PAYS_GERER', 'créer un pays');
     return this.referentiel.createPays(dto, user.sub);
   }
 
   @Delete('pays/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver un pays (soft-delete)' })
   async deletePays(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PAYS_GERER', 'supprimer un pays');
     await this.referentiel.deletePays(id, user.sub);
   }
 
   // ---------- Division ----------
   @Get('divisions')
-  @ApiOperation({ summary: 'Lister les divisions actives (filtrable par pays)' })
+  @ApiOperation({ summary: 'Lister les divisions actives (filtre pays + recherche + tri en base)' })
   @ApiQuery({ name: 'paysId', required: false })
-  listDivisions(@Query('paysId') paysId?: string) {
-    return this.referentiel.listDivisions(paysId);
+  listDivisions(
+    @Query('paysId') paysId?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
+  ) {
+    return this.referentiel.listDivisions(paysId, {
+      search,
+      sortBy,
+      sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+    });
   }
 
   @Post('divisions')
-  @Roles('ADMINISTRATEUR')
   @ApiOperation({ summary: 'Créer une division' })
-  createDivision(@Body() dto: CreateDivisionDto, @CurrentUser() user: JwtPayload) {
+  async createDivision(@Body() dto: CreateDivisionDto, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PAYS_GERER', 'créer une division');
     return this.referentiel.createDivision(dto, user.sub);
   }
 
   @Delete('divisions/:id')
-  @Roles('ADMINISTRATEUR')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Désactiver une division (soft-delete)' })
   async deleteDivision(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'PAYS_GERER', 'supprimer une division');
     await this.referentiel.deleteDivision(id, user.sub);
   }
 }

@@ -346,8 +346,15 @@ function DemandesRechargePageInner() {
     return () => clearTimeout(t);
   }, [search]);
   const sort = useTableSort<DrSortCol>('/demandes-recharge', DR_SORT_COLUMNS);
+  // Par défaut, on n'affiche que les demandes du JOUR (comme Opérations / Audit).
+  const today = todayLocal();
+  const [dateFrom, setDateFrom] = useState(() => todayLocal());
+  const [dateTo, setDateTo] = useState(() => todayLocal());
+  // Recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: demandes, isLoading } = useDemandesRecharge({
     search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
@@ -364,17 +371,8 @@ function DemandesRechargePageInner() {
   const [confirmReject, setConfirmReject] = useState<DemandeRecharge | null>(null);
   const [confirmAnnuler, setConfirmAnnuler] = useState<DemandeRecharge | null>(null);
   const [showRequest, setShowRequest] = useState(false);
-  // Par défaut, on n'affiche que les demandes du JOUR (comme Opérations / Audit).
-  const today = todayLocal();
-  const [dateFrom, setDateFrom] = useState(() => todayLocal());
-  const [dateTo, setDateTo] = useState(() => todayLocal());
 
-  // Recherche faite en BD ; le filtre par dates reste client-side.
-  const filtered = (demandes ?? []).filter((d) => {
-    if (dateFrom && new Date(d.createdAt) < new Date(`${dateFrom}T00:00:00`)) return false;
-    if (dateTo && new Date(d.createdAt) > new Date(`${dateTo}T23:59:59.999`)) return false;
-    return true;
-  });
+  const filtered = demandes ?? [];
   const isDefaultView = !search && dateFrom === today && dateTo === today;
   const resetFilters = () => {
     setSearch('');

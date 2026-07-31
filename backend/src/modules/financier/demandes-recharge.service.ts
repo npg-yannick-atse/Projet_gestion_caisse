@@ -94,12 +94,12 @@ export class DemandesRechargeService {
     if (Number(dto.montant) <= 0) {
       throw new BadRequestException('Le montant doit être strictement positif');
     }
-    // Ce n'est pas le demandeur (créateur de bons) qui demande une recharge,
-    // mais le responsable du portefeuille : validateur ou gestionnaire de portefeuille
-    // (les administrateurs sont autorisés via assertAnyRole).
-    await this.authz.assertAnyRole(
+    // Ce n'est pas le demandeur (créateur de bons) qui demande une recharge, mais le
+    // responsable du portefeuille : RECHARGE_DEMANDER est attribuée au validateur et
+    // au gestionnaire de portefeuille (les administrateurs passent — migration 0040).
+    await this.authz.assertPermission(
       userId,
-      ['VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'],
+      'RECHARGE_DEMANDER',
       'demander une recharge de portefeuille',
     );
     const ptf = await this.resolvePortefeuille(userId, dto.portefeuilleId);
@@ -134,6 +134,8 @@ export class DemandesRechargeService {
       statut?: DemandeRechargeStatut;
       demandeurId?: string;
       search?: string;
+      dateFrom?: string;
+      dateTo?: string;
       sortBy?: string;
       sortDir?: 'asc' | 'desc';
     } = {},
@@ -141,6 +143,10 @@ export class DemandesRechargeService {
     const qb = this.repo.createQueryBuilder('dr').where('dr.deleted_at IS NULL');
     if (opts.statut) qb.andWhere('dr.statut = :statut', { statut: opts.statut });
     if (opts.demandeurId) qb.andWhere('dr.demandeur_id = :did', { did: opts.demandeurId });
+    // Bornes de dates EN BASE sur la date de création (jour inclus des deux côtés) :
+    // l'écran affiche par défaut la journée courante, inutile de tout rapatrier.
+    if (opts.dateFrom) qb.andWhere('dr.created_at >= :df', { df: `${opts.dateFrom}T00:00:00.000` });
+    if (opts.dateTo) qb.andWhere('dr.created_at <= :dt', { dt: `${opts.dateTo}T23:59:59.997` });
     if (opts.search) {
       // Recherche BD : n° / motif / montant + demandeur (join sec_user) + portefeuille (join fin_portefeuille).
       qb.leftJoin('sec_user', 'u', 'u.id = dr.demandeur_id')
@@ -161,6 +167,11 @@ export class DemandesRechargeService {
 
   /** Le caissier traite la demande = effectue la recharge réelle (caisse source → portefeuille). */
   async traiter(id: string, caissierId: string, montantAjuste?: string): Promise<DemandeRecharge> {
+    await this.authz.assertPermission(
+      caissierId,
+      'RECHARGE_TRAITER',
+      'traiter une demande de recharge',
+    );
     const dr = await this.findOne(id);
     if (dr.statut !== 'EN_ATTENTE') {
       throw new BadRequestException(`Traitement impossible : la demande est ${dr.statut.toLowerCase()}.`);
@@ -188,7 +199,11 @@ export class DemandesRechargeService {
   }
 
   async rejeter(id: string, caissierId: string, commentaire?: string): Promise<DemandeRecharge> {
-    await this.authz.assertAnyRole(caissierId, ['CAISSIER'], 'rejeter une demande de recharge');
+    await this.authz.assertPermission(
+      caissierId,
+      'RECHARGE_TRAITER',
+      'rejeter une demande de recharge',
+    );
     const dr = await this.findOne(id);
     if (dr.statut !== 'EN_ATTENTE') {
       throw new BadRequestException(`Rejet impossible : la demande est ${dr.statut.toLowerCase()}.`);

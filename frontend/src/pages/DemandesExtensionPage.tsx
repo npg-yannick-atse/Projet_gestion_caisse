@@ -106,11 +106,12 @@ function HistoryModal({
   portefeuilleId?: string;
   onClose: () => void;
 }) {
-  const caisseQ = useOperationsByCaisse(caisseId ?? null, !!caisseId);
-  const ptfQ = useOperationsByPortefeuille(portefeuilleId ?? null, !!portefeuilleId);
+  // Aperçu des 50 derniers mouvements : la troncature est faite EN BASE (TOP 50).
+  const caisseQ = useOperationsByCaisse(caisseId ?? null, !!caisseId, 50);
+  const ptfQ = useOperationsByPortefeuille(portefeuilleId ?? null, !!portefeuilleId, 50);
   const ops = caisseId ? caisseQ.data : ptfQ.data;
   const isLoading = caisseId ? caisseQ.isLoading : ptfQ.isLoading;
-  const recent = (ops ?? []).slice(0, 50);
+  const recent = ops ?? [];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
