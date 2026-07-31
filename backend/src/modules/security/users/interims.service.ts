@@ -81,15 +81,35 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(dto: CreateInterimDto, currentUserId: string): Promise<Interim> {
-    // L'initiateur est TOUJOURS l'utilisateur authentifié : on ignore toute valeur
-    // d'initiateurId fournie dans le body (anti-usurpation).
-    const initiateurId = currentUserId;
+    // Par défaut l'initiateur est l'utilisateur authentifié : la valeur du body est
+    // ignorée (anti-usurpation). Déclarer AU NOM D'UN AUTRE exige la permission
+    // dédiée INTERIM_DECLARER_TIERS, en strict (aucun bypass admin).
+    const veutTiers = !!dto.initiateurId && String(dto.initiateurId) !== String(currentUserId);
+    if (veutTiers) {
+      await this.authz.assertPermissionStrict(
+        currentUserId,
+        'INTERIM_DECLARER_TIERS',
+        "déclarer un intérim au nom d'un autre utilisateur",
+      );
+      // Anti-escalade : sans cette règle, un administrateur déclarerait
+      // « initiateur = un Super Admin, remplaçant = moi » et hériterait de ses
+      // droits (ils sont cumulés par AuthorizationService), contournant
+      // l'interdiction de modifier ses propres rôles.
+      if (String(dto.remplacantId) === String(currentUserId)) {
+        throw new ForbiddenException(
+          "Vous ne pouvez pas vous désigner comme remplaçant d'un intérim que vous déclarez pour autrui.",
+        );
+      }
+    }
+    const initiateurId = veutTiers ? String(dto.initiateurId) : currentUserId;
+
     const initiateur = await this.userRepo.findOne({ where: { id: initiateurId } });
     if (!initiateur || !initiateur.estActif) {
       throw new NotFoundException('Initiateur introuvable ou inactif');
     }
 
-    // Anti-escalade : on ne délègue que ce qu'on possède.
+    // Anti-escalade : on ne délègue que ce que l'INITIATEUR DÉSIGNÉ possède —
+    // pas ce que possède celui qui saisit le formulaire.
     await this.assertCanDelegate(initiateurId, dto);
 
     const remplacant = await this.userRepo.findOne({ where: { id: dto.remplacantId } });

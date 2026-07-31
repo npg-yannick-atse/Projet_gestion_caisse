@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Ban, Plus, Repeat } from 'lucide-react';
-import { useInterims, useCreateInterim, useRevokeInterim } from '@/api/interims';
-import { useUsers } from '@/api/users';
+import { useInterims, useMesInterims, useCreateInterim, useRevokeInterim } from '@/api/interims';
+import { useUsers, useMyPermissions } from '@/api/users';
+import { useAuthStore } from '@/stores/auth.store';
 import { useRoles, usePermissions } from '@/api/roles';
 import { useProfils } from '@/api/profils';
 import { apiErrorMessage, cn } from '@/lib/utils';
@@ -23,13 +24,23 @@ const STATUT_BADGE: Record<InterimStatut, { label: string; cls: string }> = {
 
 type DelegType = 'ROLE' | 'PROFIL' | 'PERMISSION';
 
-function CreateInterimForm({ onDone }: { onDone: () => void }) {
+function CreateInterimForm({
+  onDone,
+  peutDeclarerPourAutrui,
+}: {
+  onDone: () => void;
+  /** INTERIM_DECLARER_TIERS : autorise le choix d'un autre initiateur que soi. */
+  peutDeclarerPourAutrui: boolean;
+}) {
   const create = useCreateInterim();
   const { data: users } = useUsers();
   const { data: roles } = useRoles();
   const { data: profils } = useProfils();
   const { data: permissions } = usePermissions();
+  const currentUser = useAuthStore((s) => s.user);
+  const moi = (users ?? []).find((u) => String(u.id) === String(currentUser?.id));
 
+  // Sans le droit de déclarer pour autrui, l'initiateur est forcément soi-même.
   const [initiateurId, setInitiateurId] = useState('');
   const [remplacantId, setRemplacantId] = useState('');
   const [delegType, setDelegType] = useState<DelegType>('ROLE');
@@ -38,16 +49,33 @@ function CreateInterimForm({ onDone }: { onDone: () => void }) {
   const [dateFin, setDateFin] = useState('');
   const [commentaire, setCommentaire] = useState('');
 
-  const sameUser = initiateurId && remplacantId && initiateurId === remplacantId;
+  // Initiateur effectif : celui choisi si on en a le droit, sinon soi-même.
+  const initiateurEffectif = peutDeclarerPourAutrui ? initiateurId : String(currentUser?.id ?? '');
+  const sameUser =
+    initiateurEffectif && remplacantId && String(initiateurEffectif) === String(remplacantId);
+  // Le backend refuse qu'on se désigne remplaçant d'un intérim déclaré pour autrui
+  // (anti-escalade) : on le signale ici plutôt que d'attendre le 403.
+  const autoRemplacement =
+    peutDeclarerPourAutrui &&
+    !!initiateurId &&
+    String(initiateurId) !== String(currentUser?.id) &&
+    String(remplacantId) === String(currentUser?.id);
   const valid =
-    initiateurId && remplacantId && !sameUser && delegId && dateDebut && dateFin && dateDebut < dateFin;
+    initiateurEffectif &&
+    remplacantId &&
+    !sameUser &&
+    !autoRemplacement &&
+    delegId &&
+    dateDebut &&
+    dateFin &&
+    dateDebut < dateFin;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) return;
     create.mutate(
       {
-        initiateurId,
+        initiateurId: initiateurEffectif,
         remplacantId,
         roleTransfereId: delegType === 'ROLE' ? delegId : undefined,
         profilTransfereId: delegType === 'PROFIL' ? delegId : undefined,
@@ -66,19 +94,33 @@ function CreateInterimForm({ onDone }: { onDone: () => void }) {
       <form onSubmit={submit} className="grid gap-4 p-[18px] sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Initiateur (absent)</label>
-          <select
-            aria-label="Initiateur"
-            className={selectClass}
-            value={initiateurId}
-            onChange={(e) => setInitiateurId(e.target.value)}
-          >
-            <option value="">— Choisir —</option>
-            {users?.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.prenom} {u.nom} (#{u.matricule})
-              </option>
-            ))}
-          </select>
+          {peutDeclarerPourAutrui ? (
+            <select
+              aria-label="Initiateur"
+              className={selectClass}
+              value={initiateurId}
+              onChange={(e) => setInitiateurId(e.target.value)}
+            >
+              <option value="">— Choisir —</option>
+              {users?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.prenom} {u.nom} (#{u.matricule})
+                </option>
+              ))}
+            </select>
+          ) : (
+            // Sans INTERIM_DECLARER_TIERS, on ne déclare que POUR SOI : le champ est
+            // figé plutôt que présenté comme un choix, car le backend imposerait de
+            // toute façon l'utilisateur connecté.
+            <>
+              <div className={cn(selectClass, 'flex items-center bg-[#F8FAFC] text-[#475569]')}>
+                {moi ? `${moi.prenom} ${moi.nom} (#${moi.matricule})` : 'Moi'}
+              </div>
+              <p className="text-[11px] text-[#94A3B8]">
+                Vous ne pouvez déclarer un intérim que pour vous-même.
+              </p>
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Remplaçant</label>
@@ -96,6 +138,11 @@ function CreateInterimForm({ onDone }: { onDone: () => void }) {
             ))}
           </select>
           {sameUser && <p className="text-[11px] text-[#B42318]">Doit être différent de l'initiateur.</p>}
+          {autoRemplacement && (
+            <p className="text-[11px] text-[#B42318]">
+              Vous ne pouvez pas vous désigner remplaçant d'un intérim déclaré pour quelqu'un d'autre.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -198,7 +245,20 @@ function CreateInterimForm({ onDone }: { onDone: () => void }) {
 }
 
 function InterimsPageInner() {
-  const { data: interims, isLoading } = useInterims();
+  const currentUser = useAuthStore((s) => s.user);
+  const { data: myPerms } = useMyPermissions(currentUser?.id ?? null);
+  const permsReady = myPerms !== undefined;
+  // INTERIM_VOIR = vision transverse. Sans elle, on n'affiche que SES intérims
+  // (délégations émises + celles où l'on remplace quelqu'un).
+  const peutToutVoir = (myPerms ?? []).includes('INTERIM_VOIR');
+  const peutDeclarer = (myPerms ?? []).includes('INTERIM_DECLARER');
+  const peutDeclarerPourAutrui = (myPerms ?? []).includes('INTERIM_DECLARER_TIERS');
+
+  const global = useInterims(undefined, permsReady && peutToutVoir);
+  const perso = useMesInterims(permsReady && !peutToutVoir);
+  const interims = peutToutVoir ? global.data : perso.data;
+  const isLoading = !permsReady || (peutToutVoir ? global.isLoading : perso.isLoading);
+
   const { data: users } = useUsers();
   const { data: roles } = useRoles();
   const { data: profils } = useProfils();
@@ -227,17 +287,23 @@ function InterimsPageInner() {
 
   return (
     <div className="flex flex-col gap-4">
-      {showForm && (
+      {showForm && peutDeclarer && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setShowForm(false)}>
           <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <CreateInterimForm onDone={() => setShowForm(false)} />
+            <CreateInterimForm
+              onDone={() => setShowForm(false)}
+              peutDeclarerPourAutrui={peutDeclarerPourAutrui}
+            />
           </div>
         </div>
       )}
 
       <Panel>
-        <PanelHeader title="Intérims" badge={`${interims?.length ?? 0}`}>
-          {!showForm && (
+        <PanelHeader
+          title={peutToutVoir ? 'Intérims' : 'Mes intérims'}
+          badge={`${interims?.length ?? 0}`}
+        >
+          {!showForm && peutDeclarer && (
             <button
               type="button"
               onClick={() => setShowForm(true)}
@@ -245,6 +311,11 @@ function InterimsPageInner() {
             >
               <Plus className="h-4 w-4" /> Nouvel intérim
             </button>
+          )}
+          {!peutDeclarer && (
+            <span className="ml-auto text-[11px] text-[#94A3B8]">
+              Consultation seule — permission « Déclarer un intérim » requise
+            </span>
           )}
         </PanelHeader>
 
@@ -270,7 +341,9 @@ function InterimsPageInner() {
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-[#64748B]">
                       <Repeat className="mx-auto mb-2 h-6 w-6 opacity-30" />
-                      Aucun intérim. Déclare une délégation avec « Nouvel intérim ».
+                      {peutDeclarer
+                        ? 'Aucun intérim. Déclare une délégation avec « Nouvel intérim ».'
+                        : 'Aucun intérim.'}
                     </td>
                   </tr>
                 )}

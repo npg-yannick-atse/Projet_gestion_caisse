@@ -2,10 +2,15 @@ import { IsString, IsOptional, IsNotEmpty, IsDateString } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateInterimDto {
-  @ApiProperty()
-  @IsNotEmpty()
+  /**
+   * Optionnel. Omis (ou égal à soi-même) : on déclare SON PROPRE intérim.
+   * Renseigné avec un autre utilisateur : on déclare en son nom, ce qui exige la
+   * permission INTERIM_DECLARER_TIERS (cf. interims.service.create).
+   */
+  @ApiProperty({ required: false, description: "Défaut : l'utilisateur authentifié" })
+  @IsOptional()
   @IsString()
-  initiateurId!: string;
+  initiateurId?: string;
 
   @ApiProperty()
   @IsNotEmpty()

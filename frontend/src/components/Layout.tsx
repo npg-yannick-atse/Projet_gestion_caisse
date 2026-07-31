@@ -72,8 +72,11 @@ interface NavItem {
   icon: LucideIcon;
   exact: boolean;
   roles?: RoleCode[];
-  /** Visible aussi si l'utilisateur détient cette permission (en plus des rôles). */
-  permission?: string;
+  /**
+   * Visible aussi si l'utilisateur détient cette permission (en plus des rôles).
+   * Plusieurs permissions possibles : il suffit d'en détenir UNE.
+   */
+  permission?: string | string[];
 }
 
 interface NavSection {
@@ -99,7 +102,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/bons', label: 'Bons', icon: Receipt, exact: false },
       { to: '/bons-manuels', label: 'Bons manuels', icon: BookText, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'CAISSIER', 'DAF'] },
       { to: '/extensions', label: "Demandes d'extension", icon: TrendingUp, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'VALIDATEUR', 'GESTIONNAIRE_PORTEFEUILLE'], permission: 'EXTENSION_APPROUVER' },
-      { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'INTERIM_VOIR' },
+      { to: '/interims', label: 'Intérims', icon: Repeat, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: ['INTERIM_VOIR', 'INTERIM_DECLARER'] },
     ],
   },
   {
@@ -136,7 +139,10 @@ const NAV_SECTIONS: NavSection[] = [
 const FLAT_ALL = NAV_SECTIONS.flatMap((s) => s.items);
 
 function visibleFor(item: NavItem, codes: Set<RoleCode>, perms: Set<string>): boolean {
-  if (item.permission && perms.has(item.permission)) return true;
+  if (item.permission) {
+    const wanted = Array.isArray(item.permission) ? item.permission : [item.permission];
+    if (wanted.some((p) => perms.has(p))) return true;
+  }
   if (!item.roles || item.roles.length === 0) return true;
   return item.roles.some((r) => codes.has(r));
 }

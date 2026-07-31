@@ -12,8 +12,12 @@ interface Props {
    * Permission alternative : si l'utilisateur la détient, l'accès est accordé
    * MÊME s'il n'a aucun des rôles de `allow`. Permet d'ouvrir une page à une
    * personne précise (ex. un validateur avec EMPLOYE_VOIR) sans changer de code.
+   *
+   * Plusieurs permissions peuvent être passées : il suffit d'en détenir UNE
+   * (ex. l'écran Intérims s'ouvre avec INTERIM_VOIR — vue globale — ou avec
+   * INTERIM_DECLARER — vue personnelle).
    */
-  permission?: string;
+  permission?: string | string[];
 }
 
 /**
@@ -38,7 +42,9 @@ export function RoleGuard({ allow, children, fallbackHref = '/', permission }: P
   }
 
   const userCodes = new Set<RoleCode>(roles.map((r) => r.code));
-  const ok = allow.some((r) => userCodes.has(r)) || (!!permission && (perms ?? []).includes(permission));
+  const wanted = permission === undefined ? [] : Array.isArray(permission) ? permission : [permission];
+  const ok =
+    allow.some((r) => userCodes.has(r)) || wanted.some((p) => (perms ?? []).includes(p));
 
   if (ok) return <>{children}</>;
 

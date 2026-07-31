@@ -196,7 +196,9 @@ const interimsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/interims',
   component: () => (
-    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission="INTERIM_VOIR">
+    // INTERIM_VOIR ouvre la vue globale ; INTERIM_DECLARER suffit pour la vue
+    // personnelle (déclarer et suivre ses propres délégations).
+    <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN']} permission={['INTERIM_VOIR', 'INTERIM_DECLARER']}>
       <InterimsPage />
     </RoleGuard>
   ),

@@ -20,9 +20,12 @@ import { AuthorizationService } from '../authorization.service';
 
 /**
  * Sécurité (cf. migration 0040) :
- *  - CRÉER un intérim reste ouvert à tout utilisateur authentifié : le service impose
- *    que l'initiateur soit l'utilisateur courant et qu'il ne délègue QUE des droits
- *    qu'il détient déjà (assertCanDelegate). Chacun doit pouvoir se faire remplacer.
+ *  - CRÉER un intérim exige INTERIM_DECLARER, en mode STRICT (aucun bypass admin) :
+ *    voir l'écran et pouvoir y créer une délégation sont deux droits distincts, et
+ *    comme ce sont les administrateurs qui accèdent à l'écran, un bypass rendrait la
+ *    permission décorative. Le service continue d'imposer que l'initiateur soit
+ *    l'utilisateur courant et qu'il ne délègue QUE des droits qu'il détient déjà
+ *    (assertCanDelegate) — c'est le garde-fou anti-escalade, il reste en place.
  *  - LISTER tous les intérims (vision transverse) exige INTERIM_VOIR ; les vues
  *    personnelles « mes délégations » / « je remplace » restent libres.
  *  - MODIFIER / RÉVOQUER : réservé à l'initiateur de l'intérim, ou à INTERIM_REVOQUER.
@@ -45,8 +48,14 @@ export class InterimsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Créer un intérim (initiateur = utilisateur courant ; délégation limitée à ses propres droits)' })
-  create(@Body() dto: CreateInterimDto, @CurrentUser() user: JwtPayload) {
+  @ApiOperation({
+    summary:
+      "Créer un intérim — INTERIM_DECLARER (le sien) ; INTERIM_DECLARER_TIERS en plus pour déclarer au nom d'un autre",
+  })
+  async create(@Body() dto: CreateInterimDto, @CurrentUser() user: JwtPayload) {
+    // Droit de base ; le cas « au nom d'un tiers » ajoute INTERIM_DECLARER_TIERS,
+    // vérifiée dans le service qui connaît l'initiateur réellement retenu.
+    await this.authz.assertPermissionStrict(user.sub, 'INTERIM_DECLARER', 'déclarer un intérim');
     return this.interimsService.create(dto, user.sub);
   }
 
