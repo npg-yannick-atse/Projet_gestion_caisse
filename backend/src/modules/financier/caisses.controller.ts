@@ -65,10 +65,21 @@ export class CaissesController {
   }
 
   @Get(':id/solde')
-  @ApiOperation({ summary: 'Solde courant de la caisse (calculé depuis les écritures)' })
+  @ApiOperation({
+    summary: 'Solde courant de la caisse, dans sa devise (calculé depuis les écritures)',
+  })
   async getSolde(@Param('id') id: string) {
     const solde = await this.caissesService.getSolde(id);
-    return { caisseId: id, typeCompte: 'CAISSE', solde };
+    // `soldes` accompagne systématiquement le solde principal : une caisse peut
+    // détenir d'autres devises, et les masquer donnerait une image fausse.
+    const soldes = await this.caissesService.getSoldesParDevise(id);
+    return { caisseId: id, typeCompte: 'CAISSE', solde, soldes };
+  }
+
+  @Get(':id/soldes')
+  @ApiOperation({ summary: 'Ventilation du solde de la caisse par devise' })
+  async getSoldesParDevise(@Param('id') id: string) {
+    return { caisseId: id, soldes: await this.caissesService.getSoldesParDevise(id) };
   }
 
   @Get(':id/solde-timeline')

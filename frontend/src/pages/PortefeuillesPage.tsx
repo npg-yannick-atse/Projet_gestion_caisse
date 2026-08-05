@@ -48,6 +48,7 @@ const OP_PILL: Record<TypeOperation, { tone: PillTone; label: string }> = {
   AJUSTEMENT: { tone: 'gray', label: 'Ajustement' },
   ENCAISSEMENT: { tone: 'blue', label: 'Crédit' },
   CREDIT: { tone: 'red', label: 'Débit' },
+  SALAIRE: { tone: 'red', label: 'Débit' },
 };
 
 function WalletCard({ pf, deviseCode, color }: { pf: Portefeuille; deviseCode: string; color: string }) {

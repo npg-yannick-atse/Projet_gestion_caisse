@@ -41,3 +41,62 @@
     display: none;
   }
 }
+
+@layer components {
+  /*
+   * Barre de défilement discrète du menu latéral.
+   *
+   * La barre native de Windows fait ~17 px et reste opaque : sur le bleu nuit de
+   * la barre latérale, elle attire l'œil plus que les entrées de menu. Ici :
+   * 6 px, invisible au repos, révélée au survol du menu (ou pendant le
+   * défilement tactile), sans jamais décaler le contenu.
+   */
+  .scrollbar-discret {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    /* Réserve la gouttière : la largeur du menu ne bouge pas quand la barre
+       apparaît, donc aucun saut des libellés au survol. */
+    scrollbar-gutter: stable;
+    transition: scrollbar-color 0.2s ease;
+  }
+
+  .scrollbar-discret:hover,
+  .scrollbar-discret:focus-within {
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  }
+
+  /* WebKit / Chromium — même intention, propriétés distinctes. */
+  .scrollbar-discret::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-discret::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-discret::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 9999px;
+    transition: background-color 0.2s ease;
+  }
+
+  .scrollbar-discret:hover::-webkit-scrollbar-thumb,
+  .scrollbar-discret:focus-within::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.28);
+  }
+
+  .scrollbar-discret::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.45);
+  }
+
+  /* Variante fond clair (panneaux, listes déroulantes). */
+  .scrollbar-discret-clair:hover,
+  .scrollbar-discret-clair:focus-within {
+    scrollbar-color: rgba(15, 23, 42, 0.22) transparent;
+  }
+
+  .scrollbar-discret-clair:hover::-webkit-scrollbar-thumb,
+  .scrollbar-discret-clair:focus-within::-webkit-scrollbar-thumb {
+    background-color: rgba(15, 23, 42, 0.22);
+  }
+}

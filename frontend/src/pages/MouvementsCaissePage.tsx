@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Calendar, CalendarRange, Landmark, Plus, Repeat, TrendingUp, Wallet, X } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
+import { listPartenaires } from '@/api/referentiel';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useRecharge } from '@/api/recharge';
 import { useEncaissement } from '@/api/encaissement';
-import { SapClientVerify } from '@/components/sap/SapVerify';
-import { verifierClientSap } from '@/api/sap';
+import { ClientSelect } from '@/components/ClientSelect';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
@@ -155,18 +155,24 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     setDone(false);
     setSapCheck({ checking: false, error: null });
     if (mode === 'ENCAISSEMENT') {
-      // Contrôle SAP bloquant : si un n° client est saisi, il doit exister dans SAP.
-      // (SAP injoignable n'empêche pas l'encaissement.)
+      // Contrôle dans le RÉFÉRENTIEL LOCAL (clients importés de SAP) plutôt que
+      // par appel SAP : instantané, et l'encaissement reste possible si la
+      // liaison SAP est coupée. Le numéro vient normalement du sélecteur, ce
+      // contrôle ne sert que si la valeur a une autre origine.
       if (clientNumero.trim()) {
         setSapCheck({ checking: true, error: null });
         try {
-          const r = await verifierClientSap(clientNumero.trim());
-          if (!r.existe) {
-            setSapCheck({ checking: false, error: `Le client « ${clientNumero.trim()} » n'existe pas dans SAP.` });
+          const num = clientNumero.trim();
+          const trouves = await listPartenaires({ type: 'CLIENT', search: num, limit: 30 });
+          if (!trouves.some((c) => String(c.numeroClient) === num)) {
+            setSapCheck({
+              checking: false,
+              error: `Le client « ${num} » est introuvable dans le référentiel. Synchronisez les clients depuis SAP (Master Data → Clients).`,
+            });
             return;
           }
         } catch {
-          /* SAP injoignable : on laisse passer */
+          /* Référentiel injoignable : on laisse passer, le serveur revalidera */
         }
         setSapCheck({ checking: false, error: null });
       }
@@ -367,20 +373,22 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                 <label htmlFor="enc-client-num" className={labelClass}>
                   Client (numéro)
                 </label>
-                <input
-                  id="enc-client-num"
-                  className={inputClass}
+                {/* Autocomplétion sur le référentiel LOCAL (clients importés de
+                    SAP) : plus d'aller-retour SAP à chaque saisie, et le nom du
+                    client se remplit tout seul. */}
+                <ClientSelect
                   value={clientNumero}
-                  onChange={(e) => setClientNumero(e.target.value)}
-                  placeholder="Identifiant client (optionnel)"
+                  onChange={(numero, raisonSociale) => {
+                    setClientNumero(numero);
+                    // Le nom saisi à la main n'est pas écrasé sans raison :
+                    // on ne le remplit que s'il est vide ou issu d'un choix.
+                    if (raisonSociale) setClientNom(raisonSociale);
+                    // Choisi dans le référentiel = client connu : on lève le
+                    // blocage du bouton d'enregistrement sans interroger SAP.
+                    setClientSapStatus(numero ? 'found' : 'idle');
+                  }}
+                  placeholder="Rechercher un client (nom ou numéro)…"
                 />
-                {isEnc && (
-                  <SapClientVerify
-                    code={clientNumero}
-                    onResolved={(nom) => setClientNom(nom)}
-                    onStatus={setClientSapStatus}
-                  />
-                )}
               </div>
 
               <div className="flex flex-col gap-1.5 sm:col-span-2">

@@ -108,6 +108,20 @@ export function useSyncFournisseursSap() {
   });
 }
 
+/** Import des clients SAP (table KNA1) dans le référentiel des partenaires. */
+export async function syncClientsSap(): Promise<SyncFournisseursResult> {
+  const { data } = await api.post<SyncFournisseursResult>('/sap/sync/clients', {});
+  return data;
+}
+
+export function useSyncClientsSap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: syncClientsSap,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['partenaires'] }),
+  });
+}
+
 export interface LigneEcriture {
   compteGL: string;
   sens: 'D' | 'C';

@@ -21,10 +21,12 @@ import { AuditPage } from '@/pages/AuditPage';
 import { SapTestPage } from '@/pages/SapTestPage';
 import { MouvementsCaissePage } from '@/pages/MouvementsCaissePage';
 import { ReleveAgentPage } from '@/pages/ReleveAgentPage';
+import { SalairesPage } from '@/pages/SalairesPage';
 import { ParametresPage } from '@/pages/ParametresPage';
 import { CreditsPage } from '@/pages/CreditsPage';
 import { BonCreatePage } from '@/pages/BonCreatePage';
 import { PartenairesPage } from '@/pages/PartenairesPage';
+import { ClientsPage } from '@/pages/ClientsPage';
 import { CostCentersPage } from '@/pages/CostCentersPage';
 import { DirectionsPage } from '@/pages/DirectionsPage';
 import { PaysDivisionsPage } from '@/pages/PaysDivisionsPage';
@@ -140,6 +142,12 @@ const parametresRoute = createRoute({
   ),
 });
 
+const salairesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/salaires',
+  component: SalairesPage,
+});
+
 const creditsRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/credits',
@@ -234,6 +242,12 @@ const partenairesRoute = createRoute({
       <PartenairesPage />
     </RoleGuard>
   ),
+});
+
+const clientsRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/clients',
+  component: ClientsPage,
 });
 
 const costCentersRoute = createRoute({
@@ -351,7 +365,8 @@ const routeTree = rootRoute.addChildren([
     encaissementRoute,
     releveAgentRoute,
     parametresRoute,
-    creditsRoute,
+    salairesRoute,
+  creditsRoute,
     demandesRechargeRoute,
     portefeuillesRoute,
     usersRoute,
@@ -361,7 +376,8 @@ const routeTree = rootRoute.addChildren([
     auditRoute,
     sapTestRoute,
     partenairesRoute,
-    costCentersRoute,
+    clientsRoute,
+  costCentersRoute,
     directionsRoute,
     paysDivisionsRoute,
     operationsRoute,

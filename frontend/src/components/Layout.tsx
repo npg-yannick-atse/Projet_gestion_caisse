@@ -35,6 +35,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
@@ -109,6 +110,7 @@ const NAV_SECTIONS: NavSection[] = [
     title: 'Gestion des employés',
     items: [
       { to: '/employes', label: 'Employés', icon: IdCard, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'], permission: 'EMPLOYE_VOIR' },
+      { to: '/salaires', label: 'Salaires', icon: Wallet, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'], permission: 'EMPLOYE_VOIR_SALAIRE' },
       { to: '/credits', label: 'Crédits', icon: Banknote, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF', 'VALIDATEUR'] },
       { to: '/releve-agent', label: 'Relevé par agent', icon: Scale, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'] },
     ],
@@ -129,6 +131,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/directions', label: 'Directions', icon: Network, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'DIRECTION_GERER' },
       { to: '/partenaires', label: 'Partenaires', icon: Building2, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PARTENAIRE_GERER' },
+      { to: '/clients', label: 'Clients', icon: Users, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PARTENAIRE_GERER' },
       { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'COST_CENTER_GERER' },
       { to: '/natures-operation', label: 'Natures comptables', icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'NATURE_OPERATION_GERER' },
       { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PAYS_GERER' },
@@ -508,8 +511,11 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F1F5F9] text-[#0F172A]">
-      {/* Sidebar (desktop) */}
+    // h-screen + overflow-hidden (et non min-h-screen) : la fenêtre ne défile
+    // jamais, seul <main> défile. Sans cela, une page longue faisait défiler
+    // toute la mise en page — le menu latéral partait vers le haut avec elle.
+    <div className="flex h-screen overflow-hidden bg-[#F1F5F9] text-[#0F172A]">
+      {/* Sidebar (desktop) — figée, toute la hauteur de la fenêtre */}
       <aside
         className={cn(
           'relative hidden shrink-0 flex-col bg-[#0A1628] transition-[width] duration-200 ease-out md:flex',
@@ -551,7 +557,12 @@ export function Layout() {
           )}
         </div>
 
-        <nav className={cn('relative flex-1 overflow-y-auto py-4', collapsed ? 'px-2' : 'px-3')}>
+        <nav
+          className={cn(
+            'scrollbar-discret relative flex-1 overflow-y-auto py-4',
+            collapsed ? 'px-2' : 'px-3',
+          )}
+        >
           {navSections.map((section) => {
             // En mode étendu, toutes les sections sauf « Principal » sont déroulantes.
             const isCollapsible = !collapsed && section.title !== ALWAYS_OPEN_SECTION;
@@ -644,7 +655,9 @@ export function Layout() {
       </aside>
 
       {/* Contenu */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* min-h-0 : sans lui, la hauteur automatique d'un item flex empêche
+          <main> de rétrécir, et le défilement interne ne se déclenche pas. */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Topbar */}
         <header className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[rgba(15,76,129,0.1)] bg-white px-4 sm:px-7">
           <img src="/logo-npg.png" alt="NPG" className="h-7 w-7 object-contain md:hidden" />
@@ -723,7 +736,7 @@ export function Layout() {
                   )}
 
                   {/* Liste */}
-                  <div className="max-h-[360px] overflow-y-auto">
+                  <div className="scrollbar-discret scrollbar-discret-clair max-h-[360px] overflow-y-auto">
                     {notifItems.length === 0 && (
                       <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ECFDF5] text-[#047857]">
@@ -845,7 +858,7 @@ export function Layout() {
         </header>
 
         {/* Navigation mobile */}
-        <nav className="flex gap-1 overflow-x-auto border-b border-[rgba(15,76,129,0.1)] bg-white px-3 py-2 md:hidden">
+        <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-[rgba(15,76,129,0.1)] bg-white px-3 py-2 md:hidden">
           {flatNav.map((item) => (
             <Link key={item.to} to={item.to} activeOptions={{ exact: item.exact }}>
               {({ isActive }) => (

@@ -9,7 +9,9 @@ export type TypeOperation =
   /** Entrée d'argent dans une caisse (client, dotation…). Miroir du décaissement. */
   | 'ENCAISSEMENT'
   /** Décaissement d'un crédit accordé à un employé. */
-  | 'CREDIT';
+  | 'CREDIT'
+  /** Versement du salaire d'un employé depuis une caisse ou un portefeuille. */
+  | 'SALAIRE';
 
 @Entity({ name: 'trx_operation' })
 export class Operation {

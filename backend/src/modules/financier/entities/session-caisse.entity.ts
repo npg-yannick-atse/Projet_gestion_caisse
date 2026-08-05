@@ -41,4 +41,18 @@ export class SessionCaisse {
 
   @Column({ name: 'created_by_id', type: 'bigint', nullable: true })
   createdById?: string | null;
+
+  /**
+   * Détail des soldes devise par devise (table fin_session_caisse_devise).
+   *
+   * Champ hors base, rempli à la lecture : `soldeOuverture`/`soldeCloture`
+   * ci-dessus ne portent que la devise principale de la caisse.
+   */
+  @ApiProperty({ required: false, isArray: true, type: Object })
+  devises?: Array<{
+    deviseId: string;
+    code: string | null;
+    soldeOuverture: string;
+    soldeCloture: string | null;
+  }>;
 }

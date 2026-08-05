@@ -82,7 +82,11 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
     // getSoldeDetail et la garde de recharge inverse) : on réajuste le disponible
     // EXACTEMENT au plafond, sinon un soldeInitial > 0 finance au-dessus du plafond.
     const soldeInitial = Number(pf.soldeInitial || 0);
-    const solde = soldeInitial + Number(await this.ledger.calculateBalance(String(pf.id), 'PORTEFEUILLE'));
+    const solde =
+      soldeInitial +
+      // Dans la devise du portefeuille : additionner plusieurs devises fausserait
+      // le réajustement du plafond mensuel.
+      Number(await this.ledger.calculateBalance(String(pf.id), 'PORTEFEUILLE', String(pf.deviseId)));
     const delta = Number((cap - solde).toFixed(4));
 
     await this.dataSource.transaction(async (manager) => {

@@ -6,6 +6,7 @@ import { AxiosError } from 'axios';
 import { X } from 'lucide-react';
 import { useEditBon, useEditSousBon } from '@/api/bons';
 import { usePartenaires } from '@/api/referentiel';
+import { NUMERO_CLIENT_REGEX, chiffresSeulement } from '@/lib/utils';
 import type { Bon, SousBon } from '@/types/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +26,8 @@ const sousBonSchema = z.object({
   partenaireId: z.string().optional(),
   numeroBl: z.string().trim().min(1, 'Requis'),
   codeManutention: z.string().trim().min(1, 'Requis'),
-  numeroClient: z.string().optional(),
+  // Identifiant SAP (KUNNR) : chiffres uniquement (règle appliquée aussi côté serveur).
+  numeroClient: z.string().regex(NUMERO_CLIENT_REGEX, 'Chiffres uniquement').optional(),
 });
 
 const schema = z.object({
@@ -65,6 +67,7 @@ export function EditBonModal({
     register,
     control,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -211,7 +214,14 @@ export function EditBonModal({
                       <Label htmlFor={`sb-${i}-client`}>
                         N° client <span className="text-muted-foreground">(optionnel)</span>
                       </Label>
-                      <Input id={`sb-${i}-client`} {...register(`soubons.${i}.numeroClient`)} />
+                      <Input
+                        id={`sb-${i}-client`}
+                        inputMode="numeric"
+                        {...register(`soubons.${i}.numeroClient`)}
+                        onChange={(e) =>
+                          setValue(`soubons.${i}.numeroClient`, chiffresSeulement(e.target.value), { shouldValidate: true })
+                        }
+                      />
                     </div>
 
                     <div className="space-y-1.5 sm:col-span-2">

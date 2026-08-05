@@ -19,6 +19,7 @@ const TYPE_LABELS: Record<TypeOperation, string> = {
   AJUSTEMENT: 'Ajustement',
   ENCAISSEMENT: 'Encaissement',
   CREDIT: 'Crédit',
+  SALAIRE: 'Salaire',
 };
 
 function sensOf(t: TypeOperation): 'CREDIT' | 'DEBIT' | null {

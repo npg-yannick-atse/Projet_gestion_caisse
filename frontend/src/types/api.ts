@@ -174,13 +174,35 @@ export interface SessionCaisse {
   clotureParId?: string | null;
   typeCloture?: TypeCloture | null;
   statut: SessionStatut;
+  /** Détail des soldes devise par devise — `soldeOuverture`/`soldeCloture` ne portent que la devise de la caisse. */
+  devises?: SessionSoldeDevise[];
+}
+
+/** Ouverture et clôture d'une session, pour une seule devise. */
+export interface SessionSoldeDevise {
+  deviseId: string;
+  code: string | null;
+  soldeOuverture: string;
+  soldeCloture: string | null;
+}
+
+/** Solde d'un compte pour UNE devise. Ne jamais additionner deux lignes entre elles. */
+export interface SoldeDevise {
+  deviseId: string;
+  code: string | null;
+  solde: string;
+  /** Vrai pour la devise déclarée de la caisse — celle du solde résumé. */
+  principale?: boolean;
 }
 
 export interface SoldeResponse {
   caisseId?: string;
   portefeuilleId?: string;
   typeCompte: string;
+  /** Solde dans la devise déclarée du compte, PAS la somme de toutes les devises. */
   solde: string;
+  /** Ventilation complète : une caisse peut détenir d'autres devises que la sienne. */
+  soldes?: SoldeDevise[];
   /** Budget alloué (solde initial) — présent pour les portefeuilles, sert au calcul du taux d'utilisation. */
   soldeInitial?: string;
   /** Plafond budgétaire mensuel (si défini) — dénominateur du taux d'utilisation « ce mois ». */
@@ -449,7 +471,7 @@ export interface UpdatePortefeuillePayload {
   estActif?: boolean;
 }
 
-export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT' | 'ENCAISSEMENT' | 'CREDIT';
+export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT' | 'ENCAISSEMENT' | 'CREDIT' | 'SALAIRE';
 
 export type TransfertCompteType = 'CAISSE' | 'PORTEFEUILLE';
 export type DemandeTransfertStatut =

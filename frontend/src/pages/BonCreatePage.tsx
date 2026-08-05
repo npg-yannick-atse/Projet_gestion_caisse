@@ -9,9 +9,10 @@ import { useCreateBon, useMyBonPerimeter } from '@/api/bons';
 import { useTypeBons, usePays, useDivisions, listPartenaires, listNaturesOperation } from '@/api/referentiel';
 import { useDevises, getPortefeuilleSolde } from '@/api/financierRef';
 import { SapCheckButton, SapCommandeVerify } from '@/components/sap/SapVerify';
-import { verifierClientSap, verifierCommandeSap } from '@/api/sap';
+import { ClientSelect } from '@/components/ClientSelect';
+import { verifierCommandeSap } from '@/api/sap';
 import { useAuthStore } from '@/stores/auth.store';
-import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
+import { apiErrorMessage, cn, formatMontant, NUMERO_CLIENT_REGEX } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,7 +44,8 @@ const sousBonSchema = z.object({
   caisseId: z.string().trim().min(1, 'Requis'),
   portefeuilleId: z.string().trim().min(1, 'Requis'),
   deviseId: z.string().trim().min(1, 'Requis'),
-  numeroClient: z.string().optional(),
+  // Identifiant SAP (KUNNR) : chiffres uniquement (règle appliquée aussi côté serveur).
+  numeroClient: z.string().regex(NUMERO_CLIENT_REGEX, 'Chiffres uniquement').optional(),
   description: z.string().optional(),
 });
 
@@ -319,11 +321,17 @@ export function BonCreatePage() {
     for (let i = 0; i < values.soubons.length; i++) {
       const sb = values.soubons[i];
       if (reqNumeroClient && sb.numeroClient?.trim()) {
+        // Contrôle dans le RÉFÉRENTIEL LOCAL (clients importés de SAP) : plus
+        // besoin d'un aller-retour SAP, et le bon reste créable si la liaison
+        // est coupée. Le référentiel se met à jour via Master Data → Clients.
         try {
-          const r = await verifierClientSap(sb.numeroClient.trim());
-          if (!r.existe) return `Sous-bon ${i + 1} : le client « ${sb.numeroClient} » n'existe pas dans SAP.`;
+          const num = sb.numeroClient.trim();
+          const trouves = await listPartenaires({ type: 'CLIENT', search: num, limit: 30 });
+          if (!trouves.some((c) => String(c.numeroClient) === num)) {
+            return `Sous-bon ${i + 1} : le client « ${num} » est introuvable dans le référentiel. Synchronisez les clients depuis SAP (Master Data → Clients).`;
+          }
         } catch {
-          /* SAP injoignable : on laisse passer */
+          /* Référentiel injoignable : on laisse passer, le serveur revalidera */
         }
       }
       if (reqBl && sb.numeroBl?.trim()) {
@@ -473,20 +481,24 @@ export function BonCreatePage() {
                   </p>
                   {reqNumeroClient && (
                     <div className="space-y-1.5">
-                      <Label>N° client</Label>
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1">
-                          <Input {...register(`soubons.${index}.numeroClient`, { onChange: () => resetGate(fid, 'client') })} />
-                        </div>
-                        <SapCheckButton
-                          kind="client"
-                          value={watch(`soubons.${index}.numeroClient`) ?? ''}
-                          onResult={(existe, nom) => {
-                            setGate(fid, 'client', existe);
-                            if (existe && nom) setValue(`soubons.${index}.nomClient`, nom, { shouldValidate: true });
-                          }}
-                        />
-                      </div>
+                      <Label>Client</Label>
+                      {/* Recherche dans la base locale (clients importés de SAP), et
+                          non par appel SAP : instantané, fonctionne même si la
+                          liaison SAP est coupée, et le numéro ne peut pas être
+                          erroné puisqu'il est choisi et non saisi. */}
+                      <ClientSelect
+                        value={watch(`soubons.${index}.numeroClient`) ?? ''}
+                        onChange={(numero, raisonSociale) => {
+                          setValue(`soubons.${index}.numeroClient`, numero, { shouldValidate: true });
+                          if (raisonSociale) {
+                            setValue(`soubons.${index}.nomClient`, raisonSociale, { shouldValidate: true });
+                          }
+                          // Choisi dans le référentiel = existence acquise :
+                          // le verrou de vérification se lève tout seul.
+                          if (numero) setGate(fid, 'client', true);
+                          else resetGate(fid, 'client');
+                        }}
+                      />
                       {errors.soubons?.[index]?.numeroClient && (
                         <p className="text-sm text-destructive">{errors.soubons[index]?.numeroClient?.message}</p>
                       )}

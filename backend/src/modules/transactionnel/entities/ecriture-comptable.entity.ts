@@ -10,7 +10,9 @@ export type TypeCompte =
   /** Contrepartie d'un encaissement (recette qui entre dans une caisse). */
   | 'RECETTE'
   /** Contrepartie d'un crédit employé (créance sur l'employé). */
-  | 'CREDIT_EMPLOYE';
+  | 'CREDIT_EMPLOYE'
+  /** Contrepartie d'un versement de salaire. */
+  | 'SALAIRE';
 
 /**
  * Ecriture comptable en partie double (cf. Partie IV Niveau 1.1).

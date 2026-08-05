@@ -10,6 +10,10 @@ import { ComptePerteChange } from './entities/compte-perte-change.entity';
 import { DemandeTransfert } from './entities/demande-transfert.entity';
 import { DemandeRecharge } from './entities/demande-recharge.entity';
 import { Credit } from './entities/credit.entity';
+import { SessionCaisseDevise } from './entities/session-caisse-devise.entity';
+import { PaiementSalaire } from './entities/paiement-salaire.entity';
+import { PaiementSalaireService } from './paiement-salaire.service';
+import { PaiementSalaireController } from './paiement-salaire.controller';
 import { Employe } from '@modules/referentiel/entities/employe.entity';
 import { CaissesService } from './caisses.service';
 import { CreditService } from './credit.service';
@@ -46,6 +50,8 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
       DemandeRecharge,
       Credit,
       Employe,
+      PaiementSalaire,
+      SessionCaisseDevise,
     ]),
     TransactionnelModule,
     SecurityModule,
@@ -61,6 +67,7 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     DemandesTransfertService,
     DemandesRechargeService,
     CaisseAutoCloseJob,
+    PaiementSalaireService,
   ],
   controllers: [
     CaissesController,
@@ -71,6 +78,7 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     PortefeuillesController,
     DemandesTransfertController,
     DemandesRechargeController,
+    PaiementSalaireController,
   ],
   exports: [
     CaissesService,

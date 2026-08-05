@@ -74,6 +74,13 @@ export class SapController {
     return this.sap.synchroniserFournisseurs();
   }
 
+  @Post('sync/clients')
+  @ApiOperation({ summary: 'Synchroniser les clients depuis SAP (ajoute les nouveaux)' })
+  async syncClients(@CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'SAP_SYNCHRONISER', 'synchroniser les clients');
+    return this.sap.synchroniserClients();
+  }
+
   @Get('comptes')
   @ApiOperation({ summary: 'Lister les comptes généraux postables (société, plan PCGG)' })
   comptes(@Query('q') q?: string, @Query('societe') societe?: string) {

@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength, Min, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateBonManuelDto {
@@ -60,6 +60,9 @@ export class CreateBonManuelDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  // Le numéro client est un identifiant SAP (KUNNR) : chiffres uniquement.
+  // Chaîne vide tolérée = champ non renseigné.
+  @Matches(/^[0-9]*$/, { message: 'Le numéro client ne doit contenir que des chiffres.' })
   numeroClient?: string;
 
   @ApiProperty({ required: false })

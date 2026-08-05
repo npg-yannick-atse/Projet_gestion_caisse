@@ -44,3 +44,34 @@ export function ageLabel(iso: string): string {
   const d = Math.floor(h / 24);
   return `${d} j`;
 }
+
+/**
+ * Le numéro client est un identifiant SAP (KUNNR) : uniquement des chiffres.
+ *
+ * `NUMERO_CLIENT_REGEX` tolère la chaîne vide (champ optionnel non renseigné) ;
+ * la règle est reprise à l'identique côté serveur, qui reste l'autorité — ceci
+ * n'est qu'un confort de saisie.
+ */
+export const NUMERO_CLIENT_REGEX = /^\d*$/;
+
+/** Retire tout ce qui n'est pas un chiffre (utilisé à la frappe). */
+export function chiffresSeulement(v: string): string {
+  return (v ?? '').replace(/\D/g, '');
+}
+
+/**
+ * Props à étaler sur un <input> de numéro client : clavier numérique sur mobile
+ * et filtrage des caractères non numériques au collage comme à la frappe.
+ */
+export function inputNumeroClientProps(onValue: (v: string) => void) {
+  return {
+    inputMode: 'numeric' as const,
+    autoComplete: 'off',
+    onInput: (e: React.FormEvent<HTMLInputElement>) => {
+      const el = e.currentTarget;
+      const filtre = chiffresSeulement(el.value);
+      if (el.value !== filtre) el.value = filtre;
+      onValue(filtre);
+    },
+  };
+}

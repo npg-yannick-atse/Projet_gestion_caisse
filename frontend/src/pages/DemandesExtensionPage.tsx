@@ -38,6 +38,7 @@ const OP_META: Record<TypeOperation, { label: string; cls: string; sign: string;
   AJUSTEMENT: { label: 'Ajustement', cls: 'text-[#92400E]', sign: '', icon: SlidersHorizontal },
   ENCAISSEMENT: { label: 'Encaissement', cls: 'text-[#047857]', sign: '+', icon: ArrowUpCircle },
   CREDIT: { label: 'Crédit', cls: 'text-[#6D28D9]', sign: '−', icon: ArrowDownCircle },
+  SALAIRE: { label: 'Salaire', cls: 'text-[#6D28D9]', sign: '−', icon: ArrowDownCircle },
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {

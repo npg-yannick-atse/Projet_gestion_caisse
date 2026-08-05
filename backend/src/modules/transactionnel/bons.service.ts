@@ -131,6 +131,17 @@ export class BonsService {
         }
       }
     }
+    // Format du numéro client : c'est un identifiant SAP (KUNNR), donc uniquement
+    // des chiffres. Contrôlé ici car la création de bon ne passe pas par un DTO
+    // class-validator — sans ça, l'API et le mobile accepteraient n'importe quoi.
+    for (const sb of input.soubons) {
+      const num = sb.numeroClient == null ? '' : String(sb.numeroClient).trim();
+      if (num !== '' && !/^\d+$/.test(num)) {
+        throw new BadRequestException(
+          `Numéro client invalide (« ${num} ») : il ne doit contenir que des chiffres.`,
+        );
+      }
+    }
     // Type exigeant un partenaire : présence obligatoire ET le partenaire doit être
     // relié à un fournisseur SAP (n° fournisseur / LIFNR). Contrôle serveur (vaut pour
     // l'API et le mobile), pas seulement le formulaire web.
@@ -341,11 +352,15 @@ export class BonsService {
       parPortefeuille.set(pid, (parPortefeuille.get(pid) ?? 0) + Number(sb.montant));
     }
     for (const [pid, besoin] of parPortefeuille) {
-      const solde = Number(await this.ledger.calculateBalance(pid, 'PORTEFEUILLE'));
-      const deficit = besoin - solde;
-      if (deficit <= 0) continue;
       const ptf = await this.dataSource.getRepository(Portefeuille).findOne({ where: { id: pid } });
       if (!ptf) throw new NotFoundException(`Portefeuille ${pid} introuvable`);
+      // Solde DANS LA DEVISE du portefeuille — sinon on comparerait un besoin à
+      // une somme de devises différentes.
+      const solde = Number(
+        await this.ledger.calculateBalance(pid, 'PORTEFEUILLE', String(ptf.deviseId)),
+      );
+      const deficit = besoin - solde;
+      if (deficit <= 0) continue;
       const caisse = await this.dataSource
         .getRepository(Caisse)
         .findOne({ where: { id: ptf.caisseSourceId } });
@@ -389,7 +404,18 @@ export class BonsService {
     montant: string,
     bonId: string,
   ): Promise<void> {
-    const solde = Number(await this.ledger.calculateBalance(portefeuilleId, 'PORTEFEUILLE'));
+    // Solde DANS LA DEVISE du portefeuille (cf. calculateBalance) : un solde
+    // toutes devises confondues laisserait passer un décaissement non couvert.
+    const ptf = await this.dataSource
+      .getRepository(Portefeuille)
+      .findOne({ where: { id: portefeuilleId as any } });
+    const solde = Number(
+      await this.ledger.calculateBalance(
+        portefeuilleId,
+        'PORTEFEUILLE',
+        ptf ? String(ptf.deviseId) : undefined,
+      ),
+    );
     if (solde - Number(montant) >= 0) return;
     const bon = await this.findOne(bonId);
     if (bon.statutExtension === 'APPROUVEE' && bon.extensionMode === 'DECOUVERT') return;

@@ -136,3 +136,101 @@ describe('LedgerService.hashEcriture — chaîne d’intégrité SHA-256', () =>
     expect(debit).not.toBe(credit);
   });
 });
+
+/**
+ * Soldes multi-devises.
+ *
+ * Une caisse peut détenir plusieurs devises : l'application le permettait déjà
+ * dans les faits, mais les additionnait sans conversion. Constaté en base le
+ * 05/08/2026 : la caisse CI01 affichait un solde de 92 180, soit 267 180 USD
+ * MOINS 175 000 EUR — un chiffre qui ne représentait rien.
+ *
+ * Depuis, tout solde comparé à un montant ou affiché doit préciser sa devise.
+ */
+describe('LedgerService.calculateBalance — filtrage par devise', () => {
+  /** Repository simulant un filtre WHERE devise_id. */
+  function repoParDevise(parDevise: Record<string, { credit: string; debit: string }>) {
+    const qb: any = { _devise: undefined as string | undefined };
+    for (const m of ['select', 'addSelect', 'leftJoin', 'groupBy', 'addGroupBy', 'orderBy']) {
+      qb[m] = jest.fn(() => qb);
+    }
+    qb.where = jest.fn(() => qb);
+    qb.andWhere = jest.fn((_sql: string, params: any) => {
+      if (params?.deviseId) qb._devise = String(params.deviseId);
+      return qb;
+    });
+    qb.getRawOne = jest.fn(async () => {
+      if (qb._devise) {
+        const d = parDevise[qb._devise];
+        return d ? { totalCredit: d.credit, totalDebit: d.debit } : { totalCredit: null, totalDebit: null };
+      }
+      // Sans filtre : somme brute de toutes les devises (l'ancien comportement).
+      let c = 0;
+      let d = 0;
+      for (const v of Object.values(parDevise)) {
+        c += Number(v.credit);
+        d += Number(v.debit);
+      }
+      return { totalCredit: String(c), totalDebit: String(d) };
+    });
+    return { createQueryBuilder: jest.fn(() => qb), find: jest.fn(async () => []) };
+  }
+
+  // Reproduit la caisse CI01 : 267 180 USD (devise 3) et −175 000 EUR (devise 2).
+  const CI01 = { '3': { credit: '267180', debit: '0' }, '2': { credit: '0', debit: '175000' } };
+  const svcCI01 = () => new LedgerService({} as any, repoParDevise(CI01) as any);
+
+  it('renvoie le solde de la devise demandée, sans les autres', async () => {
+    await expect(svcCI01().calculateBalance('1', 'CAISSE' as any, '3')).resolves.toBe('267180.0000');
+    await expect(svcCI01().calculateBalance('1', 'CAISSE' as any, '2')).resolves.toBe('-175000.0000');
+  });
+
+  it('renvoie 0 pour une devise absente du compte', async () => {
+    await expect(svcCI01().calculateBalance('1', 'CAISSE' as any, '99')).resolves.toBe('0.0000');
+  });
+
+  it('sans devise, additionne tout — le comportement à ne PAS utiliser pour comparer', async () => {
+    // 267 180 − 175 000 = 92 180 : le chiffre trompeur constaté en production.
+    await expect(svcCI01().calculateBalance('1', 'CAISSE' as any)).resolves.toBe('92180.0000');
+  });
+});
+
+describe('LedgerService.calculateBalancesParDevise — ventilation', () => {
+  function repoVentile(rows: any[]) {
+    const qb: any = {};
+    for (const m of ['select', 'addSelect', 'leftJoin', 'where', 'andWhere', 'groupBy', 'addGroupBy']) {
+      qb[m] = jest.fn(() => qb);
+    }
+    qb.getRawMany = jest.fn(async () => rows);
+    return { createQueryBuilder: jest.fn(() => qb), find: jest.fn(async () => []) };
+  }
+
+  it('rend une ligne par devise, chacune avec son propre solde', async () => {
+    const svc = new LedgerService(
+      {} as any,
+      repoVentile([
+        { deviseId: '3', code: 'USD', totalCredit: '267180', totalDebit: '0' },
+        { deviseId: '2', code: 'EUR', totalCredit: '0', totalDebit: '175000' },
+      ]) as any,
+    );
+    await expect(svc.calculateBalancesParDevise('1', 'CAISSE' as any)).resolves.toEqual([
+      { deviseId: '3', code: 'USD', solde: '267180.0000' },
+      { deviseId: '2', code: 'EUR', solde: '-175000.0000' },
+    ]);
+  });
+
+  it('traite les totaux absents comme des zéros', async () => {
+    const svc = new LedgerService(
+      {} as any,
+      repoVentile([{ deviseId: '1', code: 'XOF', totalCredit: null, totalDebit: '50' }]) as any,
+    );
+    await expect(svc.calculateBalancesParDevise('1', 'CAISSE' as any)).resolves.toEqual([
+      { deviseId: '1', code: 'XOF', solde: '-50.0000' },
+    ]);
+  });
+
+  it('renvoie une liste vide pour un compte sans écriture', async () => {
+    const svc = new LedgerService({} as any, repoVentile([]) as any);
+    await expect(svc.calculateBalancesParDevise('9', 'CAISSE' as any)).resolves.toEqual([]);
+  });
+});

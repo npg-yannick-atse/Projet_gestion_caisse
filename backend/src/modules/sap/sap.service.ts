@@ -79,13 +79,62 @@ export interface SapPosteResult {
 }
 
 /** Types d'opération transmis à SAP (les mouvements internes en sont exclus). */
-const TYPES_ENVOYABLES = ['ENCAISSEMENT', 'DECAISSEMENT', 'CREDIT'];
+const TYPES_ENVOYABLES = ['ENCAISSEMENT', 'DECAISSEMENT', 'CREDIT', 'SALAIRE'];
 
 @Injectable()
 export class SapService {
   private readonly logger = new Logger(SapService.name);
 
+  /**
+   * Nombre de décimales par devise, lu dans TCURX (mis en cache : la table ne
+   * bouge jamais en exploitation). Une devise ABSENTE de TCURX a 2 décimales.
+   */
+  private decimalesDevise?: Map<string, number>;
+
   constructor(private readonly dataSource: DataSource) {}
+
+  /**
+   * Décimales d'une devise selon SAP. XOF et XAF valent 0, l'USD et l'EUR 2.
+   * En cas d'échec de lecture, on retombe sur 2 (le défaut SAP) plutôt que de
+   * bloquer l'envoi — quitte à ce que le facteur soit neutre.
+   */
+  private async getDecimales(devise: string): Promise<number> {
+    if (!this.decimalesDevise) {
+      const map = new Map<string, number>();
+      try {
+        await this.withClient(async (c) => {
+          const r = await c.call('RFC_READ_TABLE', {
+            QUERY_TABLE: 'TCURX',
+            DELIMITER: '|',
+            FIELDS: [{ FIELDNAME: 'CURRKEY' }, { FIELDNAME: 'CURRDEC' }],
+            ROWCOUNT: 500,
+          });
+          for (const row of r?.DATA ?? []) {
+            const [k, d] = String(row.WA).split('|').map((s: string) => s.trim());
+            if (k) map.set(k.toUpperCase(), Number(d));
+          }
+        });
+      } catch (e: any) {
+        this.logger.warn(`Lecture TCURX impossible (${e?.message ?? e}) : 2 décimales supposées.`);
+      }
+      this.decimalesDevise = map;
+    }
+    const d = this.decimalesDevise.get(String(devise || '').toUpperCase());
+    return Number.isFinite(d) ? (d as number) : 2;
+  }
+
+  /**
+   * Facteur à appliquer à un montant avant de le passer à une BAPI.
+   *
+   * Les BAPI reçoivent AMT_DOCCUR avec DEUX décimales implicites, quelle que soit
+   * la devise. Pour une devise à 0 décimale (XOF, XAF, JPY), SAP divise donc la
+   * valeur reçue par 100 : envoyer 52 comptabilise 0,52. Il faut compenser.
+   *
+   *   décimales 0 (XOF) → ×100      décimales 2 (USD) → ×1      décimales 3 → ×0,1
+   */
+  private async facteurMontant(devise: string): Promise<number> {
+    return Math.pow(10, 2 - (await this.getDecimales(devise)));
+  }
 
   /** Paramètres de connexion, lus dans l'environnement (mêmes noms que sap.env). */
   private connectionParams(): Record<string, string> {
@@ -353,7 +402,9 @@ export class SapService {
   }
 
   /** Construit les structures BAPI_ACC_DOCUMENT_* à partir d'une pièce métier. */
-  private buildPiece(dto: PosterPieceDto): Record<string, unknown> {
+  private async buildPiece(dto: PosterPieceDto): Promise<Record<string, unknown>> {
+    // Compense les décimales implicites des BAPI (cf. facteurMontant).
+    const facteur = await this.facteurMontant(dto.devise);
     const header = {
       USERNAME: process.env.SAP_USER,
       HEADER_TXT: dto.texte ?? 'Fond de Caisse',
@@ -373,12 +424,14 @@ export class SapService {
       // valeur non vide (libellé saisi, sinon référence, sinon défaut).
       const itemText = (l.texte && l.texte.trim()) || dto.reference || dto.texte || 'Fond de Caisse';
       accountgl.push({ ITEMNO_ACC: item, GL_ACCOUNT: gl, ITEM_TEXT: itemText.slice(0, 50), COSTCENTER: l.centreCout ?? '' });
-      // Convention BAPI : débit positif, crédit négatif.
+      // Convention BAPI : débit positif, crédit négatif. Le facteur compense les
+      // deux décimales implicites du champ AMT_DOCCUR (×100 pour le XOF).
+      const montant = Number((l.montant * facteur).toFixed(4));
       currencyamount.push({
         ITEMNO_ACC: item,
         CURR_TYPE: '00',
         CURRENCY: dto.devise,
-        AMT_DOCCUR: l.sens === 'D' ? l.montant : -l.montant,
+        AMT_DOCCUR: l.sens === 'D' ? montant : -montant,
       });
     });
     return { DOCUMENTHEADER: header, ACCOUNTGL: accountgl, CURRENCYAMOUNT: currencyamount };
@@ -623,6 +676,81 @@ export class SapService {
     return { ajoutes, totalSap: vendors.length };
   }
 
+  /**
+   * Importe les clients SAP (table KNA1) dans le référentiel des partenaires.
+   *
+   * Même principe que la synchronisation des fournisseurs : on n'ajoute que les
+   * clients absents (repérés par leur numéro SAP), sans jamais écraser une fiche
+   * existante — un partenaire peut avoir été enrichi à la main côté application.
+   */
+  async synchroniserClients(): Promise<{ ajoutes: number; totalSap: number }> {
+    const clients = await this.withClient(async (c) => {
+      const r = await c.call('RFC_READ_TABLE', {
+        QUERY_TABLE: 'KNA1',
+        DELIMITER: '|',
+        ROWCOUNT: 0,
+        FIELDS: [{ FIELDNAME: 'KUNNR' }, { FIELDNAME: 'NAME1' }, { FIELDNAME: 'ORT01' }, { FIELDNAME: 'LAND1' }],
+      });
+      return ((r as any)?.DATA ?? [])
+        .map((d: any) => {
+          const [kunnr, name1, ort01, land1] = String(d.WA).split('|');
+          // Les numéros SAP sont cadrés à gauche par des zéros : on les retire
+          // pour rester lisible, tout en gardant la valeur brute si elle n'est
+          // faite que de zéros.
+          const num = (kunnr ?? '').trim().replace(/^0+/, '') || (kunnr ?? '').trim();
+          return { num, nom: (name1 ?? '').trim(), ville: (ort01 ?? '').trim(), pays: (land1 ?? '').trim() };
+        })
+        .filter((v: any) => v.num);
+    });
+
+    const existingNums = new Set(
+      (
+        await this.dataSource.query(
+          `SELECT numero_client c FROM dbo.ref_partenaire WHERE numero_client IS NOT NULL`,
+        )
+      ).map((r: any) => String(r.c)),
+    );
+    const existingCodes = new Set(
+      (await this.dataSource.query(`SELECT code FROM dbo.ref_partenaire`)).map((r: any) => String(r.code)),
+    );
+
+    const esc = (s: string) => (s ?? '').replace(/'/g, "''");
+    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string }> = [];
+    for (const v of clients) {
+      if (existingNums.has(v.num)) continue;
+      // Le code doit rester unique : en cas de collision avec un fournisseur
+      // portant le même numéro, on préfixe par « C ».
+      let code = v.num;
+      if (existingCodes.has(code)) code = `C${v.num}`;
+      if (existingCodes.has(code)) continue;
+      existingCodes.add(code);
+      existingNums.add(v.num);
+      toInsert.push({
+        code,
+        nom: (v.nom || code).slice(0, 255),
+        num: v.num,
+        ville: v.ville.slice(0, 100),
+        pays: v.pays.slice(0, 100),
+      });
+    }
+
+    let ajoutes = 0;
+    for (let i = 0; i < toInsert.length; i += 200) {
+      const chunk = toInsert.slice(i, i + 200);
+      const values = chunk
+        .map(
+          (v) =>
+            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'CLIENT', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
+        )
+        .join(', ');
+      await this.dataSource.query(
+        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_client, ville, pays, est_actif, created_at, version) VALUES ${values}`,
+      );
+      ajoutes += chunk.length;
+    }
+    return { ajoutes, totalSap: clients.length };
+  }
+
   private async getCostCenterMap(): Promise<Map<string, string>> {
     const rows: any[] = await this.dataSource.query(
       `SELECT cost_center_app, cost_center_sap FROM dbo.sap_cost_center_mapping WHERE est_actif = 1 AND cost_center_sap IS NOT NULL AND cost_center_sap <> ''`,
@@ -758,12 +886,35 @@ export class SapService {
     return { ...res, operationId: String(id) };
   }
 
+  /**
+   * Décompose la clé de référence renvoyée par la BAPI (OBJ_KEY / AWKEY).
+   *
+   * SAP la concatène sur 18 caractères : numéro de pièce (10) + société (4) +
+   * exercice (4). On la ventile pour pouvoir rechercher et rapprocher sans
+   * découper la chaîne à chaque requête — la clé complète reste stockée telle
+   * quelle, car c'est cette forme que SAP attend pour contrepasser.
+   *
+   * Toute clé d'une autre longueur est laissée non décomposée : mieux vaut trois
+   * colonnes vides qu'un découpage arbitraire.
+   */
+  private decomposerPiece(objKey: string | null): {
+    numero: string | null;
+    societe: string | null;
+    exercice: string | null;
+  } {
+    const k = (objKey ?? '').trim();
+    if (k.length !== 18) return { numero: null, societe: null, exercice: null };
+    return { numero: k.slice(0, 10), societe: k.slice(10, 14), exercice: k.slice(14, 18) };
+  }
+
   private async marquerOperation(id: number, statut: string, piece: string | null, message: string | null) {
+    const { numero, societe, exercice } = this.decomposerPiece(piece);
     await this.dataSource.query(
       `UPDATE dbo.trx_operation
-          SET sap_statut = @1, sap_piece = @2, sap_message = @3, sap_date = SYSUTCDATETIME()
+          SET sap_statut = @1, sap_piece = @2, sap_message = @3, sap_date = SYSUTCDATETIME(),
+              sap_numero_piece = @4, sap_societe = @5, sap_exercice = @6
         WHERE id = @0`,
-      [id, statut, piece, message ? message.slice(0, 500) : null],
+      [id, statut, piece, message ? message.slice(0, 500) : null, numero, societe, exercice],
     );
   }
 
@@ -773,7 +924,7 @@ export class SapService {
     if (Math.abs(balance) > 0.0001) {
       throw new BadRequestException(`Pièce déséquilibrée : débit ≠ crédit (écart ${balance.toFixed(2)}).`);
     }
-    const piece = this.buildPiece(dto);
+    const piece = await this.buildPiece(dto);
     const fm = dryRun ? 'BAPI_ACC_DOCUMENT_CHECK' : 'BAPI_ACC_DOCUMENT_POST';
     return this.withClient(async (c) => {
       const r = await c.call(fm, piece);

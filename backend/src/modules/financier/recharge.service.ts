@@ -72,7 +72,13 @@ export class RechargeService {
       // Sens inverse (portefeuille → caisse) : on ne peut pas renvoyer plus que le
       // solde disponible du portefeuille (budget initial + écritures).
       if (inverse) {
-        const ledgerBal = await this.ledgerService.calculateBalance(portefeuille.id, 'PORTEFEUILLE');
+        // Solde DANS LA DEVISE du portefeuille : sans ce filtre, un portefeuille
+        // portant plusieurs devises verrait ses montants additionnés.
+        const ledgerBal = await this.ledgerService.calculateBalance(
+          portefeuille.id,
+          'PORTEFEUILLE',
+          String(portefeuille.deviseId),
+        );
         const dispo = Number(portefeuille.soldeInitial || 0) + Number(ledgerBal || 0);
         if (parseFloat(input.montant) > dispo) {
           throw new BadRequestException(

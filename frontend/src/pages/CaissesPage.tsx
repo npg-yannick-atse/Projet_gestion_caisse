@@ -825,6 +825,9 @@ function CaisseCard({
   const { data: devises } = useDevises();
   const devise = devises?.find((d) => String(d.id) === String(caisse.deviseId));
   const deviseCode = devise?.code ?? '';
+  // Devises autres que celle de la caisse, et non nulles : les masquer donnerait
+  // une image fausse de ce que le coffre contient réellement.
+  const autresDevises = (solde?.soldes ?? []).filter((d) => !d.principale && Number(d.solde) !== 0);
   const open = useOpenCaisse();
   const close = useCloseCaisse();
   const del = useDeleteCaisse();
@@ -933,6 +936,23 @@ function CaisseCard({
           {solde ? formatMontant(solde.solde) : '…'}
           {deviseCode && <span className="ml-1.5 text-[13px] font-semibold text-white/70">{deviseCode}</span>}
         </div>
+
+        {/* Autres devises détenues par la caisse. On ne les additionne pas au
+            solde ci-dessus : ce sont des monnaies différentes. */}
+        {autresDevises.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {autresDevises.map((d) => (
+              <span
+                key={d.deviseId}
+                className="rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white/80"
+                title={`Cette caisse détient aussi ${formatMontant(d.solde)} ${d.code ?? ''}`}
+              >
+                {formatMontant(d.solde)}
+                <span className="ml-1 text-white/55">{d.code ?? '—'}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 flex items-center gap-2" onClick={stop}>
           {caisse.statut === 'FERMEE'

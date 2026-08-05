@@ -153,10 +153,12 @@ export function SuperAdminDashboard({ user }: Props) {
         </div>
       )}
 
-      <FondCaissePanel />
-
       {/* Héritage Admin (KPIs, bar par direction, anomalies, pipeline) */}
       <AdminDashboard user={user} isSuper />
+
+      {/* Le flux de caisse ferme la page : c'est un détail d'analyse, il vient
+          après les indicateurs de pilotage (même ordre que le tableau DAF). */}
+      <FondCaissePanel />
     </div>
   );
 }

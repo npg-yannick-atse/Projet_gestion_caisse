@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { usePartenaires, useCreatePartenaire, useUpdatePartenaire, useDeletePartenaire } from '@/api/referentiel';
 import { useSyncFournisseursSap } from '@/api/sap';
-import { apiErrorMessage } from '@/lib/utils';
+import { apiErrorMessage, NUMERO_CLIENT_REGEX, chiffresSeulement } from '@/lib/utils';
 import type { Partenaire, TypePartenaire } from '@/types/api';
 import { SapCheckButton } from '@/components/sap/SapVerify';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -30,7 +30,8 @@ const schema = z.object({
   raisonSociale: z.string().trim().min(1, 'Requis'),
   typePartenaire: z.enum(['CLIENT', 'FOURNISSEUR', 'MIXTE']),
   sigle: z.string().optional(),
-  numeroClient: z.string().optional(),
+  // Identifiant SAP (KUNNR) : chiffres uniquement (règle appliquée aussi côté serveur).
+  numeroClient: z.string().regex(NUMERO_CLIENT_REGEX, 'Chiffres uniquement').optional(),
   numeroFournisseur: z.string().optional(),
   adresse: z.string().optional(),
   telephone: z.string().optional(),
@@ -126,7 +127,12 @@ function PartenaireForm({ editing, onDone }: { editing?: Partenaire; onDone: () 
           <Label htmlFor="numeroClient">N° client SAP (optionnel)</Label>
           <div className="flex items-start gap-2">
             <div className="flex-1">
-              <Input id="numeroClient" {...register('numeroClient')} />
+              <Input
+                id="numeroClient"
+                inputMode="numeric"
+                {...register('numeroClient')}
+                onChange={(e) => setValue('numeroClient', chiffresSeulement(e.target.value), { shouldValidate: true })}
+              />
             </div>
             <SapCheckButton
               kind="client"

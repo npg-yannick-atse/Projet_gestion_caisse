@@ -64,6 +64,7 @@ function CaisseDetailCard({
 }) {
   const { data: solde } = useCaisseSolde(caisse.id);
   const soldeNum = Number(solde?.solde ?? 0);
+  const autresDevises = (solde?.soldes ?? []).filter((d) => !d.principale && Number(d.solde) !== 0);
   const isClosed = caisse.statut === 'FERMEE';
 
   // Couleur de la carte = couleur de la devise (la monnaie de la caisse).
@@ -123,6 +124,21 @@ function CaisseDetailCard({
             {formatMontant(soldeNum)}{' '}
             <span className="text-sm font-medium text-white/60">{deviseCode}</span>
           </div>
+          {/* Devises supplémentaires détenues — jamais additionnées au solde
+              ci-dessus, ce sont d'autres monnaies. */}
+          {autresDevises.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {autresDevises.map((d) => (
+                <span
+                  key={d.deviseId}
+                  className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/75"
+                >
+                  {formatMontant(Number(d.solde))}
+                  <span className="ml-1 text-white/50">{d.code ?? '—'}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Entrées / sorties du mois */}

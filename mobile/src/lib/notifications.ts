@@ -9,8 +9,11 @@ export async function configureNotifications() {
   configured = true;
 
   Notifications.setNotificationHandler({
+    // Depuis le SDK 53, `shouldShowAlert` est remplacé par `shouldShowBanner`
+    // (bandeau en haut de l'écran) et `shouldShowList` (centre de notifications).
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),

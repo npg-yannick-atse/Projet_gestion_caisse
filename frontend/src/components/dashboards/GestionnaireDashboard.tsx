@@ -162,8 +162,6 @@ export function GestionnaireDashboard({ user }: Props) {
         }
       />
 
-      <FondCaissePanel caisseIds={mesCaisseIds} />
-
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         <Kpi
           icon={Wallet}
@@ -346,6 +344,8 @@ export function GestionnaireDashboard({ user }: Props) {
         </div>
       </div>
 
+      {/* Le flux de caisse ferme la page, après les indicateurs de pilotage. */}
+      <FondCaissePanel caisseIds={mesCaisseIds} />
     </div>
   );
 }

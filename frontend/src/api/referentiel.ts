@@ -30,8 +30,15 @@ function refParams(filters: RefFilters = {}): Record<string, string> {
   return p;
 }
 
-export async function listPartenaires(filters: RefFilters = {}): Promise<Partenaire[]> {
-  const { data } = await api.get<Partenaire[]>('/partenaires', { params: refParams(filters) });
+export interface PartenaireFilters extends RefFilters {
+  /** Restreint aux clients ou aux fournisseurs (filtré en base). */
+  type?: 'CLIENT' | 'FOURNISSEUR' | 'MIXTE';
+}
+
+export async function listPartenaires(filters: PartenaireFilters = {}): Promise<Partenaire[]> {
+  const { data } = await api.get<Partenaire[]>('/partenaires', {
+    params: { ...refParams(filters), ...(filters.type ? { type: filters.type } : {}) },
+  });
   return data;
 }
 
@@ -79,7 +86,7 @@ export async function listTypeBons(): Promise<TypeBon[]> {
   return data;
 }
 
-export function usePartenaires(filters: RefFilters = {}) {
+export function usePartenaires(filters: PartenaireFilters = {}) {
   return useQuery({ queryKey: ['partenaires', filters], queryFn: () => listPartenaires(filters) });
 }
 

@@ -14,6 +14,7 @@ import { BonCaisse } from './entities/bon-caisse.entity';
 import { Decaissement } from './entities/decaissement.entity';
 import { Operation } from './entities/operation.entity';
 import { LedgerService } from './ledger.service';
+import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UpdateBonCaisseDto } from './dto/bon-caisse.dto';
 import { AuditService } from '@modules/audit/audit.service';
 
@@ -53,7 +54,14 @@ export class BonsCaisseService {
     montant: string,
     bonId: string,
   ): Promise<void> {
-    const solde = Number(await this.ledger.calculateBalance(portefeuilleId, 'PORTEFEUILLE'));
+    // Solde DANS LA DEVISE du portefeuille : comparer un montant à un solde
+    // toutes devises mélangées autoriserait un décaissement non couvert.
+    const ptf = await this.dataSource
+      .getRepository(Portefeuille)
+      .findOne({ where: { id: portefeuilleId as any } });
+    const solde = Number(
+      await this.ledger.calculateBalance(portefeuilleId, 'PORTEFEUILLE', ptf ? String(ptf.deviseId) : undefined),
+    );
     if (solde - Number(montant) >= 0) return;
     const bon = await this.bonRepo.findOne({ where: { id: bonId } });
     if (bon?.statutExtension === 'APPROUVEE' && bon.extensionMode === 'DECOUVERT') return;

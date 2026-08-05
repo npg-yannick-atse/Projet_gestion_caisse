@@ -235,20 +235,65 @@ export class LedgerService {
    * Calcule le solde d'un compte à partir des écritures
    * Formule : SUM(crédits) - SUM(débits)
    */
-  async calculateBalance(compteId: string, typeCompte: TypeCompte): Promise<string> {
-    const result = await this.ecritureRepo
+  /**
+   * Solde d'un compte, dans UNE devise donnée.
+   *
+   * ⚠️ Sans `deviseId`, toutes les devises sont additionnées — ce qui n'a aucun
+   * sens dès qu'un compte en porte plusieurs (additionner des USD et des EUR).
+   * Un compte n'a pas « un » solde mais un solde PAR DEVISE : passer `deviseId`
+   * dès qu'on compare à un montant ou qu'on affiche une valeur.
+   * Voir `calculateBalancesParDevise` pour la ventilation complète.
+   */
+  async calculateBalance(
+    compteId: string,
+    typeCompte: TypeCompte,
+    deviseId?: string,
+  ): Promise<string> {
+    const qb = this.ecritureRepo
       .createQueryBuilder('ecriture')
       .select('SUM(CAST(ecriture.credit AS DECIMAL(19,4)))', 'totalCredit')
       .addSelect('SUM(CAST(ecriture.debit AS DECIMAL(19,4)))', 'totalDebit')
       .where('ecriture.compte_id = :compteId', { compteId })
-      .andWhere('ecriture.type_compte = :typeCompte', { typeCompte })
-      .getRawOne();
+      .andWhere('ecriture.type_compte = :typeCompte', { typeCompte });
+    if (deviseId) qb.andWhere('ecriture.devise_id = :deviseId', { deviseId });
+    const result = await qb.getRawOne();
 
     const credit = parseFloat(result?.totalCredit || '0');
     const debit = parseFloat(result?.totalDebit || '0');
     const balance = credit - debit;
 
     return balance.toFixed(4);
+  }
+
+  /**
+   * Ventilation du solde d'un compte, une ligne PAR DEVISE présente.
+   *
+   * C'est la vraie image d'une caisse : « 267 180 USD et −175 000 EUR », et non
+   * un total de 92 180 qui ne représente rien.
+   */
+  async calculateBalancesParDevise(
+    compteId: string,
+    typeCompte: TypeCompte,
+  ): Promise<Array<{ deviseId: string; code: string | null; solde: string }>> {
+    const rows: Array<{ deviseId: string; code: string | null; totalCredit: string | null; totalDebit: string | null }> =
+      await this.ecritureRepo
+        .createQueryBuilder('e')
+        .select('e.devise_id', 'deviseId')
+        .addSelect('d.code', 'code')
+        .addSelect('SUM(CAST(e.credit AS DECIMAL(19,4)))', 'totalCredit')
+        .addSelect('SUM(CAST(e.debit AS DECIMAL(19,4)))', 'totalDebit')
+        .leftJoin('fin_devise', 'd', 'd.id = e.devise_id')
+        .where('e.compte_id = :compteId', { compteId })
+        .andWhere('e.type_compte = :typeCompte', { typeCompte })
+        .groupBy('e.devise_id')
+        .addGroupBy('d.code')
+        .getRawMany();
+
+    return rows.map((r) => ({
+      deviseId: String(r.deviseId),
+      code: r.code ?? null,
+      solde: (parseFloat(r.totalCredit || '0') - parseFloat(r.totalDebit || '0')).toFixed(4),
+    }));
   }
 
   /**

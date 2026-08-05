@@ -184,7 +184,13 @@ export class PortefeuillesService {
     id: string,
   ): Promise<{ solde: string; soldeInitial: string; budgetMensuel: string | null }> {
     const pf = await this.findOne(id);
-    const ledger = await this.ledgerService.calculateBalance(id, 'PORTEFEUILLE');
+    // Dans la devise du portefeuille : un portefeuille ayant reçu une autre
+    // devise verrait sinon les montants additionnés sans conversion.
+    const ledger = await this.ledgerService.calculateBalance(
+      id,
+      'PORTEFEUILLE',
+      String(pf.deviseId),
+    );
     const soldeInitial = Number(pf.soldeInitial || 0);
     const total = soldeInitial + Number(ledger || 0);
     return {
