@@ -19,6 +19,7 @@ import { AuthorizationService } from '@modules/security/authorization.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
+import { CreateBonDto } from './dto/create-bon.dto';
 
 /**
  * Rôles qui ont accès à TOUS les bons (pas de restriction au demandeur).
@@ -32,33 +33,6 @@ const ROLES_VOIENT_TOUS_LES_BONS = new Set([
   'CAISSIER',
   'GESTIONNAIRE_PORTEFEUILLE',
 ]);
-
-interface CreateBonRequest {
-  typeBonId: string;
-  soubons: Array<{
-    libelle: string;
-    montant: string;
-    partenaireId?: string | null;
-    numeroBl: string;
-    codeManutention: string;
-    costCenterId: string;
-    natureOperationId?: string | null;
-    natureComptableId?: string | null;
-    caisseId: string;
-    portefeuilleId: string;
-    deviseId: string;
-    numeroClient?: string;
-    nomClient?: string;
-    paysId?: string;
-    divisionId?: string;
-    description?: string;
-  }>;
-  estRecurrent?: boolean;
-  frequenceRecurrence?: 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'ANNUEL';
-  demandeExtension?: boolean;
-  descriptionExtension?: string;
-  porteur?: string;
-}
 
 @ApiTags('Transactionnel / Bons')
 @ApiBearerAuth()
@@ -110,7 +84,7 @@ export class BonsController {
 
   @Post()
   @ApiOperation({ summary: 'Créer un bon avec ses sous-bons' })
-  async create(@Body() dto: CreateBonRequest, @CurrentUser() user: JwtPayload) {
+  async create(@Body() dto: CreateBonDto, @CurrentUser() user: JwtPayload) {
     return this.bonsService.createBon({
       ...dto,
       demandeurId: user.sub,

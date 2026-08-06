@@ -471,7 +471,16 @@ export interface UpdatePortefeuillePayload {
   estActif?: boolean;
 }
 
-export type TypeOperation = 'RECHARGE' | 'DECAISSEMENT' | 'TRANSFERT' | 'AJUSTEMENT' | 'ENCAISSEMENT' | 'CREDIT' | 'SALAIRE';
+export type TypeOperation =
+  | 'RECHARGE'
+  | 'DECAISSEMENT'
+  | 'TRANSFERT'
+  | 'AJUSTEMENT'
+  | 'ENCAISSEMENT'
+  | 'CREDIT'
+  | 'SALAIRE'
+  /** Mensualité d'un crédit employé encaissée : l'argent revient dans la source. */
+  | 'REMBOURSEMENT_CREDIT';
 
 export type TransfertCompteType = 'CAISSE' | 'PORTEFEUILLE';
 export type DemandeTransfertStatut =
@@ -565,6 +574,54 @@ export interface Credit {
   dateDecaissement?: string | null;
   createdById?: string | null;
   createdAt: string;
+}
+
+/** Versement réellement encaissé au titre d'un crédit. */
+export interface CreditRemboursement {
+  id: string;
+  creditId: string;
+  /** Rang de l'échéance couverte (1 = première mensualité). */
+  numeroEcheance: number;
+  montant: string;
+  deviseId: string;
+  sourceType: CreditSource;
+  sourceId: string;
+  transactionUuid?: string | null;
+  dateRemboursement: string;
+  statut: 'ENCAISSE' | 'ANNULE';
+  commentaire?: string | null;
+  createdById?: string | null;
+  createdAt: string;
+}
+
+export interface CreateRemboursementPayload {
+  /** Par défaut, la première échéance non réglée. */
+  numeroEcheance?: number;
+  /** Par défaut, la mensualité théorique. */
+  montant?: string;
+  sourceType?: CreditSource;
+  sourceId?: string;
+  dateRemboursement?: string;
+  commentaire?: string;
+}
+
+/**
+ * Situation d'un crédit, calculée par le backend sur les versements RÉELS.
+ * Ne pas la recalculer côté écran : le calendrier ne dit pas qui a payé.
+ */
+export interface SituationCredit {
+  creditId: string;
+  montant: string;
+  nbMois: number;
+  mensualite: string;
+  rembourse: string;
+  restant: string;
+  echeancesPayees: number;
+  /** Rang de la prochaine échéance à encaisser, null si tout est soldé. */
+  prochaineEcheance: number | null;
+  echeancesEnRetard: number;
+  montantEnRetard: string;
+  pourcentage: number;
 }
 
 export interface CreateCreditPayload {

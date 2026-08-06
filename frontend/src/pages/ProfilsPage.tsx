@@ -28,6 +28,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 import { RoleGuard } from '@/components/RoleGuard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 
@@ -258,8 +261,17 @@ function PermissionEditor({ profil }: { profil: Profil }) {
   );
 }
 
+const PROFIL_SORT_COLUMNS = ['libelle', 'categorie'] as const;
+type ProfilSortCol = (typeof PROFIL_SORT_COLUMNS)[number];
+
 function ProfilsPageInner() {
-  const { data: profils, isLoading } = useProfils();
+  const { data: profilsBruts, isLoading } = useProfils();
+  // Tri à l'écran : la liste des profils tient sur une page.
+  const sort = useTableSort<ProfilSortCol>('/profils', PROFIL_SORT_COLUMNS);
+  const profils = useClientSort(profilsBruts, sort.state, {
+    libelle: (p) => p.libelle,
+    categorie: (p) => p.categorie,
+  });
   const remove = useDeleteProfil();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // form: { mode: 'create' } | { mode: 'edit', profil } | null
@@ -296,8 +308,8 @@ function ProfilsPageInner() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 text-left font-semibold">Profil</th>
-                <th className="px-4 py-2.5 text-left font-semibold">Catégorie</th>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Profil</SortableHeader>
+                <SortableHeader column="categorie" state={sort.state} onSort={sort.setSort}>Catégorie</SortableHeader>
                 <th className="px-4 py-2.5 text-center font-semibold">Permissions</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>

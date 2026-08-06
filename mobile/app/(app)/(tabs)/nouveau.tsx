@@ -43,6 +43,7 @@ export default function NouvelleDemandeScreen() {
   const [numeroBl, setNumeroBl] = useState('');
   const [codeManutention, setCodeManutention] = useState('');
   const [numeroClient, setNumeroClient] = useState('');
+  const [clientLabel, setClientLabel] = useState('');
   const [nomClient, setNomClient] = useState('');
   const [paysId, setPaysId] = useState('');
   const [divisionId, setDivisionId] = useState('');
@@ -111,6 +112,18 @@ export default function NouvelleDemandeScreen() {
     return list.map((p) => ({ value: p.id, label: p.raisonSociale, sublabel: p.code }));
   };
 
+  // Autocomplétion client sur le RÉFÉRENTIEL LOCAL (clients importés de SAP),
+  // comme le web : pas d'aller-retour SAP à la saisie, et le numéro ne peut pas
+  // être erroné puisqu'il est choisi et non tapé. La valeur retenue est le
+  // NUMÉRO client (KUNNR), c'est lui qui part sur le sous-bon.
+  const fetchClients = async (q: string): Promise<SelectOption[]> => {
+    const list = await listPartenaires({ type: 'CLIENT', search: q || undefined, limit: 30 });
+    return list
+      // Un client sans numéro SAP ne peut pas être imputé : on ne le propose pas.
+      .filter((c) => c.numeroClient)
+      .map((c) => ({ value: String(c.numeroClient), label: c.raisonSociale, sublabel: String(c.numeroClient) }));
+  };
+
   const montantValid = montantRegex.test(montant) && Number(montant) > 0;
   const canSubmit =
     !!typeBonId &&
@@ -133,6 +146,7 @@ export default function NouvelleDemandeScreen() {
     setNumeroBl('');
     setCodeManutention('');
     setNumeroClient('');
+    setClientLabel('');
     setNomClient('');
     setPaysId('');
     setDivisionId('');
@@ -266,15 +280,21 @@ export default function NouvelleDemandeScreen() {
             </View>
 
             {reqNumeroClient && (
-              <Field label="N° client" required>
-                <TextInput
-                  style={styles.input}
-                  value={numeroClient}
-                  onChangeText={setNumeroClient}
-                  placeholder="N° client…"
-                  placeholderTextColor="#94A3B8"
-                />
-              </Field>
+              <RemoteSelect
+                label="N° client"
+                required
+                value={numeroClient}
+                selectedLabel={clientLabel || numeroClient}
+                onChange={(numero, opt) => {
+                  setNumeroClient(numero);
+                  setClientLabel(opt?.label ?? '');
+                  // Le nom du client découle du client choisi (comme sur le web).
+                  if (opt?.label) setNomClient(opt.label);
+                }}
+                fetcher={fetchClients}
+                queryKey="mobile-clients"
+                placeholder="Rechercher un client (nom ou numéro)…"
+              />
             )}
 
             {reqNomClient && (

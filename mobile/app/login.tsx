@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -48,9 +49,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.logoBadge}>
-          <Text style={styles.logoText}>FC</Text>
-        </View>
+        <Image
+          source={require('../assets/icon.png')}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="Fond de Caisse"
+        />
         <Text style={styles.title}>Fond de Caisse</Text>
         <Text style={styles.subtitle}>NPG Gandour</Text>
 
@@ -106,16 +110,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#0A1628' },
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  logoBadge: {
+  logo: {
     alignSelf: 'center',
-    height: 64,
-    width: 64,
+    height: 72,
+    width: 72,
     borderRadius: 18,
-    backgroundColor: '#00C896',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  logoText: { color: '#0A1628', fontSize: 24, fontWeight: '800' },
   title: { color: '#fff', fontSize: 22, fontWeight: '700', textAlign: 'center', marginTop: 14 },
   subtitle: { color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginTop: 2, marginBottom: 24 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },

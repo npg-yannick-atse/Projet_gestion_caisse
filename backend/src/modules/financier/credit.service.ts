@@ -14,6 +14,10 @@ import { Employe } from '@modules/referentiel/entities/employe.entity';
 import { User } from '@modules/security/entities/user.entity';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
+import { Workbook } from 'exceljs';
+import { Direction } from '@modules/security/entities/direction.entity';
+import { Devise } from './entities/devise.entity';
+import { CreditRemboursementService } from './credit-remboursement.service';
 import { CreateCreditDto, UpdateCreditDto } from './dto/credit.dto';
 
 @Injectable()
@@ -24,6 +28,7 @@ export class CreditService {
     private readonly dataSource: DataSource,
     private readonly ledger: LedgerService,
     private readonly authz: AuthorizationService,
+    private readonly remboursements: CreditRemboursementService,
   ) {}
 
   /** Direction de l'utilisateur courant (pour la restriction validateur). */
@@ -68,7 +73,13 @@ export class CreditService {
 
   async list(
     userId: string,
-    opts: { dateFrom?: string; dateTo?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+    opts: {
+      dateFrom?: string;
+      dateTo?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      directionId?: string;
+    } = {},
   ): Promise<Credit[]> {
     const qb = this.creditRepo.createQueryBuilder('c');
 
@@ -80,6 +91,16 @@ export class CreditService {
       const ids = employes.map((e) => e.id);
       if (ids.length === 0) return [];
       qb.andWhere('c.employe_id IN (:...ids)', { ids });
+    }
+
+    // Filtre par direction demandé par l'écran. Il s'applique EN PLUS du
+    // cloisonnement ci-dessus : un non-admin ne peut pas s'en servir pour voir
+    // une autre direction que la sienne, l'intersection reste vide.
+    if (opts.directionId) {
+      const employes = await this.employeRepo.find({ where: { directionId: opts.directionId as any } });
+      const ids = employes.map((e) => e.id);
+      if (ids.length === 0) return [];
+      qb.andWhere('c.employe_id IN (:...dirIds)', { dirIds: ids });
     }
 
     // Filtre par date (sur la date de début du crédit ; date_debut est de type DATE).
@@ -282,6 +303,118 @@ export class CreditService {
       credit.updatedById = userId as any;
       return manager.getRepository(Credit).save(credit);
     });
+  }
+
+  private static readonly COLONNES_EXPORT = [
+    { header: 'Matricule', key: 'matricule', width: 14 },
+    { header: 'Employé', key: 'employe', width: 26 },
+    { header: 'Direction', key: 'direction', width: 22 },
+    { header: 'Montant', key: 'montant', width: 15 },
+    { header: 'Devise', key: 'devise', width: 9 },
+    { header: 'Durée (mois)', key: 'nbMois', width: 12 },
+    { header: 'Mensualité', key: 'mensualite', width: 15 },
+    { header: 'Début', key: 'debut', width: 12 },
+    { header: 'Fin prévue', key: 'fin', width: 12 },
+    { header: 'Mois versés', key: 'moisVerses', width: 12 },
+    { header: 'Remboursé', key: 'rembourse', width: 15 },
+    { header: 'Reste dû', key: 'restant', width: 15 },
+    { header: 'Mois en retard', key: 'moisRetard', width: 14 },
+    { header: 'Montant en retard', key: 'montantRetard', width: 17 },
+    { header: 'Avancement', key: 'avancement', width: 12 },
+    { header: 'Statut', key: 'statut', width: 13 },
+    { header: 'Source', key: 'source', width: 14 },
+  ];
+
+  /**
+   * Export Excel des crédits, avec la situation de remboursement de chacun.
+   *
+   * Le fichier respecte le périmètre de l'appelant et les filtres de l'écran :
+   * ce que la liste montre est exactement ce que le fichier contient.
+   */
+  async exportExcel(
+    userId: string,
+    opts: {
+      dateFrom?: string;
+      dateTo?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      directionId?: string;
+      enRetard?: boolean;
+      statut?: string;
+    } = {},
+  ): Promise<Buffer> {
+    const credits = await this.list(userId, opts);
+    const filtresStatut = opts.statut && opts.statut !== 'TOUTES' ? credits.filter((c) => c.statut === opts.statut) : credits;
+
+    const situations = await this.remboursements.situations(filtresStatut.map((c) => String(c.id)));
+    const lignes = opts.enRetard
+      ? filtresStatut.filter((c) => (situations[String(c.id)]?.echeancesEnRetard ?? 0) > 0)
+      : filtresStatut;
+
+    // Libellés résolus en une passe. `withDeleted` est indispensable ici : un
+    // crédit ancien peut pointer sur une caisse ou un portefeuille depuis
+    // supprimé, et l'export doit quand même le nommer plutôt qu'afficher un id.
+    const employes = new Map(
+      (await this.employeRepo.find({ withDeleted: true })).map((e) => [String(e.id), e]),
+    );
+    const directions = new Map(
+      (await this.dataSource.getRepository(Direction).find({ withDeleted: true })).map((d) => [String(d.id), d]),
+    );
+    const devises = new Map(
+      (await this.dataSource.getRepository(Devise).find()).map((d) => [String(d.id), d]),
+    );
+    const caisses = new Map(
+      (await this.dataSource.getRepository(Caisse).find({ withDeleted: true })).map((c) => [String(c.id), c]),
+    );
+    const portefeuilles = new Map(
+      (await this.dataSource.getRepository(Portefeuille).find({ withDeleted: true })).map((p) => [String(p.id), p]),
+    );
+
+    const wb = new Workbook();
+    const ws = wb.addWorksheet('Crédits');
+    ws.columns = CreditService.COLONNES_EXPORT;
+    ws.getRow(1).font = { bold: true };
+
+    for (const c of lignes) {
+      const s = situations[String(c.id)];
+      const emp = employes.get(String(c.employeId));
+      const dir = emp?.directionId ? directions.get(String(emp.directionId)) : undefined;
+      const fin = new Date(c.dateDebut);
+      fin.setMonth(fin.getMonth() + c.nbMois);
+      // Même libellé qu'à l'écran : le code de la caisse ou du portefeuille.
+      const source =
+        c.sourceType === 'CAISSE'
+          ? caisses.get(String(c.sourceId))?.code
+          : portefeuilles.get(String(c.sourceId))?.code;
+
+      ws.addRow({
+        matricule: emp?.matricule ?? '',
+        employe: emp ? `${emp.nom} ${emp.prenoms}`.trim() : '',
+        direction: dir ? dir.libelle : '',
+        montant: Number(c.montant),
+        devise: devises.get(String(c.deviseId))?.code ?? '',
+        nbMois: c.nbMois,
+        mensualite: Number(s?.mensualite ?? 0),
+        debut: c.dateDebut,
+        fin: fin.toISOString().slice(0, 10),
+        moisVerses: `${s?.echeancesPayees ?? 0} / ${c.nbMois}`,
+        rembourse: Number(s?.rembourse ?? 0),
+        restant: Number(s?.restant ?? c.montant),
+        moisRetard: s?.echeancesEnRetard ?? 0,
+        montantRetard: Number(s?.montantEnRetard ?? 0),
+        avancement: `${s?.pourcentage ?? 0} %`,
+        statut: c.statut,
+        source: source ?? `${c.sourceType} ${c.sourceId}`,
+      });
+    }
+
+    // Les montants sont des nombres, pas du texte : le boss doit pouvoir les
+    // additionner directement dans Excel.
+    for (const key of ['montant', 'mensualite', 'rembourse', 'restant', 'montantRetard']) {
+      ws.getColumn(key).numFmt = '# ##0.00';
+    }
+
+    return Buffer.from((await wb.xlsx.writeBuffer()) as any);
   }
 
   /** Solde (clôture) un crédit EN_COURS : libère l'employé pour un nouveau crédit. */

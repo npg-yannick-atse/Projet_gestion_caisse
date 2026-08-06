@@ -3,6 +3,9 @@ import { Gift, Save, SlidersHorizontal } from 'lucide-react';
 import { useParametres, useUpdateParametre } from '@/api/parametres';
 import { apiErrorMessage } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 import { TypesBeneficePage } from '@/pages/TypesBeneficePage';
 
 /** Une ligne éditable de paramètre. */
@@ -56,6 +59,9 @@ function ParamRow({ cle, libelle, valeur }: { cle: string; libelle?: string | nu
   );
 }
 
+const PARAM_SORT_COLUMNS = ['libelle', 'valeur'] as const;
+type ParamSortCol = (typeof PARAM_SORT_COLUMNS)[number];
+
 export function ParametresPage() {
   const [tab, setTab] = useState<'reglages' | 'benefices'>('reglages');
 
@@ -92,7 +98,13 @@ export function ParametresPage() {
 }
 
 function ReglagesGlobaux() {
-  const { data: params, isLoading, isError } = useParametres();
+  const { data: paramsBruts, isLoading, isError } = useParametres();
+  // Tri à l'écran : une poignée de réglages, tous chargés d'un coup.
+  const sort = useTableSort<ParamSortCol>('/parametres', PARAM_SORT_COLUMNS);
+  const params = useClientSort(paramsBruts, sort.state, {
+    libelle: (p) => p.libelle || p.cle,
+    valeur: (p) => p.valeur,
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -110,8 +122,8 @@ function ReglagesGlobaux() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">Paramètre</th>
-                <th className="px-4 py-2.5 font-semibold">Valeur</th>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Paramètre</SortableHeader>
+                <SortableHeader column="valeur" state={sort.state} onSort={sort.setSort}>Valeur</SortableHeader>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>

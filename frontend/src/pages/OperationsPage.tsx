@@ -58,6 +58,7 @@ const TYPE_BADGE: Record<TypeOperation, { label: string; cls: string; dot: strin
   ENCAISSEMENT: { label: 'Encaissement', cls: 'bg-[#ECFDF5] text-[#047857]', dot: '#10B981', icon: ArrowUpCircle },
   CREDIT: { label: 'Crédit', cls: 'bg-[#F5F3FF] text-[#6D28D9]', dot: '#7C3AED', icon: ArrowDownCircle },
   SALAIRE: { label: 'Salaire', cls: 'bg-[#F5F3FF] text-[#6D28D9]', dot: '#7C3AED', icon: ArrowDownCircle },
+  REMBOURSEMENT_CREDIT: { label: 'Remb. crédit', cls: 'bg-[#ECFDF5] text-[#047857]', dot: '#047857', icon: ArrowUpCircle },
 };
 
 const ADV_SELECT_CLASS =

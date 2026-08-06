@@ -10,11 +10,17 @@ import type { Interim, InterimStatut } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const inputClass = selectClass;
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
+
+const INTERIM_SORT_COLUMNS = ['initiateur', 'remplacant', 'delegue', 'debut', 'statut'] as const;
+type InterimSortCol = (typeof INTERIM_SORT_COLUMNS)[number];
 
 const STATUT_BADGE: Record<InterimStatut, { label: string; cls: string }> = {
   ACTIF: { label: 'Actif', cls: 'bg-[#ECFDF5] text-[#047857]' },
@@ -256,7 +262,7 @@ function InterimsPageInner() {
 
   const global = useInterims(undefined, permsReady && peutToutVoir);
   const perso = useMesInterims(permsReady && !peutToutVoir);
-  const interims = peutToutVoir ? global.data : perso.data;
+  const interimsBruts = peutToutVoir ? global.data : perso.data;
   const isLoading = !permsReady || (peutToutVoir ? global.isLoading : perso.isLoading);
 
   const { data: users } = useUsers();
@@ -284,6 +290,18 @@ function InterimsPageInner() {
   };
   const fmt = (iso: string) =>
     new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+
+  // Tri à l'écran : la liste des intérims est courte et chargée en entier.
+  // Déclaré APRÈS `userName` / `delegLabel` : les accesseurs les appellent, et
+  // ces constantes ne sont pas encore initialisées plus haut dans le rendu.
+  const sort = useTableSort<InterimSortCol>('/interims', INTERIM_SORT_COLUMNS);
+  const interims = useClientSort(interimsBruts, sort.state, {
+    initiateur: (i) => userName(i.initiateurId),
+    remplacant: (i) => userName(i.remplacantId),
+    delegue: (i) => delegLabel(i),
+    debut: (i) => new Date(i.dateDebut),
+    statut: (i) => i.statut,
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -326,11 +344,11 @@ function InterimsPageInner() {
             <table className="w-full text-xs">
               <thead className="bg-[#F8FAFC]">
                 <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                  <th className="px-4 py-2.5 font-semibold">Initiateur</th>
-                  <th className="px-4 py-2.5 font-semibold">Remplaçant</th>
-                  <th className="px-4 py-2.5 font-semibold">Délégué</th>
-                  <th className="px-4 py-2.5 font-semibold">Période</th>
-                  <th className="px-4 py-2.5 font-semibold">Statut</th>
+                  <SortableHeader column="initiateur" state={sort.state} onSort={sort.setSort}>Initiateur</SortableHeader>
+                  <SortableHeader column="remplacant" state={sort.state} onSort={sort.setSort}>Remplaçant</SortableHeader>
+                  <SortableHeader column="delegue" state={sort.state} onSort={sort.setSort}>Délégué</SortableHeader>
+                  <SortableHeader column="debut" state={sort.state} onSort={sort.setSort}>Période</SortableHeader>
+                  <SortableHeader column="statut" state={sort.state} onSort={sort.setSort}>Statut</SortableHeader>
                   <th className="px-4 py-2.5">
                     <span className="sr-only">Actions</span>
                   </th>

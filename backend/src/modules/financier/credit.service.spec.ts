@@ -29,6 +29,9 @@ function build(credit: any) {
     { getRepository: jest.fn(() => ({ findOne: jest.fn(async () => null) })) } as any,
     {} as any,
     authz as any,
+    // Service de remboursement : inutilisé par les règles testées ici (workflow
+    // de validation), il n'intervient qu'à l'export et dans la situation.
+    {} as any,
   );
   return { service, saved, authz, creditRepo };
 }

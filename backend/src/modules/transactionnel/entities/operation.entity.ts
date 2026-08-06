@@ -11,7 +11,9 @@ export type TypeOperation =
   /** Décaissement d'un crédit accordé à un employé. */
   | 'CREDIT'
   /** Versement du salaire d'un employé depuis une caisse ou un portefeuille. */
-  | 'SALAIRE';
+  | 'SALAIRE'
+  /** Mensualité d'un crédit employé encaissée : l'argent revient dans la source. */
+  | 'REMBOURSEMENT_CREDIT';
 
 @Entity({ name: 'trx_operation' })
 export class Operation {

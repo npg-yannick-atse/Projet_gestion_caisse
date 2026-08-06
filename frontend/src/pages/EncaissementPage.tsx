@@ -7,12 +7,21 @@ import { useEncaissement } from '@/api/encaissement';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ClientSelect } from '@/components/ClientSelect';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
 const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
+
+const ENC_SORT_COLUMNS = ['date', 'montant', 'client', 'motif'] as const;
+type EncSortCol = (typeof ENC_SORT_COLUMNS)[number];
+/** Le tableau n'affiche qu'un extrait : au-delà, la page deviendrait illisible. */
+const ENC_MAX_LIGNES = 20;
 
 export function EncaissementPage() {
   // Caisses limitées au périmètre de l'utilisateur (accès ECRITURE/ADMIN).
@@ -21,6 +30,18 @@ export function EncaissementPage() {
   const { data: encOps } = useOperations('ENCAISSEMENT');
   const { data: devises } = useDevises();
   const encaissement = useEncaissement();
+
+  // Le tri porte sur TOUS les encaissements, puis on coupe : trier après la
+  // coupe ne trierait que les 20 plus récents, ce qui ferait passer un extrait
+  // pour un classement complet.
+  const sort = useTableSort<EncSortCol>('/encaissement', ENC_SORT_COLUMNS);
+  const encTries = useClientSort(encOps, sort.state, {
+    date: (o) => new Date(o.dateOperation),
+    montant: (o) => Number(o.montant),
+    client: (o) => o.clientNom || o.clientNumero || null,
+    motif: (o) => o.motif || null,
+  });
+  const encVisibles = encTries.slice(0, ENC_MAX_LIGNES);
 
   const [caisseId, setCaisseId] = useState('');
   const [montant, setMontant] = useState('');
@@ -166,12 +187,17 @@ export function EncaissementPage() {
             <label htmlFor="clientNumero" className={labelClass}>
               Client (numéro)
             </label>
-            <input
-              id="clientNumero"
-              className={inputClass}
+            {/* Choisi dans le référentiel local plutôt que saisi : le numéro
+                client est un identifiant SAP (KUNNR), une saisie libre laissait
+                passer des lettres que le serveur refuse ensuite. */}
+            <ClientSelect
               value={clientNumero}
-              onChange={(e) => setClientNumero(e.target.value)}
-              placeholder="Identifiant client (optionnel)"
+              onChange={(numero, raisonSociale) => {
+                setClientNumero(numero);
+                // Le nom déjà saisi à la main n'est pas écrasé sans raison.
+                if (raisonSociale && !clientNom.trim()) setClientNom(raisonSociale);
+              }}
+              placeholder="Rechercher un client (optionnel)…"
             />
           </div>
 
@@ -213,10 +239,10 @@ export function EncaissementPage() {
         <table className="w-full text-xs">
           <thead className="bg-[#F8FAFC]">
             <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-              <th className="px-4 py-2.5 font-semibold">Date</th>
-              <th className="px-4 py-2.5 font-semibold">Montant</th>
-              <th className="px-4 py-2.5 font-semibold">Client</th>
-              <th className="px-4 py-2.5 font-semibold">Motif</th>
+              <SortableHeader column="date" state={sort.state} onSort={sort.setSort}>Date</SortableHeader>
+              <SortableHeader column="montant" state={sort.state} onSort={sort.setSort}>Montant</SortableHeader>
+              <SortableHeader column="client" state={sort.state} onSort={sort.setSort}>Client</SortableHeader>
+              <SortableHeader column="motif" state={sort.state} onSort={sort.setSort}>Motif</SortableHeader>
             </tr>
           </thead>
           <tbody>
@@ -227,7 +253,7 @@ export function EncaissementPage() {
                 </td>
               </tr>
             )}
-            {(encOps ?? []).slice(0, 20).map((o) => (
+            {encVisibles.map((o) => (
               <tr key={o.id} className="border-t border-[rgba(15,76,129,0.07)]">
                 <td className="px-4 py-3 text-[#64748B]">
                   {new Date(o.dateOperation).toLocaleDateString('fr-FR')}
@@ -244,6 +270,12 @@ export function EncaissementPage() {
             ))}
           </tbody>
         </table>
+        {(encOps ?? []).length > ENC_MAX_LIGNES && (
+          <div className="border-t border-[rgba(15,76,129,0.07)] px-4 py-2 text-[11px] text-[#94A3B8]">
+            {ENC_MAX_LIGNES} lignes affichées sur {(encOps ?? []).length}
+            {sort.state.by ? ' — les premières du tri choisi.' : ' — les plus récentes.'}
+          </div>
+        )}
       </Panel>
     </div>
   );

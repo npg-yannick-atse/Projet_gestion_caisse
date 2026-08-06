@@ -4,6 +4,9 @@ import { useRoles, usePermissions, useRolePermissions, useTogglePermission } fro
 import type { Permission, Role, RoleCode } from '@/types/api';
 import { cn } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 import { RoleGuard } from '@/components/RoleGuard';
 
 const ROLE_BADGE: Record<RoleCode, { cls: string; icon: LucideIcon }> = {
@@ -120,8 +123,15 @@ function PermissionEditor({ role }: { role: Role }) {
   );
 }
 
+const ROLE_SORT_COLUMNS = ['libelle'] as const;
+type RoleSortCol = (typeof ROLE_SORT_COLUMNS)[number];
+
 function RolesPageInner() {
-  const { data: roles, isLoading } = useRoles();
+  const { data: rolesBruts, isLoading } = useRoles();
+  // Seul le nom du rôle est triable : les autres colonnes sont une matrice de
+  // cases à cocher (permission accordée ou non), trier dessus n'aurait pas de sens.
+  const sort = useTableSort<RoleSortCol>('/roles', ROLE_SORT_COLUMNS);
+  const roles = useClientSort(rolesBruts, sort.state, { libelle: (r) => r.libelle });
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole = roles?.find((r) => r.id === selectedRoleId) ?? null;
 
@@ -136,7 +146,7 @@ function RolesPageInner() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 text-left font-semibold">Rôle</th>
+                <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Rôle</SortableHeader>
                 {MATRIX_COLS.map((c) => (
                   <th key={c.code} className="px-4 py-2.5 text-center font-semibold">
                     {c.label}

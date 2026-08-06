@@ -6,10 +6,13 @@ import { formatMontant } from '@/lib/utils';
 import type { Operation, TypeOperation } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 
 // Convention du relevé (validée) : ce qui fait ENTRER de l'argent = Crédit,
 // ce qui le fait SORTIR = Débit. Solde = Σcrédit − Σdébit.
-const CREDIT_TYPES: TypeOperation[] = ['ENCAISSEMENT', 'RECHARGE'];
+const CREDIT_TYPES: TypeOperation[] = ['ENCAISSEMENT', 'RECHARGE', 'REMBOURSEMENT_CREDIT'];
 const DEBIT_TYPES: TypeOperation[] = ['DECAISSEMENT', 'CREDIT'];
 
 const TYPE_LABELS: Record<TypeOperation, string> = {
@@ -20,6 +23,7 @@ const TYPE_LABELS: Record<TypeOperation, string> = {
   ENCAISSEMENT: 'Encaissement',
   CREDIT: 'Crédit',
   SALAIRE: 'Salaire',
+  REMBOURSEMENT_CREDIT: 'Remboursement crédit',
 };
 
 function sensOf(t: TypeOperation): 'CREDIT' | 'DEBIT' | null {
@@ -29,6 +33,9 @@ function sensOf(t: TypeOperation): 'CREDIT' | 'DEBIT' | null {
 }
 
 const PAGE_SIZE = 20;
+
+const RELEVE_SORT_COLUMNS = ['date', 'type', 'debit', 'credit'] as const;
+type ReleveSortCol = (typeof RELEVE_SORT_COLUMNS)[number];
 
 export function ReleveAgentPage() {
   const { data: users } = useUsers();
@@ -72,10 +79,22 @@ export function ReleveAgentPage() {
     return { lignes: lignes.reverse(), totalDebit, totalCredit, solde };
   }, [ops]);
 
+  // Tri à l'écran, appliqué AVANT la pagination : trier la page courante ne
+  // trierait que les lignes de la page et laisserait croire à un classement d'ensemble.
+  // Le solde cumulé de chaque ligne reste juste — il est calculé plus haut,
+  // dans l'ordre chronologique, et reste attaché à son opération.
+  const sort = useTableSort<ReleveSortCol>('/releve-agent', RELEVE_SORT_COLUMNS);
+  const lignesTriees = useClientSort(releve.lignes, sort.state, {
+    date: (l) => new Date(l.op.dateOperation),
+    type: (l) => l.op.typeOperation,
+    debit: (l) => l.debit,
+    credit: (l) => l.credit,
+  });
+
   // Pagination (côté client, sur la liste déjà filtrée par période côté serveur).
-  const totalPages = Math.max(1, Math.ceil(releve.lignes.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(lignesTriees.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
-  const pagedLignes = releve.lignes.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const pagedLignes = lignesTriees.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -154,11 +173,19 @@ export function ReleveAgentPage() {
             <table className="w-full text-xs">
               <thead className="bg-[#F8FAFC]">
                 <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                  <th className="px-4 py-2.5 font-semibold">Date</th>
-                  <th className="px-4 py-2.5 font-semibold">Type</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Sorties</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Entrées</th>
-                  <th className="px-4 py-2.5 font-semibold text-right">Net</th>
+                  <SortableHeader column="date" state={sort.state} onSort={sort.setSort}>Date</SortableHeader>
+                  <SortableHeader column="type" state={sort.state} onSort={sort.setSort}>Type</SortableHeader>
+                  <SortableHeader column="debit" state={sort.state} onSort={sort.setSort} align="right">Sorties</SortableHeader>
+                  <SortableHeader column="credit" state={sort.state} onSort={sort.setSort} align="right">Entrées</SortableHeader>
+                  {/* Non triable : c'est le solde CUMULÉ à la date de l'opération,
+                      calculé dans l'ordre chronologique. Le trier n'aurait pas de
+                      sens — chaque valeur dépend de celles qui la précèdent. */}
+                  <th
+                    className="px-4 py-2.5 font-semibold text-right"
+                    title="Solde cumulé de l'agent juste après cette opération"
+                  >
+                    Net
+                  </th>
                 </tr>
               </thead>
               <tbody>

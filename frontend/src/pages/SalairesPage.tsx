@@ -12,6 +12,9 @@ import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useDirections } from '@/api/directions';
 import { useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { RoleGuard } from '@/components/RoleGuard';
@@ -78,7 +81,17 @@ function SalairesPageInner() {
   const [aPayer, setAPayer] = useState<LigneSalaire | null>(null);
   const [aAnnuler, setAAnnuler] = useState<LigneSalaire | null>(null);
 
-  const lignes = data?.lignes ?? [];
+  // Tri à l'écran : la grille des salaires renvoie TOUS les employés de la
+  // période en une fois, il n'y a donc aucune portion cachée à trier en base.
+  const sort = useTableSort<SalaireSortCol>('/salaires', SALAIRE_SORT_COLUMNS);
+  const lignes = useClientSort(data?.lignes, sort.state, {
+    matricule: (l) => l.matricule,
+    nom: (l) => `${l.nom} ${l.prenoms ?? ''}`.trim(),
+    // Un salaire non renseigné n'est pas « zéro » : `null` le renvoie en fin de
+    // liste plutôt que de le classer avant le plus petit salaire réel.
+    salaire: (l) => (l.salaire ? Number(l.salaire) : null),
+    paiement: (l) => (l.paiement ? new Date(l.paiement.datePaiement) : null),
+  });
   const totaux = useMemo(() => {
     let du = 0;
     let paye = 0;
@@ -230,10 +243,10 @@ function SalairesPageInner() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <th className="px-4 py-2.5 font-semibold">Matricule</th>
-                <th className="px-4 py-2.5 font-semibold">Employé</th>
-                <th className="px-4 py-2.5 text-right font-semibold">Salaire</th>
-                <th className="px-4 py-2.5 font-semibold">Paiement du mois</th>
+                <SortableHeader column="matricule" state={sort.state} onSort={sort.setSort}>Matricule</SortableHeader>
+                <SortableHeader column="nom" state={sort.state} onSort={sort.setSort}>Employé</SortableHeader>
+                <SortableHeader column="salaire" state={sort.state} onSort={sort.setSort} align="right">Salaire</SortableHeader>
+                <SortableHeader column="paiement" state={sort.state} onSort={sort.setSort}>Paiement du mois</SortableHeader>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -372,6 +385,9 @@ function SalairesPageInner() {
  * Écran Salaires : consultation de la grille et versement depuis une caisse.
  * Voir les montants exige EMPLOYE_VOIR_SALAIRE ; payer exige SALAIRE_PAYER.
  */
+const SALAIRE_SORT_COLUMNS = ['matricule', 'nom', 'salaire', 'paiement'] as const;
+type SalaireSortCol = (typeof SALAIRE_SORT_COLUMNS)[number];
+
 export function SalairesPage() {
   return (
     <RoleGuard allow={['ADMINISTRATEUR', 'SUPER_ADMIN', 'DAF']} permission="EMPLOYE_VOIR_SALAIRE">

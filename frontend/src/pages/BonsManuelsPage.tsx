@@ -14,6 +14,7 @@ import { useUsers, useUserRoles } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { ClientSelect } from '@/components/ClientSelect';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -598,8 +599,16 @@ function NouveauBonManuel({ onDone, onClose }: { onDone?: () => void; onClose?: 
 
           {reqNumeroClient && (
             <div className="space-y-1.5">
-              <Label>N° client</Label>
-              <Input value={numeroClient} onChange={(e) => setNumeroClient(e.target.value)} placeholder="N° client…" />
+              <Label>Client</Label>
+              {/* Le numéro client est CHOISI dans le référentiel local (clients
+                  importés de SAP), il n'est plus tapé à la main : c'est ce qui
+                  garantit qu'il existe et qu'il ne contient que des chiffres.
+                  Le champ libre acceptait auparavant « TEST » ou « DFF ». */}
+              <ClientSelect
+                value={numeroClient}
+                onChange={(numero) => setNumeroClient(numero)}
+                placeholder="Rechercher un client (nom ou numéro)…"
+              />
             </div>
           )}
 

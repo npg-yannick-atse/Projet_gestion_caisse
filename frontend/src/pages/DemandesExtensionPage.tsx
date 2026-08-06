@@ -39,6 +39,8 @@ const OP_META: Record<TypeOperation, { label: string; cls: string; sign: string;
   ENCAISSEMENT: { label: 'Encaissement', cls: 'text-[#047857]', sign: '+', icon: ArrowUpCircle },
   CREDIT: { label: 'Crédit', cls: 'text-[#6D28D9]', sign: '−', icon: ArrowDownCircle },
   SALAIRE: { label: 'Salaire', cls: 'text-[#6D28D9]', sign: '−', icon: ArrowDownCircle },
+  // Le remboursement fait RENTRER l'argent : signe et flèche inverses du crédit.
+  REMBOURSEMENT_CREDIT: { label: 'Remb. crédit', cls: 'text-[#047857]', sign: '+', icon: ArrowUpCircle },
 };
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {

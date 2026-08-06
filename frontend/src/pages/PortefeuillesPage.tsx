@@ -19,6 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { SortableHeader } from '@/components/SortableHeader';
+import { useTableSort } from '@/hooks/useTableSort';
+import { useClientSort } from '@/hooks/useClientSort';
 import { Pill, type PillTone } from '@/components/ui/pill';
 
 const selectClass =
@@ -49,6 +52,7 @@ const OP_PILL: Record<TypeOperation, { tone: PillTone; label: string }> = {
   ENCAISSEMENT: { tone: 'blue', label: 'Crédit' },
   CREDIT: { tone: 'red', label: 'Débit' },
   SALAIRE: { tone: 'red', label: 'Débit' },
+  REMBOURSEMENT_CREDIT: { tone: 'blue', label: 'Crédit' },
 };
 
 function WalletCard({ pf, deviseCode, color }: { pf: Portefeuille; deviseCode: string; color: string }) {
@@ -195,6 +199,9 @@ function CreatePortefeuilleForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+const PTF_OP_SORT_COLUMNS = ['date', 'type', 'montant', 'reference'] as const;
+type PtfOpSortCol = (typeof PTF_OP_SORT_COLUMNS)[number];
+
 export function PortefeuillesPage() {
   const { data: portefeuilles, isLoading } = usePortefeuilles();
   const { data: devises } = useDevises();
@@ -204,7 +211,16 @@ export function PortefeuillesPage() {
   const [showForm, setShowForm] = useState(false);
 
   const deviseCode = useMemo(() => new Map((devises ?? []).map((d) => [d.id, d.code])), [devises]);
-  const recentOps = operations ?? [];
+  // Tri à l'écran, sur les 8 lignes rapportées — et RIEN d'autre. La troncature
+  // étant faite en base, ce tri réordonne l'aperçu, il ne classe pas l'historique :
+  // l'en-tête du panneau le dit explicitement.
+  const sort = useTableSort<PtfOpSortCol>('/portefeuilles', PTF_OP_SORT_COLUMNS);
+  const recentOps = useClientSort(operations, sort.state, {
+    date: (o) => new Date(o.dateOperation),
+    type: (o) => o.typeOperation,
+    montant: (o) => Number(o.montant),
+    reference: (o) => o.reference || null,
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -252,14 +268,18 @@ export function PortefeuillesPage() {
       )}
 
       <Panel>
-        <PanelHeader title="Mouvements récents" badge={`${recentOps.length}`} />
+        <PanelHeader title="Mouvements récents" badge={`${recentOps.length}`}>
+          <span className="ml-auto text-[11px] text-[#94A3B8]">
+            Les 8 derniers mouvements — le tri réordonne cet aperçu, pas tout l'historique.
+          </span>
+        </PanelHeader>
         <table className="w-full text-xs">
           <thead className="bg-[#F8FAFC]">
             <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-              <th className="px-4 py-2.5 font-semibold">Date</th>
-              <th className="px-4 py-2.5 font-semibold">Type</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Montant</th>
-              <th className="px-4 py-2.5 font-semibold">Référence</th>
+              <SortableHeader column="date" state={sort.state} onSort={sort.setSort}>Date</SortableHeader>
+              <SortableHeader column="type" state={sort.state} onSort={sort.setSort}>Type</SortableHeader>
+              <SortableHeader column="montant" state={sort.state} onSort={sort.setSort} align="right">Montant</SortableHeader>
+              <SortableHeader column="reference" state={sort.state} onSort={sort.setSort}>Référence</SortableHeader>
             </tr>
           </thead>
           <tbody>

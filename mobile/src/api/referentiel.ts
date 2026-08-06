@@ -21,9 +21,15 @@ export function useTypeBons() {
   return useQuery<TypeBon[]>({ queryKey: ['type-bons'], queryFn: listTypeBons });
 }
 
-export async function listPartenaires(params: { search?: string; limit?: number } = {}): Promise<Partenaire[]> {
+export async function listPartenaires(
+  params: { type?: 'CLIENT' | 'FOURNISSEUR'; search?: string; limit?: number } = {},
+): Promise<Partenaire[]> {
   const { data } = await api.get<Partenaire[]>('/partenaires', {
-    params: { search: params.search || undefined, limit: params.limit || undefined },
+    params: {
+      type: params.type || undefined,
+      search: params.search || undefined,
+      limit: params.limit || undefined,
+    },
   });
   return data;
 }
