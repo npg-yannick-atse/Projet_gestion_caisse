@@ -7,6 +7,7 @@ import type {
   CreditRemboursement,
   CreateRemboursementPayload,
   SituationCredit,
+  ModeReplanification,
 } from '@/types/api';
 
 export interface CreditsFilters {
@@ -44,8 +45,15 @@ export async function solderCredit(id: string): Promise<Credit> {
   return data;
 }
 
-export async function approuverCredit(id: string): Promise<Credit> {
-  const { data } = await api.post<Credit>(`/credits/${id}/approuver`, {});
+export async function approuverCredit(
+  id: string,
+  prelevementSalaire = false,
+  modeReplanification: ModeReplanification = 'ALLONGER',
+): Promise<Credit> {
+  const { data } = await api.post<Credit>(`/credits/${id}/approuver`, {
+    prelevementSalaire,
+    modeReplanification,
+  });
   return data;
 }
 
@@ -95,7 +103,18 @@ export function useSolderCredit() {
 
 export function useApprouverCredit() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: approuverCredit, onSuccess: () => invalidate(qc) });
+  return useMutation({
+    mutationFn: ({
+      id,
+      prelevementSalaire,
+      modeReplanification,
+    }: {
+      id: string;
+      prelevementSalaire?: boolean;
+      modeReplanification?: ModeReplanification;
+    }) => approuverCredit(id, prelevementSalaire ?? false, modeReplanification ?? 'ALLONGER'),
+    onSuccess: () => invalidate(qc),
+  });
 }
 
 export function useRejeterCredit() {

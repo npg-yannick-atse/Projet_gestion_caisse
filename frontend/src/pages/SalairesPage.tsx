@@ -79,6 +79,8 @@ function SalairesPageInner() {
   const deviseCode = (devises ?? []).find((d) => String(d.id) === deviseSource)?.code ?? '';
 
   const [aPayer, setAPayer] = useState<LigneSalaire | null>(null);
+  // Montant que le caissier accepte de prélever quand le salaire est insuffisant.
+  const [retenuePartielle, setRetenuePartielle] = useState('');
   const [aAnnuler, setAAnnuler] = useState<LigneSalaire | null>(null);
 
   // Tri à l'écran : la grille des salaires renvoie TOUS les employés de la
@@ -114,8 +116,14 @@ function SalairesPageInner() {
         sourceType,
         sourceId,
         deviseId: deviseSource,
+        // Transmis uniquement dans le cas « salaire insuffisant » : sinon
+        // l'échéance est prélevée en entier et cette valeur est ignorée.
+        montantRetenue:
+          aPayer.retenueCredit?.salaireInsuffisant && Number(retenuePartielle) > 0
+            ? retenuePartielle
+            : undefined,
       },
-      { onSuccess: () => setAPayer(null) },
+      { onSuccess: () => { setAPayer(null); setRetenuePartielle(''); } },
     );
   };
 
@@ -274,6 +282,24 @@ function SalairesPageInner() {
                       ) : (
                         formatMontant(l.salaire as string)
                       )}
+                      {/* Retenue annoncée dès la liste : le caissier repère
+                          d'un coup d'œil les paies qui ne sortiront pas en entier. */}
+                      {l.retenueCredit && !l.paiement && (
+                        <div
+                          className={`mt-0.5 text-[10px] font-medium ${
+                            l.retenueCredit.salaireInsuffisant ? 'text-[#B42318]' : 'text-[#B45309]'
+                          }`}
+                          title={
+                            l.retenueCredit.salaireInsuffisant
+                              ? 'Salaire insuffisant : aucune retenue ne sera faite'
+                              : `Échéance ${l.retenueCredit.echeance}/${l.retenueCredit.nbMois} du crédit`
+                          }
+                        >
+                          {l.retenueCredit.salaireInsuffisant
+                            ? 'crédit non retenu'
+                            : `− ${formatMontant(l.retenueCredit.montant)} crédit`}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {l.paiement ? (
@@ -343,6 +369,73 @@ function SalairesPageInner() {
               <br />
               Source : {sourceType === 'CAISSE' ? 'caisse' : 'portefeuille'}{' '}
               {(source as { code?: string } | undefined)?.code ?? ''}
+              {/* Ce que le caissier remettra réellement en espèces. Sans ce
+                  décompte il annoncerait le salaire entier, alors qu'une
+                  mensualité de crédit va être retenue. */}
+              {aPayer.retenueCredit && !aPayer.retenueCredit.salaireInsuffisant && (
+                <div className="mt-3 space-y-1 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-[#F8FAFC] px-3 py-2 text-[12px]">
+                  <div className="flex justify-between">
+                    <span className="text-[#64748B]">Salaire</span>
+                    <span className="tabular-nums">{formatMontant(aPayer.salaire ?? '0')}</span>
+                  </div>
+                  <div className="flex justify-between text-[#B45309]">
+                    <span>
+                      Retenue crédit · échéance {aPayer.retenueCredit.echeance}/{aPayer.retenueCredit.nbMois}
+                    </span>
+                    <span className="tabular-nums">−{formatMontant(aPayer.retenueCredit.montant)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[rgba(15,76,129,0.1)] pt-1 font-semibold text-[#0F172A]">
+                    <span>À remettre en espèces</span>
+                    <span className="tabular-nums">
+                      {formatMontant(Number(aPayer.salaire ?? 0) - Number(aPayer.retenueCredit.montant))}{' '}
+                      {deviseCode}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {/* Salaire insuffisant : le caissier décide de ce qui peut être
+                  prélevé. Le reliquat est reporté sur les mois suivants, sans
+                  allonger la durée du crédit. */}
+              {aPayer.retenueCredit?.salaireInsuffisant && (
+                <div className="mt-3 space-y-2 rounded-[9px] border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2.5 text-[12px] text-[#B42318]">
+                  <p>
+                    Le salaire ({formatMontant(aPayer.salaire ?? '0')}) ne couvre pas l'échéance{' '}
+                    {aPayer.retenueCredit.echeance} de{' '}
+                    <strong>{formatMontant(aPayer.retenueCredit.montant)}</strong>.
+                  </p>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.5px]">
+                      Montant à prélever ce mois-ci
+                    </span>
+                    <input
+                      inputMode="decimal"
+                      value={retenuePartielle}
+                      onChange={(e) => setRetenuePartielle(e.target.value.replace(/[^\d.]/g, ''))}
+                      placeholder={`0 — au maximum ${formatMontant(aPayer.retenueCredit.maxPrelevable)}`}
+                      className="mt-1 h-9 w-full rounded-[7px] border border-[#FECDCA] bg-white px-2.5 text-sm text-[#0F172A] outline-none focus:border-[#B42318]"
+                    />
+                  </label>
+                  {Number(retenuePartielle) > 0 && (
+                    <p className="text-[11px]">
+                      Reliquat de{' '}
+                      <strong>
+                        {formatMontant(Number(aPayer.retenueCredit.montant) - Number(retenuePartielle))}
+                      </strong>{' '}
+                      reporté sur les mois suivants — la durée du crédit ne change pas.
+                      <br />À remettre en espèces :{' '}
+                      <strong>
+                        {formatMontant(Number(aPayer.salaire ?? 0) - Number(retenuePartielle))} {deviseCode}
+                      </strong>
+                    </p>
+                  )}
+                  {!(Number(retenuePartielle) > 0) && (
+                    <p className="text-[11px]">
+                      Laissé vide : aucune retenue, le salaire part en entier et l'échéance passera
+                      « en retard ».
+                    </p>
+                  )}
+                </div>
+              )}
               <br />
               <br />
               L'argent sort réellement et l'écriture comptable est générée.
@@ -350,7 +443,7 @@ function SalairesPageInner() {
           }
           confirmLabel={payer.isPending ? 'Paiement…' : 'Payer'}
           onConfirm={confirmerPaiement}
-          onCancel={() => setAPayer(null)}
+          onCancel={() => { setAPayer(null); setRetenuePartielle(''); }}
         />
       )}
 

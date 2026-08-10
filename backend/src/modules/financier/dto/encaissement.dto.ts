@@ -12,6 +12,16 @@ export class EncaissementDto {
   @IsNumberString()
   montant!: string;
 
+  @ApiProperty({
+    required: false,
+    description:
+      "Devise reçue. Par défaut, la devise déclarée de la caisse — une caisse peut " +
+      "en détenir plusieurs.",
+  })
+  @IsOptional()
+  @IsNumberString()
+  deviseId?: string;
+
   @ApiProperty({ required: false, description: 'Nom du client qui paie' })
   @IsOptional()
   @IsString()

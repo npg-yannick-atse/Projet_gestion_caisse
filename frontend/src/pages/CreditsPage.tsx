@@ -22,7 +22,14 @@ import { useDirections } from '@/api/directions';
 import { useUserRoles, useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
-import type { Credit, CreditSource, CreditStatut, Employe, SituationCredit } from '@/types/api';
+import type {
+  Credit,
+  CreditSource,
+  CreditStatut,
+  Employe,
+  ModeReplanification,
+  SituationCredit,
+} from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SortableHeader } from '@/components/SortableHeader';
@@ -188,6 +195,11 @@ export function CreditsPage() {
   const [confirmAction, setConfirmAction] = useState<
     { credit: Credit; type: 'APPROUVER' | 'DECAISSER' | 'ANNULER' | 'SOLDER' } | null
   >(null);
+  // Autorisation de prélèvement, proposée au moment d'approuver la demande.
+  const [prelevementSalaire, setPrelevementSalaire] = useState(false);
+  // Traitement d'un mois partiellement prélevé. ALLONGER par défaut : relever la
+  // mensualité de quelqu'un qui n'a justement pas pu payer irait à contresens.
+  const [modeReplanification, setModeReplanification] = useState<ModeReplanification>('ALLONGER');
   const [rejectTarget, setRejectTarget] = useState<Credit | null>(null);
   const [rejectComment, setRejectComment] = useState('');
   // Échéancier d'un crédit (double-clic sur une ligne).
@@ -798,16 +810,89 @@ export function CreditsPage() {
       <ConfirmDialog
         open={!!confirmAction}
         title={confirmAction ? ACTION_LABELS[confirmAction.type].title : ''}
-        description={confirmAction ? ACTION_LABELS[confirmAction.type].desc : undefined}
+        description={
+          confirmAction ? (
+            <div className="space-y-3">
+              <p>{ACTION_LABELS[confirmAction.type].desc}</p>
+              {/* L'autorisation de prélever se donne ICI, et une seule fois pour
+                  toute la durée du crédit : la paie n'aura plus à être bloquée
+                  chaque mois par une validation. */}
+              {confirmAction.type === 'APPROUVER' && (
+                <label className="flex cursor-pointer items-start gap-2 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-[#F8FAFC] px-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={prelevementSalaire}
+                    onChange={(e) => setPrelevementSalaire(e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[#047857]"
+                  />
+                  <span className="text-[12px] leading-snug text-[#334155]">
+                    <strong className="text-[#0F172A]">Prélever les mensualités sur le salaire</strong>
+                    <span className="mt-0.5 block text-[11px] text-[#64748B]">
+                      {confirmAction.credit.nbMois} échéances de{' '}
+                      {formatMontant(mensualite(confirmAction.credit.montant, confirmAction.credit.nbMois))}{' '}
+                      {codeOf(confirmAction.credit.deviseId)} seront retenues automatiquement à chaque
+                      paie. Vous serez notifié à chaque retenue. Cette autorisation vaut pour toute la
+                      durée du crédit.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {/* Que faire si un mois ne peut être prélevé qu'en partie. Le choix
+                  se fait ici, une fois, et le calcul s'applique ensuite tout seul. */}
+              {confirmAction.type === 'APPROUVER' && prelevementSalaire && (
+                <div className="space-y-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-2.5">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#64748B]">
+                    Si un mois ne peut être prélevé qu'en partie
+                  </div>
+                  {(
+                    [
+                      [
+                        'ALLONGER',
+                        'Allonger le crédit',
+                        "La mensualité convenue est maintenue et des mois sont ajoutés. L'employé garde la même charge, la date de fin recule.",
+                      ],
+                      [
+                        'REPARTIR',
+                        'Répartir sur les mois restants',
+                        'La date de fin est respectée, mais les mensualités suivantes augmentent pour absorber le reliquat.',
+                      ],
+                    ] as const
+                  ).map(([valeur, titre, aide]) => (
+                    <label key={valeur} className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="radio"
+                        name="mode-replanification"
+                        checked={modeReplanification === valeur}
+                        onChange={() => setModeReplanification(valeur)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-[#0F4C81]"
+                      />
+                      <span className="text-[12px] leading-snug text-[#334155]">
+                        <strong className="text-[#0F172A]">{titre}</strong>
+                        <span className="mt-0.5 block text-[11px] text-[#64748B]">{aide}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : undefined
+        }
         confirmLabel={confirmAction ? ACTION_LABELS[confirmAction.type].label : undefined}
         busy={curMut?.isPending}
         error={curMut?.isError ? apiErrorMessage(curMut.error, 'Échec') : undefined}
-        onCancel={() => { curMut?.reset(); setConfirmAction(null); }}
+        onCancel={() => { curMut?.reset(); setConfirmAction(null); setPrelevementSalaire(false); }}
         onConfirm={() => {
           if (!confirmAction) return;
-          actionMut(confirmAction.type).mutate(confirmAction.credit.id, {
-            onSuccess: () => setConfirmAction(null),
-          });
+          const fin = { onSuccess: () => { setConfirmAction(null); setPrelevementSalaire(false); } };
+          if (confirmAction.type === 'APPROUVER') {
+            approuver.mutate(
+              { id: confirmAction.credit.id, prelevementSalaire, modeReplanification },
+              fin,
+            );
+          } else {
+            actionMut(confirmAction.type).mutate(confirmAction.credit.id as any, fin);
+          }
         }}
       />
 
@@ -869,7 +954,7 @@ export function CreditsPage() {
 
 /* --------------------------- Échéancier d'un crédit --------------------------- */
 
-type EcheanceStatut = 'PAYE' | 'EN_RETARD' | 'A_VENIR';
+type EcheanceStatut = 'PAYE' | 'PARTIEL' | 'EN_RETARD' | 'A_VENIR';
 interface Echeance {
   index: number;
   date: Date;
@@ -891,7 +976,12 @@ interface Echeance {
  * n'est payée que si un versement lui est rattaché ; échue sans versement, elle
  * est EN RETARD.
  */
-function buildEcheancier(c: Credit, remboursements: CreditRemboursementVue[]): Echeance[] {
+function buildEcheancier(
+  c: Credit,
+  remboursements: CreditRemboursementVue[],
+  reference?: number,
+  attenduCourant?: number,
+): Echeance[] {
   const start = new Date(c.dateDebut);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -903,12 +993,18 @@ function buildEcheancier(c: Credit, remboursements: CreditRemboursementVue[]): E
     d.setHours(0, 0, 0, 0);
     const verse = parRang.get(i);
     let statut: EcheanceStatut = 'A_VENIR';
-    if (verse) statut = 'PAYE';
+    const convenu = reference ?? mensualite(c.montant, c.nbMois);
+    // Versement inférieur au convenu : affiché en rouge, le reliquat ayant été
+    // replanifié.
+    if (verse) statut = Number(verse.montant || 0) < convenu - 0.005 ? 'PARTIEL' : 'PAYE';
     else if (c.statut === 'EN_COURS' && d.getTime() <= now.getTime()) statut = 'EN_RETARD';
     rows.push({
       index: i,
       date: d,
-      attendu: mensualite(c.montant, c.nbMois),
+      // Pour un mois déjà réglé, on montre le montant convenu à l'époque. Pour
+      // un mois à venir, le montant RÉELLEMENT attendu aujourd'hui : en mode
+      // « répartir », il a monté pour absorber les reliquats passés.
+      attendu: verse ? convenu : (attenduCourant ?? convenu),
       verse: verse ? Number(verse.montant || 0) : 0,
       statut,
       remboursementId: verse?.id,
@@ -927,6 +1023,7 @@ interface CreditRemboursementVue {
 
 const ECH_META: Record<EcheanceStatut, { label: string; cls: string; dot: string }> = {
   PAYE: { label: 'Payé', cls: 'text-[#047857]', dot: 'bg-[#047857]' },
+  PARTIEL: { label: 'Partiel', cls: 'text-[#B42318]', dot: 'bg-[#B42318]' },
   EN_RETARD: { label: 'En retard', cls: 'text-[#B42318]', dot: 'bg-[#B42318]' },
   A_VENIR: { label: 'À venir', cls: 'text-[#94A3B8]', dot: 'bg-[#CBD5E1]' },
 };
@@ -960,14 +1057,37 @@ function CreditScheduleModal({
 }) {
   const decaisse = credit.statut === 'EN_COURS' || credit.statut === 'SOLDE';
   const { data: remboursements } = useCreditRemboursements(decaisse ? credit.id : null);
+  const { data: situations } = useCreditSituations([credit.id]);
+  const situation = situations?.[credit.id];
   const enregistrer = useEnregistrerRemboursement();
   const annulerRemb = useAnnulerRemboursement();
   const [saisie, setSaisie] = useState<{ rang: number; montant: string } | null>(null);
   const [erreur, setErreur] = useState('');
 
+  // Aperçu de ce que déclenchera un versement inférieur à l'échéance attendue.
+  const apercuPartiel = useMemo(() => {
+    if (!saisie || !situation) return null;
+    const attendu = Number(situation.mensualite);
+    const saisi = Number(saisie.montant);
+    if (!(saisi > 0) || saisi >= attendu - 0.005) return null;
+    return {
+      manque: attendu - saisi,
+      mode: situation.modeReplanification,
+      reference: situation.mensualiteReference,
+    };
+  }, [saisie, situation]);
+
   const ech = useMemo(
-    () => (decaisse ? buildEcheancier(credit, remboursements ?? []) : []),
-    [credit, decaisse, remboursements],
+    () =>
+      decaisse
+        ? buildEcheancier(
+            credit,
+            remboursements ?? [],
+            situation ? Number(situation.mensualiteReference) : undefined,
+            situation ? Number(situation.mensualite) : undefined,
+          )
+        : [],
+    [credit, decaisse, remboursements, situation],
   );
   const mens = mensualite(credit.montant, credit.nbMois);
   // Chiffres tirés des versements réels, jamais du calendrier.
@@ -981,7 +1101,7 @@ function CreditScheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-3xl rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] bg-[#F8FAFC] px-5 py-3">
           <div>
             <div className="font-display text-sm font-semibold text-[#0F172A]">Échéancier du crédit</div>
@@ -1012,6 +1132,27 @@ function CreditScheduleModal({
 
           {decaisse ? (
             <>
+              {/* Crédit allongé : la date de fin n'est plus celle de la demande
+                  approuvée, il faut le dire plutôt que de le laisser deviner. */}
+              {situation && situation.nbMoisInitial > 0 && credit.nbMois > situation.nbMoisInitial && (
+                <div className="rounded-[9px] border border-[#FDE68A] bg-[#FEF9C3] px-3 py-2.5 text-[12px] text-[#92400E]">
+                  Crédit <strong>allongé</strong> : {situation.nbMoisInitial} → {credit.nbMois} mois. La
+                  mensualité convenue de {formatMontant(situation.mensualiteReference)} {deviseCode} est
+                  maintenue ; la fin est repoussée au {dateFin(credit.dateDebut, credit.nbMois)}.
+                </div>
+              )}
+
+              {/* Reliquat non replanifiable : toutes les échéances ont été traitées
+                  et il reste dû. Il n'y a plus de mois pour l'étaler, il faut donc
+                  le présenter au lieu de le laisser filer. */}
+              {Number(situation?.reliquatNonReplanifiable ?? 0) > 0 && (
+                <div className="rounded-[9px] border border-[#FECDCA] bg-[#FEF3F2] px-3 py-2.5 text-[12px] text-[#B42318]">
+                  <strong>Reliquat de {formatMontant(situation!.reliquatNonReplanifiable)} {deviseCode}</strong>{" "}
+                  non réglé : les {credit.nbMois} échéances ont toutes été traitées, il n'y a plus de
+                  mois sur lequel le reporter. À encaisser directement auprès de l'employé.
+                </div>
+              )}
+
               {/* Progression — fondée sur ce qui a réellement été encaissé */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] text-[#64748B]">
@@ -1042,8 +1183,29 @@ function CreditScheduleModal({
                 </div>
               )}
 
+              {/* Conséquence annoncée AVANT de valider : sans ça, le caissier
+                  saisit un montant partiel sans savoir ce qu'il déclenche. */}
+              {apercuPartiel && (
+                <div className="rounded-[9px] border border-[#FDE68A] bg-[#FEF9C3] px-3 py-2.5 text-[12px] text-[#92400E]">
+                  Versement partiel : il manquera{' '}
+                  <strong>{formatMontant(apercuPartiel.manque)} {deviseCode}</strong> sur cette échéance.
+                  {apercuPartiel.mode === 'ALLONGER' ? (
+                    <>
+                      {' '}Le crédit sera <strong>allongé</strong> — la mensualité de{' '}
+                      {formatMontant(apercuPartiel.reference)} est maintenue et un ou plusieurs mois
+                      seront ajoutés à la fin.
+                    </>
+                  ) : (
+                    <>
+                      {' '}La durée reste de {credit.nbMois} mois — les{' '}
+                      <strong>échéances suivantes augmenteront</strong> pour absorber ce reliquat.
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Détail mois par mois : attendu vs réellement versé */}
-              <div className="max-h-64 overflow-y-auto rounded-[9px] border border-[rgba(15,76,129,0.08)]">
+              <div className="max-h-[420px] overflow-y-auto rounded-[9px] border border-[rgba(15,76,129,0.08)]">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-[#F8FAFC]">
                     <tr className="text-left text-[10px] uppercase tracking-[0.6px] text-[#64748B]">
@@ -1073,7 +1235,7 @@ function CreditScheduleModal({
                                 inputMode="decimal"
                                 value={saisie.montant}
                                 onChange={(ev) => setSaisie({ rang: e.index, montant: ev.target.value })}
-                                className="h-7 w-24 rounded-[6px] border border-[#1A6DB5] px-2 text-right text-xs outline-none"
+                                className="h-7 w-28 rounded-[6px] border border-[#1A6DB5] px-2 text-right text-xs outline-none"
                               />
                             ) : e.verse > 0 ? (
                               <span className="font-medium text-[#047857]">{formatMontant(e.verse)}</span>
@@ -1085,7 +1247,7 @@ function CreditScheduleModal({
                             <span className="inline-flex items-center gap-1.5">
                               {e.statut === 'PAYE' ? (
                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                              ) : e.statut === 'EN_RETARD' ? (
+                              ) : e.statut === 'PARTIEL' || e.statut === 'EN_RETARD' ? (
                                 <AlertTriangle className="h-3.5 w-3.5" />
                               ) : (
                                 <span className={`h-2 w-2 rounded-full ${m.dot}`} />
@@ -1125,7 +1287,7 @@ function CreditScheduleModal({
                                     Annuler
                                   </button>
                                 </span>
-                              ) : e.statut === 'PAYE' ? (
+                              ) : e.statut === 'PAYE' || e.statut === 'PARTIEL' ? (
                                 <button
                                   type="button"
                                   title="Annuler ce versement (contre-passation comptable)"
@@ -1146,7 +1308,9 @@ function CreditScheduleModal({
                                   type="button"
                                   onClick={() => {
                                     setErreur('');
-                                    setSaisie({ rang: e.index, montant: String(e.attendu.toFixed(2)) });
+                                    // Pas de décimales : les montants sont en francs
+                                    // CFA, et « 250000.00 » se saisit mal.
+                                    setSaisie({ rang: e.index, montant: String(Math.round(e.attendu)) });
                                   }}
                                   className="rounded-[6px] border border-[rgba(15,76,129,0.15)] px-2 py-1 text-[10px] font-medium text-[#047857] hover:bg-[#ECFDF5]"
                                 >

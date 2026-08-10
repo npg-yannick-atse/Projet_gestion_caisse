@@ -18,6 +18,7 @@ export class EncaissementController {
     return this.encaissementService.encaisser({
       caisseId: dto.caisseId,
       montant: dto.montant,
+      deviseId: dto.deviseId,
       userId: user.sub,
       clientNom: dto.clientNom,
       clientNumero: dto.clientNumero,

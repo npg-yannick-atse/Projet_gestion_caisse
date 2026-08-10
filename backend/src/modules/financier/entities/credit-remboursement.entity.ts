@@ -58,4 +58,16 @@ export class CreditRemboursement extends AuditableEntity {
   @ApiProperty({ required: false })
   @Column({ type: 'nvarchar', length: 400, nullable: true })
   commentaire?: string | null;
+
+  /**
+   * Paiement de salaire qui a produit cette retenue, s'il y en a un.
+   *
+   * Renseigné uniquement pour les mensualités prélevées automatiquement : sans
+   * ce lien, une retenue serait indistinguable d'un versement encaissé au
+   * guichet, et l'annulation du paiement de salaire ne saurait pas laquelle
+   * contre-passer.
+   */
+  @ApiProperty({ required: false })
+  @Column({ name: 'paiement_salaire_id', type: 'bigint', nullable: true })
+  paiementSalaireId?: string | null;
 }

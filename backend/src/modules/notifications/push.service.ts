@@ -78,6 +78,56 @@ export class PushService {
     }
   }
 
+  /**
+   * Informe l'approbateur qu'une mensualité vient d'être retenue sur un salaire.
+   *
+   * Purement informatif : le prélèvement a été autorisé une fois pour toutes à
+   * l'approbation du crédit, il n'y a rien à valider. La notification sert à ce
+   * que le DAF sache que la retenue a bien eu lieu, sans consulter l'écran.
+   *
+   * Ne jette jamais : un échec d'envoi ne doit pas faire échouer une paie déjà
+   * enregistrée.
+   */
+  async notifyRetenueSalaire(
+    credit: { id: string; prelevementAutoriseParId?: string | null; validateurId?: string | null },
+    paiement: { periode: string; employeId: string },
+    montant: string,
+    echeance: number,
+  ): Promise<void> {
+    try {
+      // Celui qui a autorisé le prélèvement ; à défaut, celui qui a approuvé le crédit.
+      const destinataireId = credit.prelevementAutoriseParId ?? credit.validateurId;
+      if (!destinataireId) return;
+
+      const rows: Array<{ token: string }> = await this.dataSource
+        .createQueryBuilder()
+        .select('DISTINCT t.token', 'token')
+        .from('sec_push_token', 't')
+        .innerJoin('sec_user', 'u', 'u.id = t.user_id')
+        .where('u.id = :uid', { uid: destinataireId })
+        .andWhere('u.est_actif = 1')
+        .getRawMany();
+
+      const tokens = rows.map((r) => r.token).filter(Boolean);
+      if (tokens.length === 0) return;
+
+      const [employe] = await this.dataSource.query(
+        `SELECT matricule, nom FROM dbo.ref_employe WHERE id = @0`,
+        [paiement.employeId],
+      );
+      const qui = employe ? `${employe.nom} (${employe.matricule})` : `employé ${paiement.employeId}`;
+
+      await this.sendExpoPush(
+        tokens,
+        'Mensualité retenue sur salaire',
+        `${qui} · échéance ${echeance} · ${Number(montant).toLocaleString('fr-FR')}`,
+        { creditId: String(credit.id), periode: paiement.periode },
+      );
+    } catch (e) {
+      this.logger.warn(`notifyRetenueSalaire échec : ${(e as Error).message}`);
+    }
+  }
+
   /** Envoie une notification via l'API Expo Push. */
   private async sendExpoPush(
     tokens: string[],

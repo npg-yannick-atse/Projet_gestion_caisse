@@ -36,6 +36,7 @@ import { DemandesRechargeController } from './demandes-recharge.controller';
 import { CaisseAutoCloseJob } from './jobs/caisse-auto-close.job';
 import { TransactionnelModule } from '@modules/transactionnel/transactionnel.module';
 import { SecurityModule } from '@modules/security/security.module';
+import { NotificationsModule } from '@modules/notifications/notifications.module';
 import { ReferentielModule } from '@modules/referentiel/referentiel.module';
 
 @Module({
@@ -59,6 +60,8 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     TransactionnelModule,
     SecurityModule,
     ReferentielModule,
+    // Le paiement de salaire informe l'approbateur des retenues de crédit.
+    NotificationsModule,
   ],
   providers: [
     CaissesService,

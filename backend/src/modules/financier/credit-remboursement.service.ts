@@ -2,10 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Credit } from './entities/credit.entity';
 import { CreditRemboursement } from './entities/credit-remboursement.entity';
 import { Caisse } from './entities/caisse.entity';
@@ -27,6 +28,13 @@ export interface SituationCredit {
   restant: string;
   /** Nombre d'échéances effectivement encaissées. */
   echeancesPayees: number;
+  /** Échéances qu'il reste à régler. */
+  echeancesRestantes: number;
+  /**
+   * Reliquat qui ne peut plus être reporté : toutes les échéances ont été
+   * traitées et il reste malgré tout de l'argent dû. À présenter, pas à étaler.
+   */
+  reliquatNonReplanifiable: string;
   /** Rang de la prochaine échéance à encaisser, null si tout est soldé. */
   prochaineEcheance: number | null;
   /** Nombre d'échéances dont la date est passée sans versement. */
@@ -35,10 +43,18 @@ export interface SituationCredit {
   montantEnRetard: string;
   /** Avancement en pourcentage du montant remboursé. */
   pourcentage: number;
+  /** Mode de traitement d'un reliquat : étaler sur les mois, ou ajouter des mois. */
+  modeReplanification: 'REPARTIR' | 'ALLONGER';
+  /** Durée d'origine ; `nbMois` peut avoir été allongé. */
+  nbMoisInitial: number;
+  /** Mensualité convenue à l'origine. */
+  mensualiteReference: string;
 }
 
 @Injectable()
 export class CreditRemboursementService {
+  private readonly logger = new Logger('CreditRemboursementService');
+
   constructor(
     @InjectRepository(Credit) private readonly creditRepo: Repository<Credit>,
     @InjectRepository(CreditRemboursement)
@@ -65,9 +81,14 @@ export class CreditRemboursementService {
   }
 
   /**
-   * Mensualité théorique. Le dernier mois absorbe l'arrondi : sur 100 000 en
-   * 3 mois, deux versements de 33 333,33 et un de 33 333,34 — sinon le crédit
-   * ne se solderait jamais exactement.
+   * Mensualité théorique d'origine, calculée sur la durée totale. Le dernier
+   * mois absorbe l'arrondi : sur 100 000 en 3 mois, deux versements de
+   * 33 333,33 et un de 33 333,34 — sinon le crédit ne se solderait jamais
+   * exactement.
+   *
+   * Sert de référence à l'échéancier prévisionnel. Le montant réellement
+   * attendu à un instant donné est celui de `mensualiteCourante`, qui tient
+   * compte des versements déjà faits.
    */
   static mensualite(montant: string, nbMois: number, rang?: number): string {
     const total = Number(montant || 0);
@@ -77,6 +98,75 @@ export class CreditRemboursementService {
       return CreditRemboursementService.fmt(total - base * (nbMois - 1));
     }
     return CreditRemboursementService.fmt(base);
+  }
+
+  /**
+   * Montant réellement attendu à la prochaine échéance : ce qui reste dû,
+   * réparti sur les échéances qui restent.
+   *
+   * C'est la REPLANIFICATION demandée par le métier : si un mois n'a pu être
+   * prélevé qu'en partie, le reliquat est absorbé par les mois suivants et la
+   * durée du crédit ne bouge pas. Tant que tout est réglé à l'heure, ce calcul
+   * redonne exactement la mensualité d'origine.
+   *
+   * Quand il ne reste plus d'échéance pour absorber le reliquat, renvoie ce
+   * reliquat entier : il n'y a plus rien à replanifier, il doit être présenté
+   * tel quel plutôt qu'étalé en silence.
+   */
+  static mensualiteCourante(restant: string, echeancesRestantes: number): string {
+    const du = Number(restant || 0);
+    if (du <= 0) return CreditRemboursementService.fmt(0);
+    if (echeancesRestantes <= 1) return CreditRemboursementService.fmt(du);
+    return CreditRemboursementService.fmt(Math.floor((du / echeancesRestantes) * 100) / 100);
+  }
+
+  /** Mensualité convenue à l'origine, quelle que soit la durée courante. */
+  static reference(credit: Pick<Credit, 'montant' | 'nbMois' | 'mensualiteReference' | 'nbMoisInitial'>): string {
+    if (credit.mensualiteReference && Number(credit.mensualiteReference) > 0) {
+      return CreditRemboursementService.fmt(Number(credit.mensualiteReference));
+    }
+    // Crédit antérieur à la migration 0052 : on la reconstitue sur la durée
+    // d'origine si elle est connue, sinon sur la durée courante.
+    const mois = credit.nbMoisInitial ?? credit.nbMois;
+    return CreditRemboursementService.mensualite(credit.montant, mois);
+  }
+
+  /**
+   * Montant attendu à la prochaine échéance, selon le mode de replanification
+   * choisi par le DAF.
+   *
+   *   ALLONGER  on s'en tient à la mensualité convenue — c'est le nombre de
+   *             mois qui s'adapte. Plafonné au reste dû pour ne pas réclamer
+   *             plus que la dette au dernier mois.
+   *   REPARTIR  le reste dû est étalé sur les échéances restantes.
+   */
+  static attenduPourCredit(
+    credit: Pick<Credit, 'montant' | 'nbMois' | 'mensualiteReference' | 'nbMoisInitial' | 'modeReplanification'>,
+    restant: string,
+    echeancesRestantes: number,
+  ): string {
+    const du = Number(restant || 0);
+    if (du <= 0) return CreditRemboursementService.fmt(0);
+    if (credit.modeReplanification === 'REPARTIR') {
+      return CreditRemboursementService.mensualiteCourante(restant, echeancesRestantes);
+    }
+    return CreditRemboursementService.fmt(Math.min(du, Number(CreditRemboursementService.reference(credit))));
+  }
+
+  /**
+   * Durée nécessaire pour éteindre la dette en mode ALLONGER : les échéances
+   * déjà traitées, plus ce qu'il faut de mois à la mensualité convenue.
+   */
+  static dureeRequise(
+    credit: Pick<Credit, 'montant' | 'nbMois' | 'mensualiteReference' | 'nbMoisInitial'>,
+    restant: string,
+    echeancesPayees: number,
+  ): number {
+    const du = Number(restant || 0);
+    if (du <= 0.005) return echeancesPayees;
+    const ref = Number(CreditRemboursementService.reference(credit));
+    if (ref <= 0) return credit.nbMois;
+    return echeancesPayees + Math.ceil((du - 0.005) / ref);
   }
 
   async findCredit(creditId: string): Promise<Credit> {
@@ -131,25 +221,54 @@ export class CreditRemboursementService {
     const jour = new Date(aujourdhui);
     jour.setHours(0, 0, 0, 0);
     let enRetard = 0;
-    let montantRetard = 0;
     if (credit.statut === 'EN_COURS') {
       for (let i = 1; i <= credit.nbMois; i++) {
         if (payees.has(i)) continue;
         if (CreditRemboursementService.dateEcheance(credit.dateDebut, i).getTime() <= jour.getTime()) {
           enRetard += 1;
-          montantRetard += Number(CreditRemboursementService.mensualite(credit.montant, credit.nbMois, i));
         }
       }
     }
+    // Le montant en retard se mesure sur la mensualité COURANTE, pas sur celle
+    // d'origine : après une retenue partielle, c'est le montant replanifié qui
+    // est réellement dû. Plafonné au reste dû, sinon un long retard afficherait
+    // plus que la dette elle-même.
+    const restantesPourRetard = Math.max(0, credit.nbMois - payees.size);
+    const attenduParMois = Number(
+      CreditRemboursementService.mensualiteCourante(
+        CreditRemboursementService.fmt(restant),
+        restantesPourRetard,
+      ),
+    );
+    const montantRetard = Math.min(restant, enRetard * attenduParMois);
+
+    // Une échéance est « traitée » dès qu'un versement lui est rattaché, même
+    // partiel : le manque est reporté sur les mois suivants, on ne repasse pas
+    // deux fois sur le même mois.
+    const echeancesRestantes = Math.max(0, credit.nbMois - payees.size);
 
     return {
       creditId: String(credit.id),
       montant: CreditRemboursementService.fmt(total),
       nbMois: credit.nbMois,
-      mensualite: CreditRemboursementService.mensualite(credit.montant, credit.nbMois),
+      // Montant attendu MAINTENANT, selon le mode : mensualité convenue
+      // maintenue (ALLONGER) ou reste dû étalé sur les mois restants (REPARTIR).
+      mensualite: CreditRemboursementService.attenduPourCredit(
+        credit,
+        CreditRemboursementService.fmt(restant),
+        echeancesRestantes,
+      ),
+      modeReplanification: credit.modeReplanification ?? 'ALLONGER',
+      nbMoisInitial: credit.nbMoisInitial ?? credit.nbMois,
+      mensualiteReference: CreditRemboursementService.reference(credit),
       rembourse: CreditRemboursementService.fmt(rembourse),
       restant: CreditRemboursementService.fmt(restant),
       echeancesPayees: payees.size,
+      echeancesRestantes,
+      reliquatNonReplanifiable:
+        echeancesRestantes === 0 && restant > 0.005
+          ? CreditRemboursementService.fmt(restant)
+          : CreditRemboursementService.fmt(0),
       prochaineEcheance: prochaine,
       echeancesEnRetard: enRetard,
       montantEnRetard: CreditRemboursementService.fmt(montantRetard),
@@ -233,7 +352,9 @@ export class CreditRemboursementService {
       );
     }
 
-    const montant = dto.montant ?? CreditRemboursementService.mensualite(credit.montant, credit.nbMois, rang);
+    // Par défaut, le montant ATTENDU selon le mode de replanification — et non
+    // montant ÷ nbMois, qui après un allongement vaudrait moins que le convenu.
+    const montant = dto.montant ?? situation.mensualite;
     if (Number(montant) <= 0) throw new BadRequestException('Le montant doit être positif.');
     // Un versement ne peut pas dépasser ce qui reste dû : sinon la créance
     // deviendrait négative et l'employé serait créditeur de l'entreprise.
@@ -285,14 +406,10 @@ export class CreditRemboursementService {
           }),
         );
 
-        // Solde automatique : dès que la dette est éteinte, le crédit se ferme
-        // et l'employé redevient éligible.
-        const totalApres = Number(situation.rembourse) + Number(montant);
-        if (totalApres >= Number(credit.montant) - 0.005) {
-          credit.statut = 'SOLDE';
-          credit.updatedById = userId as any;
-          await manager.getRepository(Credit).save(credit);
-        }
+        // Solde si la dette est éteinte, replanification sinon — exactement
+        // comme pour une retenue sur salaire : un versement partiel saisi au
+        // guichet doit avoir les mêmes conséquences.
+        await this.cloturerOuReplanifier(credit, situation, montant, userId, manager);
 
         return remb;
       });
@@ -303,6 +420,121 @@ export class CreditRemboursementService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Enregistre une mensualité RETENUE SUR LE SALAIRE, dans la transaction du
+   * paiement de salaire.
+   *
+   * Se distingue de `enregistrer` sur trois points, tous voulus :
+   *  - pas de contrôle de périmètre ni d'ouverture de caisse : ils ont déjà été
+   *    faits pour le paiement de salaire, qui porte le même mouvement ;
+   *  - pas de vérification de permission : l'autorisation a été donnée une fois
+   *    pour toutes par le DAF à l'approbation du crédit ;
+   *  - la ligne garde le lien vers le paiement, pour qu'une annulation de la
+   *    paie sache quelle retenue contre-passer.
+   */
+  async enregistrerDepuisSalaire(
+    credit: Credit,
+    ligne: { echeance: number; montant: string; paiementSalaireId: string },
+    userId: string,
+    manager: EntityManager,
+  ): Promise<CreditRemboursement> {
+    // Situation lue AVANT d'écrire : `situation` interroge le dépôt hors
+    // transaction et ne verrait pas la ligne qu'on s'apprête à insérer.
+    const avant = await this.situation(String(credit.id));
+
+    const op = await this.ledger.createOperation(
+      {
+        typeOperation: 'REMBOURSEMENT_CREDIT',
+        caisseId: credit.sourceType === 'CAISSE' ? String(credit.sourceId) : undefined,
+        portefeuilleId: credit.sourceType === 'PORTEFEUILLE' ? String(credit.sourceId) : undefined,
+        montant: ligne.montant,
+        deviseId: String(credit.deviseId),
+        userId,
+        reference: `Retenue sur salaire — échéance ${ligne.echeance}/${credit.nbMois}`,
+      },
+      manager,
+    );
+
+    // Même sens que l'encaissement au guichet : DÉBIT créance (la dette
+    // diminue) / CRÉDIT source (l'argent y reste, au lieu d'être versé).
+    await this.ledger.createPairedEcritures(
+      { compteId: String(credit.employeId), typeCompte: 'CREDIT_EMPLOYE', deviseId: String(credit.deviseId) },
+      { compteId: String(credit.sourceId), typeCompte: credit.sourceType as any, deviseId: String(credit.deviseId) },
+      ligne.montant,
+      op.transactionUuid,
+      manager,
+    );
+
+    const repo = manager.getRepository(CreditRemboursement);
+    const remb = await repo.save(
+      repo.create({
+        creditId: String(credit.id) as any,
+        numeroEcheance: ligne.echeance,
+        montant: ligne.montant,
+        deviseId: credit.deviseId as any,
+        sourceType: credit.sourceType as any,
+        sourceId: credit.sourceId as any,
+        transactionUuid: op.transactionUuid,
+        paiementSalaireId: ligne.paiementSalaireId as any,
+        dateRemboursement: new Date(),
+        statut: 'ENCAISSE',
+        commentaire: 'Retenue automatique sur salaire',
+        createdById: userId as any,
+      }),
+    );
+
+    await this.cloturerOuReplanifier(credit, avant, ligne.montant, userId, manager);
+    return remb;
+  }
+
+  /**
+   * Suite d'un versement : solder le crédit si la dette est éteinte, sinon
+   * replanifier ce qui reste.
+   *
+   * Partagé par les DEUX chemins d'encaissement — la retenue sur salaire et la
+   * saisie au guichet. Les séparer avait laissé la replanification hors du
+   * chemin manuel : un versement partiel saisi à la main ne rallongeait rien.
+   */
+  private async cloturerOuReplanifier(
+    credit: Credit,
+    avant: SituationCredit,
+    montantVerse: string,
+    userId: string,
+    manager: EntityManager,
+  ): Promise<void> {
+    const restantApres = Number(credit.montant) - (Number(avant.rembourse) + Number(montantVerse));
+
+    if (restantApres <= 0.005) {
+      credit.statut = 'SOLDE';
+      credit.updatedById = userId as any;
+      await manager.getRepository(Credit).save(credit);
+      return;
+    }
+
+    // Mode ALLONGER : la mensualité convenue est maintenue, donc c'est la DURÉE
+    // qui absorbe le reliquat. On ajoute autant de mois qu'il en faut — jamais
+    // on n'en retire, un crédit déjà allongé ne se raccourcit pas tout seul.
+    // (En mode REPARTIR il n'y a rien à faire : la durée est figée et le montant
+    // attendu se recalcule à la lecture.)
+    if ((credit.modeReplanification ?? 'ALLONGER') !== 'ALLONGER') return;
+
+    const requise = CreditRemboursementService.dureeRequise(
+      credit,
+      CreditRemboursementService.fmt(restantApres),
+      avant.echeancesPayees + 1,
+    );
+    if (requise <= credit.nbMois) return;
+
+    this.logger.log(
+      `Crédit ${credit.id} allongé de ${credit.nbMois} à ${requise} mois ` +
+        `(reliquat ${CreditRemboursementService.fmt(restantApres)}).`,
+    );
+    credit.nbMoisInitial = credit.nbMoisInitial ?? credit.nbMois;
+    credit.nbMois = requise;
+    credit.updatedById = userId as any;
+    await manager.getRepository(Credit).save(credit);
   }
 
   /**

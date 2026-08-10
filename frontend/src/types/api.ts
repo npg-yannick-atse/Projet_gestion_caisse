@@ -577,6 +577,9 @@ export interface Credit {
 }
 
 /** Versement réellement encaissé au titre d'un crédit. */
+/** Que faire du reliquat d'une mensualité partiellement prélevée. */
+export type ModeReplanification = 'REPARTIR' | 'ALLONGER';
+
 export interface CreditRemboursement {
   id: string;
   creditId: string;
@@ -613,15 +616,29 @@ export interface SituationCredit {
   creditId: string;
   montant: string;
   nbMois: number;
+  /** Montant attendu MAINTENANT, reliquats des mois précédents replanifiés inclus. */
   mensualite: string;
   rembourse: string;
   restant: string;
   echeancesPayees: number;
+  /** Échéances qu'il reste à régler. */
+  echeancesRestantes: number;
+  /**
+   * Reliquat qui ne peut plus être reporté : toutes les échéances ont été
+   * traitées et il reste malgré tout de l'argent dû. À présenter, pas à étaler.
+   */
+  reliquatNonReplanifiable: string;
   /** Rang de la prochaine échéance à encaisser, null si tout est soldé. */
   prochaineEcheance: number | null;
   echeancesEnRetard: number;
   montantEnRetard: string;
   pourcentage: number;
+  /** Traitement d'un reliquat : étaler sur les mois restants, ou ajouter des mois. */
+  modeReplanification: ModeReplanification;
+  /** Durée d'origine ;  peut avoir été allongé. */
+  nbMoisInitial: number;
+  /** Mensualité convenue à l'origine. */
+  mensualiteReference: string;
 }
 
 export interface CreateCreditPayload {
@@ -649,6 +666,12 @@ export interface Parametre {
 export interface EncaissementPayload {
   caisseId: string;
   montant: string;
+  /**
+   * Devise réellement reçue. Par défaut, la devise déclarée de la caisse — mais
+   * une caisse peut en détenir plusieurs, un client peut donc payer dans une
+   * autre monnaie.
+   */
+  deviseId?: string;
   clientNom?: string;
   clientNumero?: string;
   motif?: string;

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PaiementSalaireService } from './paiement-salaire.service';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
@@ -14,6 +14,13 @@ class PayerSalaireDto {
   @IsNotEmpty() @IsString() sourceId!: string;
   @IsNotEmpty() @IsString() deviseId!: string;
   @IsOptional() @IsString() @MaxLength(400) commentaire?: string;
+  /**
+   * Montant que le caissier accepte de prélever au titre du crédit quand le
+   * salaire ne couvre pas l'échéance. Le reliquat est reporté sur les mois
+   * suivants. Sans cette valeur, aucune retenue partielle n'est faite.
+   */
+  @IsOptional() @IsNumberString({}, { message: 'La retenue doit être un nombre.' })
+  montantRetenue?: string;
 }
 
 class AnnulerPaiementDto {

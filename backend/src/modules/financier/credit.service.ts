@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { Credit } from './entities/credit.entity';
+import { Credit, ModeReplanification } from './entities/credit.entity';
 import { Caisse } from './entities/caisse.entity';
 import { Portefeuille } from './entities/portefeuille.entity';
 import { Employe } from '@modules/referentiel/entities/employe.entity';
@@ -219,8 +219,20 @@ export class CreditService {
     return this.creditRepo.save(credit);
   }
 
-  /** DAF approuve une demande (EN_ATTENTE → APPROUVEE). Pas d'auto-approbation. */
-  async approuver(id: string, userId: string): Promise<Credit> {
+  /**
+   * DAF approuve une demande (EN_ATTENTE → APPROUVEE). Pas d'auto-approbation.
+   *
+   * C'est ICI, et seulement ici, que se donne l'autorisation de prélever les
+   * mensualités sur le salaire : une fois pour toute la durée du crédit. La
+   * paie n'aura donc pas à être bloquée chaque mois par une validation, mais
+   * en contrepartie on garde la trace de qui a autorisé et quand.
+   */
+  async approuver(
+    id: string,
+    userId: string,
+    prelevementSalaire = false,
+    modeReplanification: ModeReplanification = 'ALLONGER',
+  ): Promise<Credit> {
     const credit = await this.findOne(id);
     if (credit.statut !== 'EN_ATTENTE') {
       throw new BadRequestException('Seule une demande en attente peut être approuvée.');
@@ -231,6 +243,18 @@ export class CreditService {
     credit.statut = 'APPROUVEE';
     credit.validateurId = userId as any;
     credit.dateValidation = new Date();
+    if (prelevementSalaire) {
+      credit.prelevementSalaire = true;
+      credit.prelevementAutoriseParId = userId as any;
+      credit.prelevementAutoriseLe = new Date();
+    }
+    // Le mode de replanification vaut aussi pour les versements encaissés au
+    // guichet : il est donc enregistré même sans prélèvement sur salaire.
+    credit.modeReplanification = modeReplanification;
+    // Mensualité convenue, figée ici : elle sert de référence si la durée est
+    // allongée plus tard, où montant ÷ nbMois ne vaudrait plus rien.
+    credit.nbMoisInitial = credit.nbMois;
+    credit.mensualiteReference = CreditRemboursementService.mensualite(credit.montant, credit.nbMois);
     credit.updatedById = userId as any;
     return this.creditRepo.save(credit);
   }

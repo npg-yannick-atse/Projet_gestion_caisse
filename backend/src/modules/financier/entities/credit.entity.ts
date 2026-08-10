@@ -11,6 +11,8 @@ export type CreditStatut =
   | 'REJETEE'
   | 'ANNULEE';
 export type CreditSource = 'CAISSE' | 'PORTEFEUILLE';
+/** Traitement du reliquat d'une mensualité partiellement prélevée. */
+export type ModeReplanification = 'REPARTIR' | 'ALLONGER';
 
 /**
  * Crédit accordé à un employé, via un WORKFLOW de validation :
@@ -84,4 +86,56 @@ export class Credit extends AuditableEntity {
 
   @Column({ name: 'date_decaissement', type: 'datetime2', precision: 3, nullable: true })
   dateDecaissement?: Date | null;
+
+  // --- Prélèvement sur salaire ---
+  /**
+   * Autorisation, donnée UNE FOIS à l'approbation, de retenir les mensualités
+   * sur le salaire. Tant qu'elle est fausse, la paie ne retient rien : on
+   * n'ampute pas un salaire sans qu'un approbateur l'ait décidé.
+   */
+  @ApiProperty({ description: 'Les mensualités sont-elles prélevées sur le salaire ?' })
+  @Column({ name: 'prelevement_salaire', type: 'bit', default: false })
+  prelevementSalaire!: boolean;
+
+  @ApiProperty({ required: false, description: 'Qui a autorisé le prélèvement sur salaire' })
+  @Column({ name: 'prelevement_autorise_par_id', type: 'bigint', nullable: true })
+  prelevementAutoriseParId?: string | null;
+
+  @ApiProperty({ required: false })
+  @Column({ name: 'prelevement_autorise_le', type: 'datetime2', precision: 3, nullable: true })
+  prelevementAutoriseLe?: Date | null;
+
+  /**
+   * Que faire du reliquat quand une mensualité n'a pu être prélevée qu'en
+   * partie. Choisi par le DAF à l'approbation.
+   *
+   *   REPARTIR  le reliquat est étalé sur les échéances restantes : la
+   *             mensualité monte, la date de fin ne bouge pas.
+   *   ALLONGER  la mensualité convenue est maintenue et des mois sont ajoutés :
+   *             la date de fin recule.
+   */
+  @ApiProperty({ enum: ['REPARTIR', 'ALLONGER'], default: 'ALLONGER' })
+  @Column({ name: 'mode_replanification', type: 'nvarchar', length: 20, default: 'ALLONGER' })
+  modeReplanification!: ModeReplanification;
+
+  /**
+   * Mensualité convenue, figée. Indispensable au mode ALLONGER : `nbMois`
+   * évoluant, un recalcul montant ÷ nbMois donnerait une mensualité qui baisse
+   * à chaque allongement et le crédit ne se solderait jamais.
+   */
+  @ApiProperty({ required: false })
+  @Column({
+    name: 'mensualite_reference',
+    type: 'decimal',
+    precision: 19,
+    scale: 4,
+    transformer: decimalToString,
+    nullable: true,
+  })
+  mensualiteReference?: string | null;
+
+  /** Durée d'origine ; `nbMois` porte la durée courante, éventuellement allongée. */
+  @ApiProperty({ required: false })
+  @Column({ name: 'nb_mois_initial', type: 'int', nullable: true })
+  nbMoisInitial?: number | null;
 }

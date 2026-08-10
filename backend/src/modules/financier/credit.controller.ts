@@ -4,7 +4,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreditService } from './credit.service';
 import { CreditRemboursementService } from './credit-remboursement.service';
 import { CreateCreditDto, UpdateCreditDto } from './dto/credit.dto';
-import { AnnulerRemboursementDto, CreateRemboursementDto } from './dto/credit-remboursement.dto';
+import { AnnulerRemboursementDto, ApprouverCreditDto, CreateRemboursementDto } from './dto/credit-remboursement.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '@modules/security/authorization.service';
@@ -87,10 +87,21 @@ export class CreditController {
   }
 
   @Post(':id/approuver')
-  @ApiOperation({ summary: 'Approuver une demande de crédit (DAF)' })
-  async approuver(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+  @ApiOperation({
+    summary: 'Approuver une demande de crédit (DAF), avec ou sans prélèvement sur salaire',
+  })
+  async approuver(
+    @Param('id') id: string,
+    @Body() dto: ApprouverCreditDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
     await this.authz.assertPermission(user.sub, 'CREDIT_VALIDER', 'approuver un crédit');
-    return this.creditService.approuver(id, user.sub);
+    return this.creditService.approuver(
+      id,
+      user.sub,
+      dto?.prelevementSalaire ?? false,
+      dto?.modeReplanification ?? 'ALLONGER',
+    );
   }
 
   @Post(':id/rejeter')

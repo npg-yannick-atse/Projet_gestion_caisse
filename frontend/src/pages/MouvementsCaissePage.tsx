@@ -14,6 +14,7 @@ import { Panel, PanelHeader } from '@/components/ui/panel';
 import { CharCounter } from '@/components/ui/char-counter';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
+import { useCaisseDevise } from '@/hooks/useCaisseDevise';
 
 const MVT_SORT_COLUMNS = ['dateOperation', 'montant'] as const;
 type MvtSortCol = (typeof MVT_SORT_COLUMNS)[number];
@@ -30,6 +31,13 @@ const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
+// Montant + devise sur une même ligne. On REMPLACE `w-full` au lieu d'ajouter une
+// autre largeur : deux classes de largeur concurrentes se départagent par l'ordre
+// de la feuille Tailwind, et `w-full` l'emporte — le select occupait toute la
+// ligne et le champ montant disparaissait.
+const montantInputClass = inputClass.replace('w-full', 'flex-1 min-w-0');
+const deviseSelectClass = selectClass.replace('w-full', 'w-24 shrink-0');
+
 export type MouvementMode = 'ENCAISSEMENT' | 'RECHARGE';
 
 /**
@@ -43,7 +51,10 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   // Données partagées.
   const { data: perimeter } = useMyBonPerimeter();
   const caisses = perimeter?.caisses;
-  const openCaisses = (caisses ?? []).filter((c) => c.statut === 'OUVERTE');
+  const openCaisses = useMemo(
+    () => (caisses ?? []).filter((c) => c.statut === 'OUVERTE'),
+    [caisses],
+  );
   const { data: allPortefeuilles } = usePortefeuilles();
   const { data: devises } = useDevises();
 
@@ -73,6 +84,8 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
 
   // Champs encaissement.
   const [encCaisseId, setEncCaisseId] = useState('');
+  // Devise reçue : par défaut celle de la caisse choisie, modifiable.
+  const [encDeviseId, setEncDeviseId] = useState('');
   const [clientNom, setClientNom] = useState('');
   const [clientNumero, setClientNumero] = useState('');
   const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
@@ -99,6 +112,23 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   }, [mode]);
 
   const codeOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId)?.code ?? '';
+  const { deviseDeLaCaisse, caissesPourDevise, caisseEvidentePourDevise } =
+    useCaisseDevise(openCaisses);
+  const deviseCaisseEnc = deviseDeLaCaisse(encCaisseId);
+
+  /** Choisir une caisse renseigne sa devise déclarée. */
+  const choisirCaisseEnc = (id: string) => {
+    setEncCaisseId(id);
+    const d = deviseDeLaCaisse(id);
+    if (d) setEncDeviseId(d);
+  };
+
+  /** Choisir une devise présélectionne la caisse s'il n'y a qu'une candidate. */
+  const choisirDeviseEnc = (id: string) => {
+    setEncDeviseId(id);
+    const evidente = caisseEvidentePourDevise(id);
+    if (evidente) setEncCaisseId(evidente);
+  };
 
   const busy = mode === 'ENCAISSEMENT' ? encaissement.isPending : recharge.isPending;
   const error = mode === 'ENCAISSEMENT' ? encaissement.error : recharge.error;
@@ -106,7 +136,9 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
 
   const valid =
     mode === 'ENCAISSEMENT'
-      ? !!encCaisseId && Number(montant) > 0
+      // La devise est EXIGÉE : sans elle, le serveur retomberait sur celle de la
+      // caisse et l'écriture porterait une monnaie que l'écran n'affichait pas.
+      ? !!encCaisseId && !!encDeviseId && Number(montant) > 0
       : !!rechCaisseId && !!portefeuilleId && Number(montant) > 0;
 
   const stats = useMemo(() => {
@@ -130,6 +162,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     setEncMotif('');
     setRechMotif('');
     setEncCaisseId('');
+    setEncDeviseId('');
     setRechCaisseId('');
     setPortefeuilleId('');
     setSens('CAISSE_VERS_PORTEFEUILLE');
@@ -180,6 +213,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
         {
           caisseId: encCaisseId,
           montant,
+          deviseId: encDeviseId || undefined,
           clientNom: clientNom.trim() || undefined,
           clientNumero: clientNumero.trim() || undefined,
           motif: encMotif.trim() || undefined,
@@ -328,7 +362,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   id="enc-caisse"
                   className={selectClass}
                   value={encCaisseId}
-                  onChange={(e) => setEncCaisseId(e.target.value)}
+                  onChange={(e) => choisirCaisseEnc(e.target.value)}
                 >
                   <option value="">— Choisir —</option>
                   {openCaisses.map((c) => (
@@ -338,22 +372,58 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   ))}
                 </select>
                 {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+                {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
+                    à la place du caissier, l'argent est dans un coffre précis. */}
+                {!encCaisseId && encDeviseId && caissesPourDevise(encDeviseId).length > 1 && (
+                  <p className="text-[11px] text-[#64748B]">
+                    {caissesPourDevise(encDeviseId).length} caisses en {codeOf(encDeviseId)} — précisez
+                    laquelle reçoit l'argent.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="enc-montant" className={labelClass}>
                   Montant
                 </label>
-                <input
-                  id="enc-montant"
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  className={inputClass}
-                  value={montant}
-                  onChange={(e) => setMontant(e.target.value)}
-                  placeholder="Ex : 100000"
-                />
+                <div className="flex gap-2">
+                  <input
+                    id="enc-montant"
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    className={montantInputClass}
+                    value={montant}
+                    onChange={(e) => setMontant(e.target.value)}
+                    placeholder="Ex : 100000"
+                  />
+                  {/* Devise reçue. La caisse a une devise déclarée mais peut en
+                      détenir d'autres : sans ce choix, un règlement en dollars
+                      serait enregistré en francs et le solde deviendrait faux. */}
+                  <select
+                    aria-label="Devise reçue"
+                    title="Devise réellement reçue"
+                    className={encDeviseId ? deviseSelectClass : `${deviseSelectClass} border-[#FECDCA]`}
+                    value={encDeviseId}
+                    onChange={(e) => choisirDeviseEnc(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {(devises ?? []).map((d) => (
+                      <option key={d.id} value={String(d.id)}>
+                        {d.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!encDeviseId && (
+                  <p className="text-[11px] text-[#B42318]">Choisissez la devise reçue.</p>
+                )}
+                {encCaisseId && encDeviseId && encDeviseId !== deviseCaisseEnc && (
+                  <p className="text-[11px] text-[#B45309]">
+                    Devise différente de celle de la caisse ({codeOf(deviseCaisseEnc)}) — le montant sera
+                    suivi séparément dans le solde.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">

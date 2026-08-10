@@ -11,12 +11,20 @@ import { ClientSelect } from '@/components/ClientSelect';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
+import { useCaisseDevise } from '@/hooks/useCaisseDevise';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
 const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
+
+// Montant + devise sur une même ligne. On REMPLACE `w-full` au lieu d'ajouter une
+// autre largeur : deux classes de largeur concurrentes se départagent par l'ordre
+// de la feuille Tailwind, et `w-full` l'emporte — le select occupait toute la
+// ligne et le champ montant disparaissait.
+const montantInputClass = inputClass.replace('w-full', 'flex-1 min-w-0');
+const deviseSelectClass = selectClass.replace('w-full', 'w-24 shrink-0');
 
 const ENC_SORT_COLUMNS = ['date', 'montant', 'client', 'motif'] as const;
 type EncSortCol = (typeof ENC_SORT_COLUMNS)[number];
@@ -45,13 +53,38 @@ export function EncaissementPage() {
 
   const [caisseId, setCaisseId] = useState('');
   const [montant, setMontant] = useState('');
+  // Devise reçue : par défaut celle de la caisse choisie, modifiable.
+  const [deviseId, setDeviseId] = useState('');
   const [clientNom, setClientNom] = useState('');
   const [clientNumero, setClientNumero] = useState('');
   const [motif, setMotif] = useState('');
   const [done, setDone] = useState(false);
 
-  const openCaisses = (caisses ?? []).filter((c) => c.statut === 'OUVERTE');
-  const valid = !!caisseId && Number(montant) > 0;
+  const openCaisses = useMemo(
+    () => (caisses ?? []).filter((c) => c.statut === 'OUVERTE'),
+    [caisses],
+  );
+  const { deviseDeLaCaisse, caissesPourDevise, caisseEvidentePourDevise } =
+    useCaisseDevise(openCaisses);
+  const deviseCaisse = deviseDeLaCaisse(caisseId);
+
+  /** Choisir une caisse renseigne sa devise déclarée. */
+  const choisirCaisse = (id: string) => {
+    setCaisseId(id);
+    const d = deviseDeLaCaisse(id);
+    if (d) setDeviseId(d);
+  };
+
+  /** Choisir une devise présélectionne la caisse s'il n'y a qu'une candidate. */
+  const choisirDevise = (id: string) => {
+    setDeviseId(id);
+    const evidente = caisseEvidentePourDevise(id);
+    if (evidente) setCaisseId(evidente);
+  };
+
+  // La devise est EXIGÉE : sans elle, le serveur retomberait sur celle de la
+  // caisse et l'écriture porterait une monnaie que l'écran n'affichait pas.
+  const valid = !!caisseId && !!deviseId && Number(montant) > 0;
 
   const codeOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId)?.code ?? '';
 
@@ -84,6 +117,7 @@ export function EncaissementPage() {
         caisseId,
         montant,
         clientNom: clientNom.trim() || undefined,
+        deviseId: deviseId || undefined,
         clientNumero: clientNumero.trim() || undefined,
         motif: motif.trim() || undefined,
       },
@@ -143,7 +177,7 @@ export function EncaissementPage() {
             <label htmlFor="caisse" className={labelClass}>
               Caisse
             </label>
-            <select id="caisse" className={selectClass} value={caisseId} onChange={(e) => setCaisseId(e.target.value)}>
+            <select id="caisse" className={selectClass} value={caisseId} onChange={(e) => choisirCaisse(e.target.value)}>
               <option value="">— Choisir —</option>
               {openCaisses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -152,22 +186,58 @@ export function EncaissementPage() {
               ))}
             </select>
             {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+            {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
+                à la place du caissier, l'argent est dans un coffre précis. */}
+            {!caisseId && deviseId && caissesPourDevise(deviseId).length > 1 && (
+              <p className="text-[11px] text-[#64748B]">
+                {caissesPourDevise(deviseId).length} caisses en {codeOf(deviseId)} — précisez laquelle
+                reçoit l'argent.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="montant" className={labelClass}>
               Montant
             </label>
-            <input
-              id="montant"
-              type="number"
-              min="0"
-              step="0.0001"
-              className={inputClass}
-              value={montant}
-              onChange={(e) => setMontant(e.target.value)}
-              placeholder="Ex : 100000"
-            />
+            <div className="flex gap-2">
+              <input
+                id="montant"
+                type="number"
+                min="0"
+                step="0.0001"
+                className={montantInputClass}
+                value={montant}
+                onChange={(e) => setMontant(e.target.value)}
+                placeholder="Ex : 100000"
+              />
+              {/* Devise reçue. Une caisse a une devise déclarée, mais elle peut
+                  en détenir d'autres : sans ce choix, un règlement en dollars
+                  serait enregistré en francs et le solde deviendrait faux. */}
+              <select
+                aria-label="Devise reçue"
+                title="Devise réellement reçue"
+                className={deviseId ? deviseSelectClass : `${deviseSelectClass} border-[#FECDCA]`}
+                value={deviseId}
+                onChange={(e) => choisirDevise(e.target.value)}
+              >
+                <option value="">—</option>
+                {(devises ?? []).map((d) => (
+                  <option key={d.id} value={String(d.id)}>
+                    {d.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {!deviseId && (
+              <p className="text-[11px] text-[#B42318]">Choisissez la devise reçue.</p>
+            )}
+            {caisseId && deviseId && deviseId !== deviseCaisse && (
+              <p className="text-[11px] text-[#B45309]">
+                Devise différente de celle de la caisse ({codeOf(deviseCaisse)}) — le montant sera
+                suivi séparément dans le solde.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

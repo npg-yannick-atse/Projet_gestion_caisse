@@ -21,6 +21,24 @@ export interface LigneSalaire {
   directionId: string | null;
   salaire: string | null;
   paiement: PaiementSalaireResume | null;
+  /** Mensualité de crédit qui sera retenue sur cette paie (null si rien à retenir). */
+  retenueCredit: RetenueCredit | null;
+}
+
+/** Retenue annoncée AVANT le paiement, calculée par le serveur. */
+export interface RetenueCredit {
+  creditId: string;
+  echeance: number;
+  nbMois: number;
+  montant: string;
+  deviseId: string;
+  /**
+   * Le salaire ne couvre pas l'échéance : le caissier doit indiquer ce qui peut
+   * être prélevé, le reliquat est reporté sur les mois suivants.
+   */
+  salaireInsuffisant: boolean;
+  /** Plafond de la retenue : on ne prélève pas plus que le salaire versé. */
+  maxPrelevable: string;
 }
 
 export interface GrilleSalaires {
@@ -58,6 +76,12 @@ export interface PayerSalairePayload {
   sourceId: string;
   deviseId: string;
   commentaire?: string;
+  /**
+   * Montant que le caissier accepte de prélever au titre du crédit quand le
+   * salaire ne couvre pas l'échéance. Le reliquat est reporté sur les mois
+   * suivants. Sans cette valeur, aucune retenue partielle n'est faite.
+   */
+  montantRetenue?: string;
 }
 
 export async function payerSalaire(payload: PayerSalairePayload) {

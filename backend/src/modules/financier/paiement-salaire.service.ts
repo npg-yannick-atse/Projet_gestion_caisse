@@ -2,15 +2,19 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { PaiementSalaire, SourceFonds } from './entities/paiement-salaire.entity';
 import { Caisse } from './entities/caisse.entity';
 import { Employe } from '@modules/referentiel/entities/employe.entity';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
+import { PushService } from '@modules/notifications/push.service';
+import { Credit } from './entities/credit.entity';
+import { CreditRemboursementService } from './credit-remboursement.service';
 
 export interface PayerSalaireInput {
   employeId: string;
@@ -22,6 +26,12 @@ export interface PayerSalaireInput {
   sourceId: string;
   deviseId: string;
   commentaire?: string;
+  /**
+   * Montant que le caissier accepte de prélever quand le salaire ne couvre pas
+   * l'échéance. Ignoré si le salaire suffit : l'échéance est alors prélevée en
+   * entier.
+   */
+  montantRetenue?: string;
 }
 
 /** Ligne du tableau des salaires : l'employé, son salaire, et son paiement du mois. */
@@ -41,6 +51,29 @@ export interface LigneSalaire {
     sourceId: string;
     statut: string;
   } | null;
+  /**
+   * Mensualité qui sera retenue sur cette paie, si l'employé a un crédit dont
+   * le prélèvement a été autorisé. `null` s'il n'y a rien à retenir.
+   *
+   * Le caissier doit savoir AVANT de valider ce qu'il remettra réellement en
+   * espèces : sans cette information, il annoncerait le salaire entier.
+   */
+  retenueCredit: {
+    creditId: string;
+    echeance: number;
+    nbMois: number;
+    /** Montant attendu, reliquats des mois précédents déjà replanifiés dedans. */
+    montant: string;
+    deviseId: string;
+    /**
+     * Vrai si le salaire ne couvre pas l'échéance. Le caissier doit alors
+     * indiquer ce qui peut être prélevé ; le reliquat se reporte sur les mois
+     * suivants.
+     */
+    salaireInsuffisant: boolean;
+    /** Plafond de la retenue : on ne prélève pas plus que le salaire versé. */
+    maxPrelevable: string;
+  } | null;
 }
 
 /**
@@ -52,6 +85,8 @@ export interface LigneSalaire {
  */
 @Injectable()
 export class PaiementSalaireService {
+  private readonly logger = new Logger('PaiementSalaireService');
+
   constructor(
     @InjectRepository(PaiementSalaire)
     private readonly repo: Repository<PaiementSalaire>,
@@ -60,6 +95,8 @@ export class PaiementSalaireService {
     private readonly dataSource: DataSource,
     private readonly ledger: LedgerService,
     private readonly authz: AuthorizationService,
+    private readonly remboursements: CreditRemboursementService,
+    private readonly push: PushService,
   ) {}
 
   /** Mois courant au format AAAA-MM. */
@@ -113,10 +150,29 @@ export class PaiementSalaireService {
     });
     const parEmploye = new Map(paiements.map((x) => [String(x.employeId), x]));
 
+    // Crédits dont le prélèvement est autorisé, pour les employés affichés.
+    // Une seule requête : la grille peut compter plusieurs centaines de lignes.
+    const ids = employes.map((e) => String(e.id));
+    const credits = ids.length
+      ? await this.dataSource.getRepository(Credit).find({
+          where: { employeId: In(ids) as any, statut: 'EN_COURS', prelevementSalaire: true },
+        })
+      : [];
+    const situations = await this.remboursements.situations(credits.map((c) => String(c.id)));
+    const creditParEmploye = new Map(credits.map((c) => [String(c.employeId), c]));
+
     return {
       periode: p,
       lignes: employes.map((e) => {
         const pay = parEmploye.get(String(e.id));
+        const credit = creditParEmploye.get(String(e.id));
+        const situation = credit ? situations[String(credit.id)] : undefined;
+        const echeance = situation?.prochaineEcheance ?? null;
+        // Montant attendu à cette échéance, reliquats déjà replanifiés inclus —
+        // et non la mensualité d'origine, qui serait fausse après un mois court.
+        const mensualite = credit && echeance !== null ? situation!.mensualite : null;
+        // Aucune retenue avant le mois du décaissement.
+        const avantDecaissement = credit ? p < String(credit.dateDebut).slice(0, 7) : false;
         return {
           employeId: String(e.id),
           matricule: e.matricule,
@@ -134,6 +190,19 @@ export class PaiementSalaireService {
                 statut: pay.statut,
               }
             : null,
+          retenueCredit:
+            credit && echeance !== null && mensualite && !avantDecaissement
+              ? {
+                  creditId: String(credit.id),
+                  echeance,
+                  nbMois: credit.nbMois,
+                  montant: mensualite,
+                  deviseId: String(credit.deviseId),
+                  salaireInsuffisant: Number(e.salaire ?? 0) < Number(mensualite),
+                  // Ce que l'employé pourra au mieux verser ce mois-ci.
+                  maxPrelevable: e.salaire ?? '0',
+                }
+              : null,
         };
       }),
     };
@@ -221,21 +290,139 @@ export class PaiementSalaireService {
         manager,
       );
 
-      const paiement = manager.getRepository(PaiementSalaire).create({
-        employeId: input.employeId as any,
-        periode,
-        montant,
-        deviseId: input.deviseId as any,
-        sourceType: input.sourceType,
-        sourceId: input.sourceId as any,
-        transactionUuid: op.transactionUuid,
-        datePaiement: new Date(),
-        statut: 'PAYE',
-        commentaire: input.commentaire ?? null,
-        createdById: userId as any,
-      });
-      return manager.getRepository(PaiementSalaire).save(paiement);
+      const paiement = await manager.getRepository(PaiementSalaire).save(
+        manager.getRepository(PaiementSalaire).create({
+          employeId: input.employeId as any,
+          periode,
+          montant,
+          deviseId: input.deviseId as any,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId as any,
+          transactionUuid: op.transactionUuid,
+          datePaiement: new Date(),
+          statut: 'PAYE',
+          commentaire: input.commentaire ?? null,
+          createdById: userId as any,
+        }),
+      );
+
+      // Retenue de la mensualité de crédit, dans LA MÊME transaction : soit le
+      // salaire et la retenue sont enregistrés ensemble, soit rien ne l'est.
+      const retenue = await this.retenirMensualite(paiement, montant, input.montantRetenue, userId, manager);
+      (paiement as any).retenueCredit = retenue;
+      return paiement;
     });
+  }
+
+  /**
+   * Prélève la mensualité du crédit en cours de l'employé, si le DAF l'a
+   * autorisé à l'approbation.
+   *
+   * Comptablement, deux opérations distinctes cohabitent : le salaire fait
+   * sortir son montant entier, le remboursement fait rentrer la mensualité.
+   * Elles se compensent sur la caisse, si bien que le caissier ne remet en
+   * espèces que la différence — sans qu'on ait à inventer un montant net.
+   *
+   * Renvoie `null` quand rien n'est retenu, avec le motif : c'est ce que
+   * l'écran affiche au caissier.
+   */
+  private async retenirMensualite(
+    paiement: PaiementSalaire,
+    montantSalaire: string,
+    montantRetenue: string | undefined,
+    userId: string,
+    manager: EntityManager,
+  ): Promise<{
+    montant: string;
+    echeance: number;
+    creditId: string;
+    attendu: string;
+    partielle: boolean;
+  } | null> {
+    const credit = await manager.getRepository(Credit).findOne({
+      where: {
+        employeId: paiement.employeId as any,
+        statut: 'EN_COURS',
+        prelevementSalaire: true,
+      },
+    });
+    if (!credit) return null;
+
+    // Une retenue ne peut se faire que dans la devise du crédit : prélever des
+    // XOF sur une créance libellée en USD reviendrait à additionner des
+    // monnaies différentes.
+    if (String(credit.deviseId) !== String(paiement.deviseId)) {
+      this.logger.warn(
+        `Crédit ${credit.id} non prélevé : devise du salaire (${paiement.deviseId}) ` +
+          `différente de celle du crédit (${credit.deviseId}).`,
+      );
+      return null;
+    }
+
+    // Le prélèvement ne commence qu'au DÉCAISSEMENT : une paie régularisée pour
+    // un mois antérieur ne doit rien retenir, l'employé n'avait pas encore reçu
+    // l'argent du crédit.
+    const moisDecaissement = String(credit.dateDebut).slice(0, 7);
+    if (paiement.periode < moisDecaissement) {
+      this.logger.warn(
+        `Crédit ${credit.id} non prélevé sur ${paiement.periode} : antérieur au ` +
+          `décaissement (${moisDecaissement}).`,
+      );
+      return null;
+    }
+
+    const situation = await this.remboursements.situation(String(credit.id));
+    const echeance = situation.prochaineEcheance;
+    if (echeance === null) return null;
+
+    // Montant attendu, reliquats des mois précédents déjà replanifiés dedans.
+    const attendu = situation.mensualite;
+
+    // Salaire insuffisant : le caissier indique ce qui peut être prélevé. Sans
+    // saisie de sa part, on ne retient rien plutôt que de décider à sa place.
+    let montant = attendu;
+    if (Number(montantSalaire) < Number(attendu)) {
+      const propose = (montantRetenue ?? '').toString().trim();
+      if (!propose || !(Number(propose) > 0)) {
+        this.logger.warn(
+          `Crédit ${credit.id} non prélevé sur ${paiement.periode} : salaire ${montantSalaire} ` +
+            `inférieur à l'échéance ${attendu} et aucun montant indiqué par le caissier.`,
+        );
+        return null;
+      }
+      if (Number(propose) > Number(montantSalaire)) {
+        throw new BadRequestException(
+          `La retenue (${propose}) ne peut pas dépasser le salaire versé (${montantSalaire}).`,
+        );
+      }
+      if (Number(propose) > Number(situation.restant)) {
+        throw new BadRequestException(
+          `La retenue (${propose}) dépasse le reste dû (${situation.restant}).`,
+        );
+      }
+      montant = propose;
+    }
+
+    await this.remboursements.enregistrerDepuisSalaire(
+      credit,
+      { echeance, montant, paiementSalaireId: String(paiement.id) },
+      userId,
+      manager,
+    );
+
+    // Notification d'information : le prélèvement a été autorisé une fois pour
+    // toutes, l'approbateur n'a rien à valider — il est simplement tenu informé.
+    void this.push.notifyRetenueSalaire(credit, paiement, montant, echeance);
+
+    // `partielle` indique à l'écran qu'il faut afficher la ligne en rouge, et
+    // que le reliquat a été reporté sur les mois suivants.
+    return {
+      montant,
+      echeance,
+      creditId: String(credit.id),
+      attendu,
+      partielle: Number(montant) < Number(attendu),
+    };
   }
 
   /**
