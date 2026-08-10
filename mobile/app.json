@@ -23,7 +23,6 @@
     },
     "android": {
       "package": "com.npgandour.fdc",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -32,6 +31,14 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -45,7 +52,8 @@
         {
           "color": "#0F4C81"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "apiUrl": "http://10.10.32.2:8080/api/v1",

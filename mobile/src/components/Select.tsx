@@ -6,6 +6,8 @@ export interface SelectOption {
   value: string;
   label: string;
   sublabel?: string;
+  /** Objet source de l'option, pour les traitements dérivés à la sélection. */
+  data?: unknown;
 }
 
 interface Props {

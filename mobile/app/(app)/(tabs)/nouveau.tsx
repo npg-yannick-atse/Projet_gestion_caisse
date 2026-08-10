@@ -121,7 +121,12 @@ export default function NouvelleDemandeScreen() {
     return list
       // Un client sans numéro SAP ne peut pas être imputé : on ne le propose pas.
       .filter((c) => c.numeroClient)
-      .map((c) => ({ value: String(c.numeroClient), label: c.raisonSociale, sublabel: String(c.numeroClient) }));
+      .map((c) => ({
+        value: String(c.numeroClient),
+        label: c.raisonSociale,
+        sublabel: String(c.numeroClient),
+        data: c,
+      }));
   };
 
   const montantValid = montantRegex.test(montant) && Number(montant) > 0;
@@ -290,6 +295,18 @@ export default function NouvelleDemandeScreen() {
                   setClientLabel(opt?.label ?? '');
                   // Le nom du client découle du client choisi (comme sur le web).
                   if (opt?.label) setNomClient(opt.label);
+                  // Le pays aussi : `ref_partenaire.pays` porte le code ISO-2 SAP
+                  // (LAND1), qui suit la même convention que `ref_pays.code`.
+                  // Sans correspondance (pays absent du référentiel), on ne
+                  // touche à rien plutôt que de poser une valeur fausse.
+                  const client = opt?.data as Partenaire | undefined;
+                  const paysDuClient = client?.pays
+                    ? (paysData ?? []).find((p: Pays) => p.code === client.pays)
+                    : undefined;
+                  if (paysDuClient) {
+                    setPaysId(paysDuClient.id);
+                    setDivisionId(''); // la division dépend du pays
+                  }
                 }}
                 fetcher={fetchClients}
                 queryKey="mobile-clients"

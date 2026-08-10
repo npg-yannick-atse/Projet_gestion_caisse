@@ -107,6 +107,8 @@ export interface Partenaire {
   code: string;
   raisonSociale: string;
   numeroClient?: string | null;
+  /** Code pays ISO-2 (LAND1 de SAP) — sert à pré-sélectionner le pays du bon. */
+  pays?: string | null;
   estActif: boolean;
 }
 
