@@ -411,6 +411,7 @@ const createPortefeuilleSchema = z.object({
   proprietaireType: z.enum(['USER', 'DIRECTION']),
   proprietaireId: z.string().trim().min(1, 'Propriétaire requis'),
   gestionnaireId: z.string().optional(),
+  deviseId: z.string().trim().min(1, 'Devise requise'),
   soldeInitial: z.string().optional(),
   budgetMensuel: z
     .string()
@@ -419,7 +420,7 @@ const createPortefeuilleSchema = z.object({
 });
 type CreatePortefeuilleFormValues = z.infer<typeof createPortefeuilleSchema>;
 
-function NewPortefeuilleInline({
+function NewPortefeuilleModal({
   caisseId,
   deviseId,
   onDone,
@@ -430,6 +431,7 @@ function NewPortefeuilleInline({
 }) {
   const { data: users } = useUsers();
   const { data: directions } = useDirections();
+  const { data: devises } = useDevises();
   const create = useCreatePortefeuille();
   const {
     register,
@@ -439,18 +441,20 @@ function NewPortefeuilleInline({
     formState: { errors },
   } = useForm<CreatePortefeuilleFormValues>({
     resolver: zodResolver(createPortefeuilleSchema),
-    defaultValues: { proprietaireType: 'USER' },
+    // La devise de la caisse n'est qu'une proposition : c'est le portefeuille
+    // qui porte la sienne, et une caisse peut en détenir plusieurs.
+    defaultValues: { proprietaireType: 'USER', deviseId },
   });
 
   const proprietaireType = watch('proprietaireType');
   const selectedGestionnaire = watch('gestionnaireId') ?? '';
+  const selectedDevise = watch('deviseId') ?? '';
 
   const onSubmit = handleSubmit((values) => {
     create.mutate(
       {
         ...values,
         caisseSourceId: caisseId,
-        deviseId,
         gestionnaireId: values.gestionnaireId || undefined,
         soldeInitial: values.soldeInitial || undefined,
         budgetMensuel: values.budgetMensuel || undefined,
@@ -462,8 +466,7 @@ function NewPortefeuilleInline({
   });
 
   return (
-    <div className="mb-2 rounded-md border border-[rgba(15,76,129,0.15)] bg-white p-3">
-      <div className="mb-2 text-xs font-semibold text-[#475569]">Nouveau portefeuille</div>
+    <ModalOverlay title="Nouveau portefeuille" onClose={onDone}>
       <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="pf-code">Code</Label>
@@ -474,6 +477,24 @@ function NewPortefeuilleInline({
           <Label htmlFor="pf-libelle">Libellé</Label>
           <Input id="pf-libelle" {...register('libelle')} />
           {errors.libelle && <p className="text-xs text-destructive">{errors.libelle.message}</p>}
+        </div>
+        <div className="space-y-1 sm:col-span-2">
+          <Label htmlFor="pf-devise">Devise</Label>
+          <select id="pf-devise" className={selectClass} {...register('deviseId')}>
+            <option value="">— Choisir —</option>
+            {devises?.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.code} — {d.libelle}
+              </option>
+            ))}
+          </select>
+          {selectedDevise && selectedDevise !== deviseId && (
+            <p className="text-xs text-[#B45309]">
+              Devise différente de la caisse : celle-ci devra détenir des {devises?.find((d) => d.id === selectedDevise)?.code} pour
+              pouvoir recharger ce portefeuille.
+            </p>
+          )}
+          {errors.deviseId && <p className="text-xs text-destructive">{errors.deviseId.message}</p>}
         </div>
         <div className="space-y-1 sm:col-span-2">
           <Label>Propriétaire</Label>
@@ -541,19 +562,19 @@ function NewPortefeuilleInline({
             </>
           )}
         </div>
-        <div className="flex items-end gap-2">
-          <Button type="submit" disabled={create.isPending} size="sm">
+        <div className="flex items-center gap-2 sm:col-span-2">
+          <Button type="submit" disabled={create.isPending}>
             {create.isPending ? 'Création…' : 'Créer'}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={onDone}>
+          <Button type="button" variant="ghost" onClick={onDone}>
             Annuler
           </Button>
+          {create.isError && (
+            <p className="text-sm text-destructive">{apiErrorMessage(create.error, 'Création impossible')}</p>
+          )}
         </div>
-        {create.isError && (
-          <p className="sm:col-span-2 text-xs text-destructive">{apiErrorMessage(create.error, 'Création impossible')}</p>
-        )}
       </form>
-    </div>
+    </ModalOverlay>
   );
 }
 
@@ -575,8 +596,16 @@ function ModalOverlay({
     return () => window.removeEventListener('keydown', onEsc);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl">
+    // Clic sur le fond = fermeture ; l'arrêt de propagation évite qu'un clic
+    // dans le formulaire ne referme la modale.
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-[rgba(15,76,129,0.07)] px-5 py-3">
           <div className="font-display text-sm font-semibold text-[#0F172A]">{title}</div>
           <button
@@ -588,7 +617,9 @@ function ModalOverlay({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        {/* Le corps défile seul : l'en-tête et sa fermeture restent visibles
+            même sur un formulaire long ou un petit écran. */}
+        <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );
@@ -760,7 +791,7 @@ function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; devise
         }}
       />
 
-      {!showCreate && fp.canManagePf && (
+      {fp.canManagePf && (
         <div className="mb-3 flex justify-end">
           <button
             type="button"
@@ -773,7 +804,7 @@ function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; devise
       )}
 
       {showCreate && (
-        <NewPortefeuilleInline
+        <NewPortefeuilleModal
           caisseId={caisseId}
           deviseId={deviseId}
           onDone={() => setShowCreate(false)}
@@ -782,7 +813,7 @@ function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; devise
 
       {isLoading && <div className="text-xs text-[#64748B]">Chargement…</div>}
 
-      {portefeuilles && portefeuilles.length === 0 && !showCreate && (
+      {portefeuilles && portefeuilles.length === 0 && (
         <div className="rounded-md border border-dashed border-[rgba(15,76,129,0.15)] bg-white p-4 text-center text-xs text-[#94A3B8]">
           Aucun portefeuille rattaché à cette caisse.
         </div>
@@ -1072,7 +1103,7 @@ export function CaissesPage() {
                 : 'Ouvrez une caisse depuis la liste pour démarrer les opérations.'}
             </div>
           </div>
-          {!showCreate && fp.canManageCaisse && (
+          {fp.canManageCaisse && (
             <button
               type="button"
               onClick={() => setShowCreate(true)}
@@ -1092,7 +1123,7 @@ export function CaissesPage() {
         <span className="rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-semibold text-[#047857]">
           {caisses?.length ?? 0}
         </span>
-        {!showCreate && fp.canManageCaisse && (
+        {fp.canManageCaisse && (
           <button
             type="button"
             onClick={() => setShowCreate(true)}

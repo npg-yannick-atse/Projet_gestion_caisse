@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Banknote, Briefcase, Check, Eye, Pencil, ShieldCheck, User, X, type LucideIcon } from 'lucide-react';
 import { useRoles, usePermissions, useRolePermissions, useTogglePermission } from '@/api/roles';
 import type { Permission, Role, RoleCode } from '@/types/api';
@@ -90,7 +90,7 @@ function PermissionRow({ permission, roleId, assigned }: { permission: Permissio
   );
 }
 
-function PermissionEditor({ role }: { role: Role }) {
+function PermissionEditor({ role, onClose }: { role: Role; onClose: () => void }) {
   const { data: permissions } = usePermissions();
   const rolePerms = useRolePermissions(role.id);
   const assignedIds = useMemo(() => new Set((rolePerms.data ?? []).map((p) => p.id)), [rolePerms.data]);
@@ -107,8 +107,19 @@ function PermissionEditor({ role }: { role: Role }) {
 
   return (
     <Panel>
-      <PanelHeader title={`Permissions — ${role.libelle}`} badge={`${assignedIds.size}`} />
-      <div className="grid gap-5 p-[18px] sm:grid-cols-2">
+      <PanelHeader title={`Permissions — ${role.libelle}`} badge={`${assignedIds.size}`}>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fermer"
+          className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </PanelHeader>
+      {/* Les permissions défilent à l'intérieur : l'en-tête (nom du rôle, compteur
+          et fermeture) reste visible malgré une soixantaine de lignes. */}
+      <div className="grid max-h-[70vh] gap-5 overflow-y-auto p-[18px] sm:grid-cols-2">
         {byModule.map(([module, perms]) => (
           <div key={module} className="space-y-1">
             <h3 className="text-[10px] font-semibold uppercase tracking-[0.7px] text-[#64748B]">{module}</h3>
@@ -134,6 +145,16 @@ function RolesPageInner() {
   const roles = useClientSort(rolesBruts, sort.state, { libelle: (r) => r.libelle });
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const selectedRole = roles?.find((r) => r.id === selectedRoleId) ?? null;
+
+  // Échap ferme la modale, comme attendu de toute boîte de dialogue.
+  useEffect(() => {
+    if (!selectedRole) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedRoleId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedRole]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -171,12 +192,15 @@ function RolesPageInner() {
         )}
       </Panel>
 
-      {selectedRole ? (
-        <PermissionEditor role={selectedRole} />
-      ) : (
-        <p className="px-1 text-xs text-[#64748B]">
-          Cliquez sur l'icône <Pencil className="inline h-3 w-3" /> d'un rôle pour gérer toutes ses permissions.
-        </p>
+      {selectedRole && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={() => setSelectedRoleId(null)}
+        >
+          <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+            <PermissionEditor role={selectedRole} onClose={() => setSelectedRoleId(null)} />
+          </div>
+        </div>
       )}
     </div>
   );

@@ -62,22 +62,20 @@ export class RechargeService {
           `Le portefeuille ${portefeuille.code} n'est pas rattaché à la caisse ${caisse.code}`,
         );
       }
-      if (portefeuille.deviseId !== caisse.deviseId) {
-        throw new BadRequestException('Devise incohérente entre la caisse et le portefeuille');
-      }
-
       const sens: RechargeSens = input.sens ?? 'CAISSE_VERS_PORTEFEUILLE';
-      const inverse = sens === 'PORTEFEUILLE_VERS_CAISSE';
 
       // Sens inverse (portefeuille → caisse) : on ne peut pas renvoyer plus que le
-      // solde disponible du portefeuille (budget initial + écritures).
-      if (inverse) {
+      // solde disponible du portefeuille (budget initial + écritures). Ce contrôle
+      // reste ici : il porte sur le `soldeInitial`, notion propre au portefeuille
+      // et étrangère au grand livre.
+      if (sens === 'PORTEFEUILLE_VERS_CAISSE') {
         // Solde DANS LA DEVISE du portefeuille : sans ce filtre, un portefeuille
         // portant plusieurs devises verrait ses montants additionnés.
         const ledgerBal = await this.ledgerService.calculateBalance(
           portefeuille.id,
           'PORTEFEUILLE',
           String(portefeuille.deviseId),
+          manager,
         );
         const dispo = Number(portefeuille.soldeInitial || 0) + Number(ledgerBal || 0);
         if (parseFloat(input.montant) > dispo) {
@@ -87,27 +85,19 @@ export class RechargeService {
         }
       }
 
-      const operation = await this.ledgerService.createOperation(
+      // Devise du portefeuille et solvabilité de la caisse : appliquées par le
+      // point de passage commun, partagé avec l'extension de bon et le budget
+      // mensuel.
+      const { operation, ecritures } = await this.ledgerService.mouvementCaissePortefeuille(
         {
-          typeOperation: 'RECHARGE',
           caisseId: caisse.id,
           portefeuilleId: portefeuille.id,
           montant: input.montant,
-          deviseId: caisse.deviseId,
+          sens,
+          typeOperation: 'RECHARGE',
           userId: input.userId,
           reference: input.reference,
         },
-        manager,
-      );
-
-      // Partie double : DÉBIT (1er) / CRÉDIT (2e). On inverse les deux comptes selon le sens.
-      const caisseAcc = { compteId: caisse.id, typeCompte: 'CAISSE' as const, deviseId: caisse.deviseId };
-      const ptfAcc = { compteId: portefeuille.id, typeCompte: 'PORTEFEUILLE' as const, deviseId: caisse.deviseId };
-      const ecritures = await this.ledgerService.createPairedEcritures(
-        inverse ? ptfAcc : caisseAcc,
-        inverse ? caisseAcc : ptfAcc,
-        input.montant,
-        operation.transactionUuid,
         manager,
       );
 

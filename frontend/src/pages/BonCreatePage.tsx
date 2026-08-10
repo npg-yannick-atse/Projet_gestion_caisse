@@ -59,6 +59,30 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+/**
+ * Libellés du bloc de vérification.
+ *
+ * Il couvre deux contrôles de nature différente : le CLIENT est cherché dans le
+ * référentiel local (clients importés de SAP — aucun appel SAP), tandis que le
+ * N° de document est réellement vérifié dans SAP. Annoncer « vérification SAP »
+ * quand seul le client est exigé serait faux : sur un type Restitution Client,
+ * rien ne sort de l'application.
+ */
+function titreVerification(reqBl: boolean): string {
+  return reqBl ? 'Vérification SAP requise' : 'Vérification requise';
+}
+
+function messageVerification(reqBl: boolean, reqClient: boolean, unlocked: boolean): string {
+  if (unlocked) {
+    return reqBl
+      ? '✓ Document vérifié dans SAP — vous pouvez compléter le sous-bon.'
+      : '✓ Client sélectionné — vous pouvez compléter le sous-bon.';
+  }
+  if (reqBl && reqClient) return 'Sélectionnez le client, puis vérifiez le n° de document dans SAP.';
+  if (reqBl) return 'Vérifiez le n° de document dans SAP pour débloquer la saisie ci-dessous.';
+  return 'Sélectionnez le client pour débloquer la saisie ci-dessous.';
+}
+
 const emptySousBon = {
   libelle: '',
   montant: '',
@@ -477,7 +501,7 @@ export function BonCreatePage() {
               {gateActive && (
                 <div className="space-y-3 rounded-[10px] border border-[#BFDBFE] bg-[#F0F7FF] p-3.5 sm:col-span-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#1E40AF]">
-                    Vérification SAP requise
+                    {titreVerification(reqBl)}
                   </p>
                   {reqNumeroClient && (
                     <div className="space-y-1.5">
@@ -523,9 +547,7 @@ export function BonCreatePage() {
                     </div>
                   )}
                   <p className={cn('text-[11px]', unlocked ? 'text-[#047857]' : 'text-[#64748B]')}>
-                    {unlocked
-                      ? '✓ Vérifié dans SAP — vous pouvez compléter le sous-bon.'
-                      : 'Vérifiez le(s) numéro(s) dans SAP pour débloquer la saisie ci-dessous.'}
+                    {messageVerification(reqBl, reqNumeroClient, unlocked)}
                   </p>
                 </div>
               )}
@@ -792,7 +814,9 @@ export function BonCreatePage() {
             disabled={createBon.isPending || sapCheck.checking || !fields.every((f) => isUnlocked(f.id))}
           >
             {sapCheck.checking
-              ? 'Vérification SAP…'
+              ? reqBl
+                ? 'Vérification SAP…'
+                : 'Vérification…'
               : createBon.isPending
                 ? 'Création…'
                 : isInsufficient

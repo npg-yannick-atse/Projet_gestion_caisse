@@ -372,23 +372,20 @@ export class BonsService {
       }
       const montant = deficit.toFixed(4);
       await this.dataSource.transaction(async (manager) => {
-        const operation = await this.ledger.createOperation(
+        // Point de passage commun : la devise retenue est celle du PORTEFEUILLE
+        // (l'ancienne version prenait celle de la caisse, ce qui ne créditait
+        // rien quand les deux différaient), et la caisse doit détenir cette
+        // devise, sinon l'extension est refusée plutôt que de creuser un négatif.
+        await this.ledger.mouvementCaissePortefeuille(
           {
-            typeOperation: 'RECHARGE',
             caisseId: caisse.id,
             portefeuilleId: ptf.id,
             montant,
-            deviseId: caisse.deviseId,
+            sens: 'CAISSE_VERS_PORTEFEUILLE',
+            typeOperation: 'RECHARGE',
             userId,
             reference: `Extension bon ${bonId}`,
           },
-          manager,
-        );
-        await this.ledger.createPairedEcritures(
-          { compteId: caisse.id, typeCompte: 'CAISSE', deviseId: caisse.deviseId },
-          { compteId: ptf.id, typeCompte: 'PORTEFEUILLE', deviseId: caisse.deviseId },
-          montant,
-          operation.transactionUuid,
           manager,
         );
       });

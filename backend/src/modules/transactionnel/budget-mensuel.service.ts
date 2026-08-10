@@ -4,7 +4,6 @@ import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { Role } from '@modules/security/entities/role.entity';
 import { UserRole } from '@modules/security/entities/user-role.entity';
 import { LedgerService } from './ledger.service';
-import { TypeCompte } from './entities/ecriture-comptable.entity';
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 h
 
@@ -91,32 +90,24 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
 
     await this.dataSource.transaction(async (manager) => {
       if (delta !== 0) {
-        const montant = Math.abs(delta).toFixed(4);
-        const op = await this.ledger.createOperation(
+        // Point de passage commun : il vérifie que la caisse détient bien la
+        // devise avant de la débiter. Une recharge impossible fait échouer le
+        // réajustement — `reconcileAll` la journalise et laisse le mois non
+        // marqué, donc la tentative se rejouera dès la caisse approvisionnée,
+        // plutôt que de creuser un solde négatif en silence.
+        // delta > 0 : recharge (caisse → portefeuille) ; delta < 0 : reprise.
+        await this.ledger.mouvementCaissePortefeuille(
           {
-            typeOperation: 'AJUSTEMENT',
             caisseId: String(pf.caisseSourceId),
             portefeuilleId: String(pf.id),
-            montant,
-            deviseId: String(pf.deviseId),
+            montant: Math.abs(delta).toFixed(4),
+            sens: delta > 0 ? 'CAISSE_VERS_PORTEFEUILLE' : 'PORTEFEUILLE_VERS_CAISSE',
+            typeOperation: 'AJUSTEMENT',
             userId,
             reference: `Reset budget ${mois}`,
           },
           manager,
         );
-        const caisseLeg = {
-          compteId: String(pf.caisseSourceId),
-          typeCompte: 'CAISSE' as TypeCompte,
-          deviseId: String(pf.deviseId),
-        };
-        const ptfLeg = {
-          compteId: String(pf.id),
-          typeCompte: 'PORTEFEUILLE' as TypeCompte,
-          deviseId: String(pf.deviseId),
-        };
-        // delta > 0 : recharge (caisse → portefeuille) ; delta < 0 : reprise (portefeuille → caisse).
-        const [debit, credit] = delta > 0 ? [caisseLeg, ptfLeg] : [ptfLeg, caisseLeg];
-        await this.ledger.createPairedEcritures(debit, credit, montant, op.transactionUuid, manager);
       }
       await manager.getRepository(Portefeuille).update({ id: pf.id as any }, { budgetResetMois: mois });
     });

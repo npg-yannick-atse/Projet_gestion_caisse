@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import { Workbook } from 'exceljs';
@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { Operation, TypeOperation } from './entities/operation.entity';
 import { EcritureComptable, TypeCompte } from './entities/ecriture-comptable.entity';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
+import { Caisse } from '@modules/financier/entities/caisse.entity';
+import { Devise } from '@modules/financier/entities/devise.entity';
+import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 
 const TYPE_LABELS: Record<string, string> = {
   RECHARGE: 'Recharge',
@@ -223,6 +226,87 @@ export class LedgerService {
     return [debitEcriture, creditEcriture];
   }
 
+  /**
+   * Mouvement interne caisse ↔ portefeuille, en partie double.
+   *
+   * POINT DE PASSAGE UNIQUE : recharge manuelle, recharge d'extension de bon et
+   * réajustement du budget mensuel passent tous par ici. Trois chemins écrivaient
+   * auparavant le grand livre chacun de leur côté, avec des règles divergentes —
+   * c'est ainsi que des débits en euros ont été portés sur une caisse qui n'avait
+   * jamais reçu d'euros (−175 000 EUR sur CI01 en juin 2026).
+   *
+   * Deux règles y sont appliquées, sans échappatoire possible :
+   *   1. la devise du mouvement est celle du PORTEFEUILLE — la caisse n'en
+   *      déclare qu'une par défaut et peut en détenir plusieurs ;
+   *   2. dans le sens caisse → portefeuille, la caisse doit RÉELLEMENT détenir
+   *      cette devise, sinon son solde deviendrait négatif.
+   *
+   * Les contrôles de droits restent à la charge de l'appelant : un réajustement
+   * automatique de budget n'a pas d'utilisateur à qui demander une permission.
+   */
+  async mouvementCaissePortefeuille(
+    input: {
+      caisseId: string;
+      portefeuilleId: string;
+      montant: string;
+      sens: 'CAISSE_VERS_PORTEFEUILLE' | 'PORTEFEUILLE_VERS_CAISSE';
+      typeOperation: TypeOperation;
+      userId: string;
+      reference?: string;
+    },
+    manager: EntityManager,
+  ): Promise<{
+    operation: Operation;
+    ecritures: [EcritureComptable, EcritureComptable];
+    deviseId: string;
+  }> {
+    const caisse = await manager.getRepository(Caisse).findOne({ where: { id: input.caisseId as any } });
+    if (!caisse) throw new NotFoundException(`Caisse ${input.caisseId} introuvable`);
+    const portefeuille = await manager
+      .getRepository(Portefeuille)
+      .findOne({ where: { id: input.portefeuilleId as any } });
+    if (!portefeuille) throw new NotFoundException(`Portefeuille ${input.portefeuilleId} introuvable`);
+
+    const deviseId = String(portefeuille.deviseId);
+    const inverse = input.sens === 'PORTEFEUILLE_VERS_CAISSE';
+
+    if (!inverse) {
+      const dispo = Number(await this.calculateBalance(caisse.id, 'CAISSE', deviseId, manager));
+      if (parseFloat(input.montant) > dispo) {
+        const devise = await manager.getRepository(Devise).findOne({ where: { id: deviseId as any } });
+        throw new BadRequestException(
+          `La caisse ${caisse.code} ne détient pas assez de ${devise?.code ?? deviseId} ` +
+            `(disponible : ${dispo.toFixed(4)}). Approvisionnez-la dans cette devise avant de recharger.`,
+        );
+      }
+    }
+
+    const operation = await this.createOperation(
+      {
+        typeOperation: input.typeOperation,
+        caisseId: caisse.id,
+        portefeuilleId: portefeuille.id,
+        montant: input.montant,
+        deviseId,
+        userId: input.userId,
+        reference: input.reference,
+      },
+      manager,
+    );
+
+    const caisseAcc = { compteId: caisse.id, typeCompte: 'CAISSE' as TypeCompte, deviseId };
+    const ptfAcc = { compteId: portefeuille.id, typeCompte: 'PORTEFEUILLE' as TypeCompte, deviseId };
+    const ecritures = await this.createPairedEcritures(
+      inverse ? ptfAcc : caisseAcc,
+      inverse ? caisseAcc : ptfAcc,
+      input.montant,
+      operation.transactionUuid,
+      manager,
+    );
+
+    return { operation, ecritures, deviseId };
+  }
+
   /** Vrai si le compte (caisse/portefeuille) porte au moins une écriture comptable. */
   async hasEcritures(compteId: string, typeCompte: TypeCompte): Promise<boolean> {
     const n = await this.ecritureRepo.count({
@@ -248,8 +332,11 @@ export class LedgerService {
     compteId: string,
     typeCompte: TypeCompte,
     deviseId?: string,
+    // Indispensable pour contrôler un solde DANS la transaction en cours :
+    // sans le manager, la lecture ignore les écritures non encore validées.
+    manager?: EntityManager,
   ): Promise<string> {
-    const qb = this.ecritureRepo
+    const qb = this.ecrRepo(manager)
       .createQueryBuilder('ecriture')
       .select('SUM(CAST(ecriture.credit AS DECIMAL(19,4)))', 'totalCredit')
       .addSelect('SUM(CAST(ecriture.debit AS DECIMAL(19,4)))', 'totalDebit')

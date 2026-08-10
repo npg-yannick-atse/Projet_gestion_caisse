@@ -55,7 +55,19 @@ export class CaissesService {
       caisse.code = dto.code;
     }
     if (dto.libelle !== undefined) caisse.libelle = dto.libelle;
-    if (dto.deviseId !== undefined) caisse.deviseId = dto.deviseId as any;
+    if (dto.deviseId !== undefined && String(dto.deviseId) !== String(caisse.deviseId)) {
+      // La devise de la caisse n'est qu'un DÉFAUT (devise du résumé de session,
+      // valeur proposée à l'encaissement, solde mis en avant sur la carte) : les
+      // portefeuilles portent la leur, la caisse peut en détenir plusieurs. La
+      // changer reste donc anodin — sauf session ouverte, dont le résumé de
+      // clôture serait alors libellé dans une autre devise que celle ouverte.
+      if (caisse.statut === 'OUVERTE') {
+        throw new BadRequestException(
+          `Impossible de changer la devise de la caisse ${caisse.code} tant qu'une session est ouverte. Clôturez-la d'abord.`,
+        );
+      }
+      caisse.deviseId = dto.deviseId as any;
+    }
     if (dto.siteId !== undefined) caisse.siteId = dto.siteId as any;
     if (dto.estPrincipale !== undefined) caisse.estPrincipale = dto.estPrincipale;
     if (dto.estActif !== undefined) caisse.estActif = dto.estActif;
