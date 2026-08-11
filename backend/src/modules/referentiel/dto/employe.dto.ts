@@ -12,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 /** Modes de détermination du montant d'un bénéfice. */
 export const MODES_MONTANT_BENEFICE = ['SAISI', 'FIXE', 'POURCENTAGE_SALAIRE'] as const;
@@ -47,7 +48,7 @@ export class CreateEmployeDto {
 
   @ApiProperty({ required: false, description: 'Salaire — DECIMAL(19,4) en string' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   salaire?: string;
 
   @ApiProperty({ required: false, enum: MODES_REGLEMENT })
@@ -93,7 +94,7 @@ export class UpdateEmployeDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   salaire?: string;
 
   @ApiProperty({ required: false, enum: MODES_REGLEMENT })
@@ -136,7 +137,7 @@ export class TypeBeneficeConfigDto {
 
   @ApiProperty({ required: false, description: 'Montant imposé (mode FIXE)' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montantFixe?: string | null;
 
   @ApiProperty({ required: false, description: '% du salaire (mode POURCENTAGE_SALAIRE)' })
@@ -204,7 +205,7 @@ export class CreateEmployeBeneficeDto {
   // d'attribution du type choisi (montant fixe/calculé, période requise ou non).
   @ApiProperty({ required: false, description: 'Montant — requis seulement si le type est en mode SAISI' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montant?: string;
 
   @ApiProperty({ required: false, description: 'Début de validité (AAAA-MM-JJ) — requis si le type a une période' })
@@ -226,7 +227,7 @@ export class CreateEmployeBeneficeDto {
 export class UpdateEmployeBeneficeDto {
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montant?: string;
 
   @ApiProperty({ required: false })
@@ -248,4 +249,26 @@ export class UpdateEmployeBeneficeDto {
   @IsOptional()
   @IsString()
   commentaire?: string;
+}
+
+/**
+ * Changement de salaire : ouvre une nouvelle période à compter de `dateDebut`
+ * et clôt la précédente la veille. Le passé n'est jamais réécrit.
+ */
+export class ChangerSalaireDto {
+  @ApiProperty({ description: 'Nouveau salaire. DECIMAL(19,4) en string.' })
+  @IsNotEmpty()
+  @IsMontant()
+  montant!: string;
+
+  @ApiProperty({ description: "Premier jour de validité (AAAA-MM-JJ)." })
+  @IsNotEmpty()
+  @IsDateString()
+  dateDebut!: string;
+
+  @ApiProperty({ required: false, description: 'Augmentation, réduction, régularisation…' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  motif?: string;
 }

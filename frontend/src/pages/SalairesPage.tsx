@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CheckCircle2, Search, Undo2 } from 'lucide-react';
 import {
   useGrilleSalaires,
+  useArrieresSalaires,
   usePayerSalaire,
   useAnnulerPaiementSalaire,
   type LigneSalaire,
   type SourceFonds,
+  type StatutSalaire,
 } from '@/api/salaires';
 import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
@@ -49,12 +51,27 @@ function SalairesPageInner() {
     return () => clearTimeout(t);
   }, [search]);
   const [directionId, setDirectionId] = useState('');
+  // '' = tous. NON_PAYE isole les employés absents le jour de la paie, qu'il
+  // faudra régler à leur retour — c'est la liste qu'on vient consulter.
+  // '' = tous · PAYE · NON_PAYE portent sur le mois affiché ;
+  // ARRIERES bascule sur les mois ANTÉRIEURS restés impayés.
+  const [statut, setStatut] = useState<'' | StatutSalaire | 'ARRIERES'>('');
+  const vueArrieres = statut === 'ARRIERES';
+  // Période réellement réglée : celle de la ligne pour un arriéré, sinon le mois
+  // affiché. Sans ça, payer un arriéré l'aurait imputé au mois courant.
+  const [periodeAPayer, setPeriodeAPayer] = useState('');
 
   const { data, isLoading, isError, error } = useGrilleSalaires({
     periode,
     search: debounced || undefined,
     directionId: directionId || undefined,
+    statut: vueArrieres ? undefined : statut || undefined,
   });
+
+  const { data: arrieres } = useArrieresSalaires(
+    { periode, search: debounced || undefined, directionId: directionId || undefined },
+    vueArrieres,
+  );
 
   const { data: caisses } = useCaisses();
   const { data: portefeuilles } = usePortefeuilles();
@@ -112,7 +129,7 @@ function SalairesPageInner() {
     payer.mutate(
       {
         employeId: aPayer.employeId,
-        periode,
+        periode: periodeAPayer || periode,
         sourceType,
         sourceId,
         deviseId: deviseSource,
@@ -123,7 +140,7 @@ function SalairesPageInner() {
             ? retenuePartielle
             : undefined,
       },
-      { onSuccess: () => { setAPayer(null); setRetenuePartielle(''); } },
+      { onSuccess: () => { setAPayer(null); setRetenuePartielle(''); setPeriodeAPayer(''); } },
     );
   };
 
@@ -137,6 +154,36 @@ function SalairesPageInner() {
             </span>
           )}
         </PanelHeader>
+
+        {/* Onglets d'état : le compteur porte sur toute la période, pas sur la
+            liste filtrée, sinon l'onglet actif afficherait toujours le total. */}
+        <div className="flex gap-1 border-b border-[rgba(15,76,129,0.07)] px-[18px] pt-2.5">
+          {([
+            { v: '' as const, label: 'Tous', n: data?.stats.total },
+            { v: 'NON_PAYE' as const, label: 'Non payés', n: data?.stats.nonPayes },
+            { v: 'PAYE' as const, label: 'Payés', n: data?.stats.payes },
+            { v: 'ARRIERES' as const, label: 'Mois antérieurs', n: arrieres?.stats.nb },
+          ]).map((o) => (
+            <button
+              key={o.v || 'tous'}
+              type="button"
+              onClick={() => setStatut(o.v)}
+              className={cn(
+                'rounded-t-[9px] px-3.5 py-2 text-[11px] font-medium transition-colors',
+                statut === o.v
+                  ? 'bg-[#EFF6FF] text-[#0F4C81]'
+                  : 'text-[#64748B] hover:bg-[#F8FAFC] hover:text-[#0F172A]',
+              )}
+            >
+              {o.label}
+              {o.n !== undefined && (
+                <span className="ml-1.5 rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#1A6DB5]">
+                  {o.n}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
 
         {/* Filtres + source des fonds */}
         <div className="flex flex-wrap items-end gap-3 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
@@ -247,7 +294,78 @@ function SalairesPageInner() {
           </div>
         )}
 
-        {data && (
+        {/* Mois antérieurs : un tableau à part, car une ligne y désigne un COUPLE
+            employé + mois, alors que la grille normale n'a qu'une ligne par
+            employé. Payer ici impute au mois de la ligne, pas au mois affiché. */}
+        {vueArrieres && arrieres && (
+          <table className="w-full text-xs">
+            <thead className="bg-[#F8FAFC]">
+              <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
+                <th className="px-4 py-2.5 font-semibold">Mois dû</th>
+                <th className="px-4 py-2.5 font-semibold">Matricule</th>
+                <th className="px-4 py-2.5 font-semibold">Employé</th>
+                <th className="px-4 py-2.5 text-right font-semibold">Salaire</th>
+                <th className="px-4 py-2.5"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {arrieres.lignes.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
+                    Aucun salaire en retard sur les mois précédents.
+                  </td>
+                </tr>
+              )}
+              {arrieres.lignes.map((l) => {
+                const sansSalaire = !l.salaire || Number(l.salaire) <= 0;
+                return (
+                  <tr key={`${l.employeId}-${l.periode}`} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-[#FFFBEB] px-2 py-0.5 text-[10px] font-semibold text-[#78350F]">
+                        {libellePeriode(l.periode)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[#1A6DB5]">{l.matricule}</td>
+                    <td className="px-4 py-3 font-medium text-[#0F172A]">
+                      {l.nom} {l.prenoms ?? ''}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {sansSalaire ? (
+                        <span className="text-[10px] uppercase tracking-[0.5px] text-[#94A3B8]">non renseigné</span>
+                      ) : (
+                        formatMontant(l.salaire as string)
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {peutPayer && (
+                        <button
+                          type="button"
+                          disabled={sansSalaire || !sourceId}
+                          title={
+                            sansSalaire
+                              ? 'Renseignez le salaire de cet employé'
+                              : !sourceId
+                                ? 'Choisissez la caisse ou le portefeuille source'
+                                : undefined
+                          }
+                          onClick={() => {
+                            setPeriodeAPayer(l.periode);
+                            setAPayer({ ...l, paiement: null, retenueCredit: null } as LigneSalaire);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-[7px] bg-[#0F4C81] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#1A6DB5] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Banknote className="h-3.5 w-3.5" /> Payer
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {!vueArrieres && data && (
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
@@ -443,7 +561,7 @@ function SalairesPageInner() {
           }
           confirmLabel={payer.isPending ? 'Paiement…' : 'Payer'}
           onConfirm={confirmerPaiement}
-          onCancel={() => { setAPayer(null); setRetenuePartielle(''); }}
+          onCancel={() => { setAPayer(null); setRetenuePartielle(''); setPeriodeAPayer(''); }}
         />
       )}
 

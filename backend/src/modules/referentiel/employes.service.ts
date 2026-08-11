@@ -5,6 +5,7 @@ import { Workbook } from 'exceljs';
 import { Employe } from './entities/employe.entity';
 import { TypeBenefice } from './entities/type-benefice.entity';
 import { EmployeBenefice } from './entities/employe-benefice.entity';
+import { EmployeSalaire } from './entities/employe-salaire.entity';
 import { Direction } from '@modules/security/entities/direction.entity';
 import { User } from '@modules/security/entities/user.entity';
 import { AuthorizationService } from '@modules/security/authorization.service';
@@ -15,6 +16,8 @@ export interface EmployeQuery {
   directionId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  /** true = liste les employés DÉSACTIVÉS au lieu des actifs (pour les réactiver). */
+  inactifs?: boolean;
 }
 
 export type ImportStatut = 'OK' | 'IGNORE' | 'ERREUR';
@@ -46,6 +49,7 @@ export class EmployesService {
     @InjectRepository(Employe) private readonly employeRepo: Repository<Employe>,
     @InjectRepository(TypeBenefice) private readonly typeBeneficeRepo: Repository<TypeBenefice>,
     @InjectRepository(EmployeBenefice) private readonly beneficeRepo: Repository<EmployeBenefice>,
+    @InjectRepository(EmployeSalaire) private readonly salaireRepo: Repository<EmployeSalaire>,
     private readonly parametres: ParametresService,
     private readonly dataSource: DataSource,
     private readonly authz: AuthorizationService,
@@ -82,7 +86,12 @@ export class EmployesService {
    * Chaque employé porte `nbBenefices` = nombre de bénéfices VALIDES (indicateur UI).
    */
   async listEmployes(opts: EmployeQuery = {}): Promise<Array<Employe & { nbBenefices: number }>> {
-    const qb = this.employeRepo.createQueryBuilder('e').where('e.estActif = :actif', { actif: true });
+    // `withDeleted` est indispensable pour les désactivés : la désactivation
+    // renseigne `deleted_at`, que TypeORM masque par défaut (@DeleteDateColumn).
+    const qb = this.employeRepo
+      .createQueryBuilder('e')
+      .where('e.estActif = :actif', { actif: !opts.inactifs });
+    if (opts.inactifs) qb.withDeleted();
 
     if (opts.search && opts.search.trim()) {
       const s = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
@@ -324,7 +333,11 @@ export class EmployesService {
     // On inclut les lignes soft-deleted : la contrainte UNIQUE en base les compte aussi.
     const existing = await this.employeRepo.findOne({ where: { matricule: dto.matricule }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Un employé avec le matricule ${dto.matricule} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le matricule ${dto.matricule} est encore occupé par un employé supprimé. Choisissez un autre matricule.`
+          : `Un employé avec le matricule ${dto.matricule} existe déjà`,
+      );
     }
     const e = this.employeRepo.create({
       matricule: dto.matricule,
@@ -339,7 +352,24 @@ export class EmployesService {
       estActif: true,
       createdById: userId as any,
     });
-    return this.employeRepo.save(e);
+    const cree = await this.employeRepo.save(e);
+
+    // Première période de salaire : sans elle, l'employé n'aurait aucun salaire
+    // opposable à un mois donné et la grille le verrait « non renseigné ».
+    if (dto.salaire && Number(dto.salaire) > 0) {
+      const now = new Date();
+      await this.salaireRepo.save(
+        this.salaireRepo.create({
+          employeId: cree.id as any,
+          montant: dto.salaire,
+          dateDebut: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`,
+          dateFin: null,
+          motif: 'Salaire initial',
+          createdById: userId as any,
+        }),
+      );
+    }
+    return cree;
   }
 
   async updateEmploye(id: string, dto: UpdateEmployeDto, userId: string): Promise<Employe> {
@@ -348,6 +378,11 @@ export class EmployesService {
     if (dto.nom !== undefined) e.nom = dto.nom;
     if (dto.prenoms !== undefined) e.prenoms = dto.prenoms;
     if (dto.directionId !== undefined) e.directionId = dto.directionId || null;
+    // Le salaire est historisé : modifier la fiche ouvre une nouvelle période à
+    // compter d'aujourd'hui, plutôt que d'écraser silencieusement le passé.
+    // Pour dater l'effet autrement, passer par `changerSalaire`.
+    const salaireAChange =
+      dto.salaire !== undefined && Number(dto.salaire || 0) !== Number(e.salaire || 0);
     if (dto.salaire !== undefined) e.salaire = dto.salaire || null;
     if (dto.modeReglement !== undefined) e.modeReglement = dto.modeReglement;
     if (dto.banque !== undefined) e.banque = dto.banque || null;
@@ -355,7 +390,26 @@ export class EmployesService {
     if (dto.portefeuilleSourceId !== undefined) e.portefeuilleSourceId = dto.portefeuilleSourceId || null;
     if (dto.estActif !== undefined) e.estActif = dto.estActif;
     e.updatedById = userId as any;
-    return this.employeRepo.save(e);
+    const sauve = await this.employeRepo.save(e);
+
+    if (salaireAChange && dto.salaire && Number(dto.salaire) > 0) {
+      const now = new Date();
+      const debut = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+      const derniere = await this.salaireRepo.findOne({
+        where: { employeId: id as any },
+        order: { dateDebut: 'DESC', id: 'DESC' },
+      });
+      // Deux changements le même mois : on corrige la période en cours au lieu
+      // d'en empiler une seconde qui commencerait le même jour.
+      if (derniere && String(derniere.dateDebut) === debut) {
+        derniere.montant = dto.salaire;
+        derniere.updatedById = userId as any;
+        await this.salaireRepo.save(derniere);
+      } else {
+        await this.changerSalaire(id, { montant: dto.salaire, dateDebut: debut, motif: 'Modification de la fiche' }, userId);
+      }
+    }
+    return sauve;
   }
 
   async deleteEmploye(id: string, userId: string): Promise<void> {
@@ -375,6 +429,146 @@ export class EmployesService {
     e.deletedAt = new Date();
     e.deletedById = userId as any;
     await this.employeRepo.save(e);
+  }
+
+  /**
+   * Remet en service un employé désactivé.
+   *
+   * La désactivation ne supprime rien : la ligne reste en base et son matricule
+   * demeure réservé par la contrainte UNIQUE. Sans réactivation, un employé
+   * désactivé par erreur était définitivement inaccessible depuis l'application,
+   * et son matricule inutilisable — constaté en test le 10/08/2026 sur `TYAL`.
+   */
+  async reactiverEmploye(id: string, userId: string): Promise<Employe> {
+    const e = await this.employeRepo.findOne({ where: { id: id as any }, withDeleted: true });
+    if (!e) throw new NotFoundException(`Employé ${id} introuvable`);
+    if (e.estActif && !e.deletedAt) {
+      throw new ConflictException('Cet employé est déjà actif.');
+    }
+    e.estActif = true;
+    e.deletedAt = null;
+    e.deletedById = null;
+    e.updatedById = userId as any;
+    return this.employeRepo.save(e);
+  }
+
+  /* ------------------------------------------------ Historique salaire -- */
+
+  /** Premier jour du mois d'une période 'AAAA-MM'. */
+  private static premierJour(periode: string): string {
+    return `${periode}-01`;
+  }
+
+  /**
+   * Salaire applicable à un MOIS donné, d'après l'historique.
+   *
+   * On retient la période dont `date_debut` est la plus récente parmi celles qui
+   * ont commencé au plus tard ce mois-là, et qui n'était pas close avant lui.
+   * Renvoie `null` si aucune période ne couvre le mois (employé entré après).
+   *
+   * C'est ce qui empêche une augmentation de réécrire le passé : régler un mois
+   * de juillet resté impayé verse le salaire de juillet, pas celui d'aujourd'hui.
+   */
+  async salaireDuMois(employeId: string, periode: string): Promise<string | null> {
+    const jour = EmployesService.premierJour(periode);
+    const rows: Array<{ montant: string }> = await this.salaireRepo.manager.query(
+      `SELECT TOP 1 montant FROM dbo.ref_employe_salaire
+       WHERE employe_id = @0 AND deleted_at IS NULL
+         AND date_debut <= @1
+         AND (date_fin IS NULL OR date_fin >= @1)
+       ORDER BY date_debut DESC, id DESC`,
+      [employeId, jour],
+    );
+    return rows?.[0]?.montant != null ? String(rows[0].montant) : null;
+  }
+
+  /** Salaires applicables à un mois pour PLUSIEURS employés (un seul aller-retour). */
+  async salairesDuMois(employeIds: string[], periode: string): Promise<Map<string, string>> {
+    if (employeIds.length === 0) return new Map();
+    const jour = EmployesService.premierJour(periode);
+    // La sous-requête retient, par employé, la période la plus récente en vigueur
+    // ce mois-là — équivalent ensembliste du TOP 1 de `salaireDuMois`.
+    const rows: Array<{ employe_id: string; montant: string }> = await this.salaireRepo.manager.query(
+      `SELECT s.employe_id, s.montant
+       FROM dbo.ref_employe_salaire s
+       JOIN (
+         SELECT employe_id, MAX(date_debut) AS d
+         FROM dbo.ref_employe_salaire
+         WHERE deleted_at IS NULL AND date_debut <= @0 AND (date_fin IS NULL OR date_fin >= @0)
+         GROUP BY employe_id
+       ) m ON m.employe_id = s.employe_id AND m.d = s.date_debut
+       WHERE s.deleted_at IS NULL AND s.date_debut <= @0 AND (s.date_fin IS NULL OR s.date_fin >= @0)`,
+      [jour],
+    );
+    const voulus = new Set(employeIds.map(String));
+    const out = new Map<string, string>();
+    for (const r of rows ?? []) {
+      const id = String(r.employe_id);
+      if (voulus.has(id)) out.set(id, String(r.montant));
+    }
+    return out;
+  }
+
+  /** Historique complet, du plus récent au plus ancien. */
+  async historiqueSalaire(employeId: string): Promise<EmployeSalaire[]> {
+    return this.salaireRepo.find({
+      where: { employeId: employeId as any },
+      order: { dateDebut: 'DESC', id: 'DESC' },
+    });
+  }
+
+  /**
+   * Enregistre un nouveau salaire à partir d'une date : clôt la période en cours
+   * la veille, et ouvre la nouvelle. `ref_employe.salaire` est mise à jour en
+   * reflet du salaire courant, car exports et calculs de crédit la lisent.
+   */
+  async changerSalaire(
+    employeId: string,
+    input: { montant: string; dateDebut: string; motif?: string },
+    userId: string,
+  ): Promise<EmployeSalaire> {
+    const employe = await this.findEmploye(employeId);
+    const debut = input.dateDebut.slice(0, 10);
+
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(EmployeSalaire);
+      const enCours = await repo.findOne({
+        where: { employeId: employeId as any },
+        order: { dateDebut: 'DESC', id: 'DESC' },
+      });
+
+      if (enCours) {
+        if (debut <= String(enCours.dateDebut)) {
+          throw new BadRequestException(
+            `La date d'effet doit être postérieure au ${enCours.dateDebut}, début du salaire en cours.`,
+          );
+        }
+        // Clôture la veille : les périodes se suivent sans trou ni chevauchement.
+        const veille = new Date(`${debut}T00:00:00Z`);
+        veille.setUTCDate(veille.getUTCDate() - 1);
+        enCours.dateFin = veille.toISOString().slice(0, 10);
+        enCours.updatedById = userId as any;
+        await repo.save(enCours);
+      }
+
+      const cree = await repo.save(
+        repo.create({
+          employeId: employeId as any,
+          montant: input.montant,
+          dateDebut: debut,
+          dateFin: null,
+          motif: input.motif || null,
+          createdById: userId as any,
+        }),
+      );
+
+      // Reflet du salaire courant sur la fiche : de nombreux écrans la lisent.
+      employe.salaire = input.montant;
+      employe.updatedById = userId as any;
+      await manager.getRepository(Employe).save(employe);
+
+      return cree;
+    });
   }
 
   /* -------------------------------------------------- Types de bénéfice -- */

@@ -14,9 +14,11 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
-  Trash2,
+  TrendingUp,
   Upload,
+  UserX,
   Wallet,
   X,
   XCircle,
@@ -26,6 +28,7 @@ import {
   useCreateEmploye,
   useUpdateEmploye,
   useDeleteEmploye,
+  useReactiverEmploye,
   useImportEmployes,
   useApercuImportEmployes,
   exportEmployes,
@@ -46,6 +49,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { HistoriqueSalaireModal } from '@/components/HistoriqueSalaireModal';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 
@@ -757,6 +761,9 @@ export function EmployesPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [directionId, setDirectionId] = useState('');
+  // Les désactivés ne sont pas supprimés : ils restent en base et gardent leur
+  // matricule réservé. Pouvoir les afficher évite de recréer un doublon.
+  const [voirInactifs, setVoirInactifs] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -768,9 +775,13 @@ export function EmployesPage() {
     directionId: directionId || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
+    inactifs: voirInactifs || undefined,
   });
   const { data: directions } = useDirections();
   const remove = useDeleteEmploye();
+  const reactiver = useReactiverEmploye();
+  // Le formulaire de création reste hors de portée en vue « désactivés » :
+  // on y répare l'existant, on n'y ajoute pas.
   const importMut = useImportEmployes();
   const apercuMut = useApercuImportEmployes();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -814,6 +825,8 @@ export function EmployesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Employe | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Employe | null>(null);
+  // Employé dont on consulte l'historique de salaire.
+  const [salaireDe, setSalaireDe] = useState<Employe | null>(null);
   const [beneficesFor, setBeneficesFor] = useState<Employe | null>(null);
   const [detailFor, setDetailFor] = useState<Employe | null>(null);
 
@@ -1143,6 +1156,15 @@ export function EmployesPage() {
               </option>
             ))}
           </select>
+          <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 py-1.5 text-xs text-[#475569]">
+            <input
+              type="checkbox"
+              checked={voirInactifs}
+              onChange={(e) => setVoirInactifs(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            Afficher les désactivés
+          </label>
         </div>
 
         {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
@@ -1219,13 +1241,35 @@ export function EmployesPage() {
                       </button>
                       <button
                         type="button"
-                        aria-label="Supprimer"
-                        title="Désactiver l'employé"
-                        onClick={() => setPendingDelete(e)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#FEF2F2] hover:text-[#EF4444]"
+                        aria-label="Historique du salaire"
+                        title="Salaire : historique et augmentations"
+                        onClick={() => setSalaireDe(e)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#F5F3FF] hover:text-[#5B21B6]"
                       >
-                        <Trash2 className="h-5 w-5" />
+                        <TrendingUp className="h-5 w-5" />
                       </button>
+                      {voirInactifs ? (
+                        <button
+                          type="button"
+                          aria-label="Réactiver"
+                          title="Remettre cet employé en service"
+                          disabled={reactiver.isPending}
+                          onClick={() => reactiver.mutate(e.id)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#ECFDF5] hover:text-[#047857] disabled:opacity-40"
+                        >
+                          <RotateCcw className="h-5 w-5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label="Désactiver"
+                          title="Désactiver l'employé — il reste en base et pourra être réactivé"
+                          onClick={() => setPendingDelete(e)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-[9px] text-[#64748B] transition-colors hover:bg-[#FFFBEB] hover:text-[#B45309]"
+                        >
+                          <UserX className="h-5 w-5" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1254,14 +1298,22 @@ export function EmployesPage() {
 
       {beneficesFor && <BeneficesModal employe={beneficesFor} onClose={() => setBeneficesFor(null)} />}
 
+      {salaireDe && <HistoriqueSalaireModal employe={salaireDe} onClose={() => setSalaireDe(null)} />}
+
       <ConfirmDialog
         open={!!pendingDelete}
         variant="danger"
-        title={pendingDelete ? `Supprimer ${pendingDelete.nom} ${pendingDelete.prenoms} ?` : ''}
-        description={pendingDelete ? "L'employé sera désactivé (retiré de la liste). Ses bénéfices restent en base." : undefined}
-        confirmLabel="Supprimer"
+        title={pendingDelete ? `Désactiver ${pendingDelete.nom} ${pendingDelete.prenoms} ?` : ''}
+        description={
+          pendingDelete
+            ? "L'employé sort de la liste mais reste en base : son historique et ses bénéfices " +
+              'sont conservés, et son matricule demeure réservé. Vous pourrez le remettre en ' +
+              'service via « Afficher les désactivés ».'
+            : undefined
+        }
+        confirmLabel="Désactiver"
         busy={remove.isPending}
-        error={remove.isError ? apiErrorMessage(remove.error, 'Suppression impossible') : undefined}
+        error={remove.isError ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
         onCancel={() => {
           setPendingDelete(null);
           remove.reset();

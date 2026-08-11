@@ -14,6 +14,7 @@ import { Division } from './entities/division.entity';
 import { Employe } from './entities/employe.entity';
 import { TypeBenefice } from './entities/type-benefice.entity';
 import { EmployeBenefice } from './entities/employe-benefice.entity';
+import { EmployeSalaire } from './entities/employe-salaire.entity';
 import { Parametre } from './entities/parametre.entity';
 import { ReferentielService } from './referentiel.service';
 import { ReferentielController } from './referentiel.controller';
@@ -39,6 +40,7 @@ import { ParametresController } from './parametres.controller';
       Employe,
       TypeBenefice,
       EmployeBenefice,
+      EmployeSalaire,
       Parametre,
     ]),
   ],

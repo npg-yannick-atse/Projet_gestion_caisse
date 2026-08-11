@@ -18,6 +18,8 @@ export interface EmployesFilters {
   directionId?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  /** true = liste les employés DÉSACTIVÉS, pour pouvoir les remettre en service. */
+  inactifs?: boolean;
 }
 
 export async function listEmployes(filters: EmployesFilters = {}): Promise<Employe[]> {
@@ -26,6 +28,7 @@ export async function listEmployes(filters: EmployesFilters = {}): Promise<Emplo
   if (filters.directionId) params.directionId = filters.directionId;
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;
+  if (filters.inactifs) params.inactifs = 'true';
   const { data } = await api.get<Employe[]>('/employes', { params });
   return data;
 }
@@ -160,6 +163,20 @@ export function useDeleteEmploye() {
   });
 }
 
+/** Remet en service un employé désactivé — évite d'avoir à le recréer. */
+export async function reactiverEmploye(id: string): Promise<Employe> {
+  const { data } = await api.post<Employe>(`/employes/${id}/reactiver`);
+  return data;
+}
+
+export function useReactiverEmploye() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: reactiverEmploye,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['employes'] }),
+  });
+}
+
 /* --------------------------------------------------- Types de bénéfice -- */
 
 export async function listTypesBenefice(filters: EmployesFilters = {}): Promise<TypeBenefice[]> {
@@ -265,6 +282,63 @@ export function useUpdateBenefice(employeId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['benefices', employeId] });
       qc.invalidateQueries({ queryKey: ['employes'] });
+    },
+  });
+}
+
+/* ------------------------------------------------- Historique salaire -- */
+
+/**
+ * Une période de salaire. Le salaire n'est plus une valeur unique écrasée à
+ * chaque augmentation : c'est une succession de périodes, si bien qu'un mois
+ * passé garde le montant qui s'appliquait alors.
+ */
+export interface PeriodeSalaire {
+  id: string;
+  employeId: string;
+  montant: string;
+  dateDebut: string;
+  /** null = salaire en vigueur. */
+  dateFin?: string | null;
+  motif?: string | null;
+  createdAt: string;
+}
+
+export interface ChangerSalairePayload {
+  montant: string;
+  dateDebut: string;
+  motif?: string;
+}
+
+export async function listHistoriqueSalaire(employeId: string): Promise<PeriodeSalaire[]> {
+  const { data } = await api.get<PeriodeSalaire[]>(`/employes/${employeId}/salaires`);
+  return data;
+}
+
+export function useHistoriqueSalaire(employeId: string | null) {
+  return useQuery({
+    queryKey: ['employes', employeId, 'salaires'],
+    queryFn: () => listHistoriqueSalaire(employeId as string),
+    enabled: !!employeId,
+  });
+}
+
+export async function changerSalaire(
+  employeId: string,
+  payload: ChangerSalairePayload,
+): Promise<PeriodeSalaire> {
+  const { data } = await api.post<PeriodeSalaire>(`/employes/${employeId}/salaires`, payload);
+  return data;
+}
+
+export function useChangerSalaire(employeId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ChangerSalairePayload) => changerSalaire(employeId as string, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employes'] });
+      // La grille des salaires dépend du montant en vigueur : elle doit suivre.
+      qc.invalidateQueries({ queryKey: ['salaires'] });
     },
   });
 }

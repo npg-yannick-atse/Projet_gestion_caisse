@@ -50,7 +50,40 @@ export class PaiementSalaireController {
   @ApiQuery({ name: 'periode', required: false, description: 'AAAA-MM (défaut : mois courant)' })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'directionId', required: false })
+  @ApiQuery({
+    name: 'statut',
+    required: false,
+    enum: ['PAYE', 'NON_PAYE'],
+    description:
+      "Filtre l'état du salaire sur la période. NON_PAYE isole notamment les employés " +
+      'absents le jour de la paie, qu\'il faudra régler à leur retour.',
+  })
   async lister(
+    @CurrentUser() user: JwtPayload,
+    @Query('periode') periode?: string,
+    @Query('search') search?: string,
+    @Query('directionId') directionId?: string,
+    @Query('statut') statut?: 'PAYE' | 'NON_PAYE',
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'EMPLOYE_VOIR_SALAIRE',
+      'consulter les salaires',
+    );
+    return this.service.listerPourPeriode(periode ?? '', { search, directionId, statut });
+  }
+
+  @Get('arrieres')
+  @ApiOperation({
+    summary: 'Salaires impayés des mois ANTÉRIEURS à la période',
+    description:
+      "Permet de régler depuis le mois courant ceux qui étaient absents les mois précédents, " +
+      'sans rouvrir chaque mois un par un.',
+  })
+  @ApiQuery({ name: 'periode', required: false, description: 'AAAA-MM (défaut : mois courant)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'directionId', required: false })
+  async arrieres(
     @CurrentUser() user: JwtPayload,
     @Query('periode') periode?: string,
     @Query('search') search?: string,
@@ -61,7 +94,7 @@ export class PaiementSalaireController {
       'EMPLOYE_VOIR_SALAIRE',
       'consulter les salaires',
     );
-    return this.service.listerPourPeriode(periode ?? '', { search, directionId });
+    return this.service.listerArrieres(periode ?? '', { search, directionId });
   }
 
   @Get('employe/:employeId')

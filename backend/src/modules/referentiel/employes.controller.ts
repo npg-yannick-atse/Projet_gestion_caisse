@@ -17,6 +17,7 @@ import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EmployesService } from './employes.service';
 import {
+  ChangerSalaireDto,
   CreateEmployeBeneficeDto,
   CreateEmployeDto,
   CreateTypeBeneficeDto,
@@ -63,6 +64,7 @@ export class EmployesController {
     @Query('directionId') directionId?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('inactifs') inactifs?: string,
   ) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR', 'consulter les employés');
     const list = await this.employes.listEmployes({
@@ -70,6 +72,7 @@ export class EmployesController {
       directionId,
       sortBy,
       sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
+      inactifs: inactifs === 'true' || inactifs === '1',
     });
     return this.filtrerSalaire(list, user.sub);
   }
@@ -176,6 +179,47 @@ export class EmployesController {
   async deleteEmploye(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     await this.authz.assertPermission(user.sub, 'EMPLOYE_SUPPRIMER', 'supprimer un employé');
     await this.employes.deleteEmploye(id, user.sub);
+  }
+
+  @Get('employes/:id/salaires')
+  @ApiOperation({
+    summary: "Historique des salaires d'un employé",
+    description: 'Une ligne par période de validité, de la plus récente à la plus ancienne.',
+  })
+  async historiqueSalaire(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_VOIR_SALAIRE', 'consulter les salaires');
+    return this.employes.historiqueSalaire(id);
+  }
+
+  @Post('employes/:id/salaires')
+  @ApiOperation({
+    summary: 'Enregistrer un nouveau salaire à partir d’une date',
+    description:
+      "Clôt la période en cours la veille et en ouvre une nouvelle. Le salaire des mois " +
+      'déjà écoulés reste celui qui s’appliquait alors : une augmentation ne réécrit pas le passé.',
+  })
+  async changerSalaire(
+    @Param('id') id: string,
+    @Body() dto: ChangerSalaireDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // Modifier un salaire, c'est modifier l'employé : même droit que la fiche.
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_MODIFIER', 'modifier un salaire');
+    return this.employes.changerSalaire(id, dto, user.sub);
+  }
+
+  @Post('employes/:id/reactiver')
+  @ApiOperation({
+    summary: 'Remettre en service un employé désactivé',
+    description:
+      "La désactivation ne supprime rien : la ligne reste en base et son matricule demeure " +
+      'réservé. Réactiver évite d\'avoir à recréer l\'employé sous un autre matricule.',
+  })
+  async reactiverEmploye(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    // Même droit que la désactivation : qui peut retirer peut remettre.
+    await this.authz.assertPermission(user.sub, 'EMPLOYE_SUPPRIMER', 'réactiver un employé');
+    const e = await this.employes.reactiverEmploye(id, user.sub);
+    return this.filtrerSalaire(e, user.sub);
   }
 
   /* -------------------------------------------------- Types de bénéfice -- */

@@ -41,15 +41,48 @@ export interface RetenueCredit {
   maxPrelevable: string;
 }
 
+/** État du salaire sur la période. NON_PAYE isole les absents du jour de paie. */
+export type StatutSalaire = 'PAYE' | 'NON_PAYE';
+
 export interface GrilleSalaires {
   periode: string;
   lignes: LigneSalaire[];
+  /** Effectifs par état AVANT filtrage, pour les onglets. */
+  stats: { total: number; payes: number; nonPayes: number };
 }
 
 export interface SalairesFilters {
   periode?: string;
   search?: string;
   directionId?: string;
+  statut?: StatutSalaire;
+}
+
+/** Une ligne d'arriéré : un employé ET le mois resté impayé. */
+export interface LigneArriere {
+  employeId: string;
+  matricule: string;
+  nom: string;
+  prenoms: string | null;
+  directionId: string | null;
+  periode: string;
+  salaire: string | null;
+}
+
+export interface GrilleArrieres {
+  periode: string;
+  lignes: LigneArriere[];
+  stats: { nb: number; employesConcernes: number };
+}
+
+/** Mois antérieurs restés impayés — réglables sans changer de mois à l'écran. */
+export async function getArrieresSalaires(filters: SalairesFilters = {}): Promise<GrilleArrieres> {
+  const params: Record<string, string> = {};
+  if (filters.periode) params.periode = filters.periode;
+  if (filters.search) params.search = filters.search;
+  if (filters.directionId) params.directionId = filters.directionId;
+  const { data } = await api.get<GrilleArrieres>('/salaires/arrieres', { params });
+  return data;
 }
 
 export async function getGrilleSalaires(filters: SalairesFilters = {}): Promise<GrilleSalaires> {
@@ -57,6 +90,7 @@ export async function getGrilleSalaires(filters: SalairesFilters = {}): Promise<
   if (filters.periode) params.periode = filters.periode;
   if (filters.search) params.search = filters.search;
   if (filters.directionId) params.directionId = filters.directionId;
+  if (filters.statut) params.statut = filters.statut;
   const { data } = await api.get<GrilleSalaires>('/salaires', { params });
   return data;
 }
@@ -65,6 +99,14 @@ export function useGrilleSalaires(filters: SalairesFilters = {}) {
   return useQuery({
     queryKey: ['salaires', filters],
     queryFn: () => getGrilleSalaires(filters),
+  });
+}
+
+export function useArrieresSalaires(filters: SalairesFilters = {}, actif = true) {
+  return useQuery({
+    queryKey: ['salaires', 'arrieres', filters],
+    queryFn: () => getArrieresSalaires(filters),
+    enabled: actif,
   });
 }
 

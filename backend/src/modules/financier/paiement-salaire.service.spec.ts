@@ -125,6 +125,9 @@ function build(opts: {
     authz as any,
     remboursements as any,
     push as any,
+    // Historique des salaires : sans période enregistrée, le service se replie
+    // sur la fiche de l'employé — c'est ce que ces tests exercent.
+    { salaireDuMois: async () => null, salairesDuMois: async () => new Map() } as any,
   );
   return { service, ledger, saved, repo, remboursements, push, creditRepo };
 }

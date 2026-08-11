@@ -10,6 +10,7 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { PaiementSalaire, SourceFonds } from './entities/paiement-salaire.entity';
 import { Caisse } from './entities/caisse.entity';
 import { Employe } from '@modules/referentiel/entities/employe.entity';
+import { EmployesService } from '@modules/referentiel/employes.service';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { PushService } from '@modules/notifications/push.service';
@@ -97,6 +98,7 @@ export class PaiementSalaireService {
     private readonly authz: AuthorizationService,
     private readonly remboursements: CreditRemboursementService,
     private readonly push: PushService,
+    private readonly employes: EmployesService,
   ) {}
 
   /** Mois courant au format AAAA-MM. */
@@ -128,8 +130,13 @@ export class PaiementSalaireService {
    */
   async listerPourPeriode(
     periode: string,
-    opts: { search?: string; directionId?: string } = {},
-  ): Promise<{ periode: string; lignes: LigneSalaire[] }> {
+    opts: { search?: string; directionId?: string; statut?: 'PAYE' | 'NON_PAYE' } = {},
+  ): Promise<{
+    periode: string;
+    lignes: LigneSalaire[];
+    /** Effectifs par état AVANT filtrage, pour alimenter les onglets. */
+    stats: { total: number; payes: number; nonPayes: number };
+  }> {
     const p = PaiementSalaireService.normaliserPeriode(periode);
 
     const qb = this.employeRepo
@@ -161,9 +168,12 @@ export class PaiementSalaireService {
     const situations = await this.remboursements.situations(credits.map((c) => String(c.id)));
     const creditParEmploye = new Map(credits.map((c) => [String(c.employeId), c]));
 
-    return {
-      periode: p,
-      lignes: employes.map((e) => {
+    // Salaire EN VIGUEUR CE MOIS-LÀ, et non le salaire courant : sans ça, une
+    // augmentation d'août ferait payer le nouveau montant pour un juillet resté
+    // impayé. Repli sur la fiche pour un employé sans historique.
+    const salairesDuMois = await this.employes.salairesDuMois(ids, p);
+
+    const toutesLignes: LigneSalaire[] = employes.map((e) => {
         const pay = parEmploye.get(String(e.id));
         const credit = creditParEmploye.get(String(e.id));
         const situation = credit ? situations[String(credit.id)] : undefined;
@@ -173,13 +183,16 @@ export class PaiementSalaireService {
         const mensualite = credit && echeance !== null ? situation!.mensualite : null;
         // Aucune retenue avant le mois du décaissement.
         const avantDecaissement = credit ? p < String(credit.dateDebut).slice(0, 7) : false;
+        // Le salaire de CE mois. Repli sur la fiche pour un employé antérieur à
+        // l'historisation et dont la reprise n'aurait rien produit.
+        const salaireMois = salairesDuMois.get(String(e.id)) ?? e.salaire ?? null;
         return {
           employeId: String(e.id),
           matricule: e.matricule,
           nom: e.nom,
           prenoms: (e as any).prenoms ?? null,
           directionId: e.directionId ? String(e.directionId) : null,
-          salaire: e.salaire ?? null,
+          salaire: salaireMois,
           paiement: pay
             ? {
                 id: String(pay.id),
@@ -198,13 +211,140 @@ export class PaiementSalaireService {
                   nbMois: credit.nbMois,
                   montant: mensualite,
                   deviseId: String(credit.deviseId),
-                  salaireInsuffisant: Number(e.salaire ?? 0) < Number(mensualite),
+                  salaireInsuffisant: Number(salaireMois ?? 0) < Number(mensualite),
                   // Ce que l'employé pourra au mieux verser ce mois-ci.
-                  maxPrelevable: e.salaire ?? '0',
+                  maxPrelevable: salaireMois ?? '0',
                 }
               : null,
-        };
-      }),
+      };
+    });
+
+    // Les compteurs portent sur l'ensemble de la période (recherche et direction
+    // déjà appliquées), pas sur la liste filtrée : sinon l'onglet actif afficherait
+    // toujours le total, et les autres zéro.
+    const payes = toutesLignes.filter((l) => l.paiement !== null).length;
+    const stats = { total: toutesLignes.length, payes, nonPayes: toutesLignes.length - payes };
+
+    const lignes =
+      opts.statut === 'PAYE'
+        ? toutesLignes.filter((l) => l.paiement !== null)
+        : opts.statut === 'NON_PAYE'
+          ? toutesLignes.filter((l) => l.paiement === null)
+          : toutesLignes;
+
+    return { periode: p, lignes, stats };
+  }
+
+  /** Mois d'une période 'AAAA-MM', décalé de `n` mois. */
+  private static decalerPeriode(periode: string, n: number): string {
+    const [a, m] = periode.split('-').map(Number);
+    const d = new Date(Date.UTC(a, m - 1 + n, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+
+  /** Profondeur maximale de recherche des arriérés, en mois. */
+  static readonly MAX_MOIS_ARRIERES = 24;
+
+  /**
+   * Salaires restés impayés sur les mois ANTÉRIEURS à la période demandée.
+   *
+   * Sert le cas de l'employé absent le jour de la paie : il n'a pas été réglé ce
+   * mois-là, et on le paie à son retour. Sans cette vue, il fallait rouvrir chaque
+   * mois passé un par un pour retrouver qui restait à payer.
+   *
+   * Un salaire n'est dû qu'à partir du mois d'ENTRÉE de l'employé dans
+   * l'application (`created_at`) : la fiche ne porte pas de date d'embauche, et
+   * réclamer des mois antérieurs à sa création serait faux. Les employés importés
+   * en masse sont donc dus à partir de leur import — la vue sous-estime plutôt
+   * qu'elle ne sur-réclame.
+   */
+  async listerArrieres(
+    periode: string,
+    opts: { search?: string; directionId?: string } = {},
+  ): Promise<{
+    periode: string;
+    lignes: Array<{
+      employeId: string;
+      matricule: string;
+      nom: string;
+      prenoms: string | null;
+      directionId: string | null;
+      periode: string;
+      salaire: string | null;
+    }>;
+    stats: { nb: number; employesConcernes: number };
+  }> {
+    const p = PaiementSalaireService.normaliserPeriode(periode);
+    const plancher = PaiementSalaireService.decalerPeriode(p, -PaiementSalaireService.MAX_MOIS_ARRIERES);
+
+    const qb = this.employeRepo.createQueryBuilder('e').where('e.estActif = :a', { a: true });
+    if (opts.directionId) qb.andWhere('e.direction_id = :d', { d: opts.directionId });
+    if (opts.search && opts.search.trim()) {
+      const s = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        '(e.matricule LIKE :s ESCAPE :esc OR e.nom LIKE :s ESCAPE :esc OR e.prenoms LIKE :s ESCAPE :esc)',
+        { s, esc: '\\' },
+      );
+    }
+    const employes = await qb.orderBy('e.nom', 'ASC').addOrderBy('e.prenoms', 'ASC').getMany();
+    if (employes.length === 0) return { periode: p, lignes: [], stats: { nb: 0, employesConcernes: 0 } };
+
+    // Un seul aller-retour : les paiements déjà faits sur toute la fenêtre.
+    const payes = await this.repo.find({
+      where: { employeId: In(employes.map((e) => String(e.id))) as any, statut: 'PAYE' },
+    });
+    const dejaPaye = new Set(payes.map((x) => `${x.employeId}|${x.periode}`));
+
+    const lignes: Array<{
+      employeId: string; matricule: string; nom: string; prenoms: string | null;
+      directionId: string | null; periode: string; salaire: string | null;
+    }> = [];
+
+    // Le salaire varie d'un mois à l'autre : on résout chaque mois séparément,
+    // sinon un arriéré de juillet serait chiffré au salaire d'aujourd'hui.
+    const moisRencontres = new Set<string>();
+    for (const e of employes) {
+      const d = new Date(e.createdAt);
+      let m = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      if (m < plancher) m = plancher;
+      while (m < p) {
+        moisRencontres.add(m);
+        m = PaiementSalaireService.decalerPeriode(m, 1);
+      }
+    }
+    const salaireParMois = new Map<string, Map<string, string>>();
+    for (const m of moisRencontres) {
+      salaireParMois.set(m, await this.employes.salairesDuMois(employes.map((e) => String(e.id)), m));
+    }
+
+    for (const e of employes) {
+      const entree = `${new Date(e.createdAt).getUTCFullYear()}-${String(
+        new Date(e.createdAt).getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
+      // Le mois courant est déjà couvert par la grille : on s'arrête au précédent.
+      let mois = entree > plancher ? entree : plancher;
+      while (mois < p) {
+        if (!dejaPaye.has(`${e.id}|${mois}`)) {
+          lignes.push({
+            employeId: String(e.id),
+            matricule: e.matricule,
+            nom: e.nom,
+            prenoms: (e as any).prenoms ?? null,
+            directionId: e.directionId ? String(e.directionId) : null,
+            periode: mois,
+            salaire: salaireParMois.get(mois)?.get(String(e.id)) ?? e.salaire ?? null,
+          });
+        }
+        mois = PaiementSalaireService.decalerPeriode(mois, 1);
+      }
+    }
+
+    // Du plus ancien au plus récent : on règle les arriérés dans l'ordre.
+    lignes.sort((a, b) => a.periode.localeCompare(b.periode) || a.nom.localeCompare(b.nom));
+    return {
+      periode: p,
+      lignes,
+      stats: { nb: lignes.length, employesConcernes: new Set(lignes.map((l) => l.employeId)).size },
     };
   }
 
@@ -240,7 +380,11 @@ export class PaiementSalaireService {
     }
 
     // Montant : celui fourni, sinon le salaire de la fiche.
-    const montant = (input.montant ?? employe.salaire ?? '').toString().trim();
+    // Le salaire du MOIS PAYÉ fait foi, pas celui d'aujourd'hui : régler un
+    // juillet impayé après une augmentation d'août doit verser le montant de
+    // juillet. Un montant explicite reste prioritaire (régularisation).
+    const salaireDuMois = await this.employes.salaireDuMois(String(employe.id), periode);
+    const montant = (input.montant ?? salaireDuMois ?? employe.salaire ?? '').toString().trim();
     if (!montant || !(Number(montant) > 0)) {
       throw new BadRequestException(
         `Aucun montant à payer : renseignez le salaire de ${employe.matricule} ou saisissez un montant.`,
