@@ -1,5 +1,6 @@
 import { IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength, Min, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateBonManuelDto {
   @ApiProperty({ description: 'Carnet ACTIF utilisé' })
@@ -19,7 +20,7 @@ export class CreateBonManuelDto {
 
   @ApiProperty({ description: 'Montant décaissé', example: '50000' })
   @IsNotEmpty()
-  @IsNumberString()
+  @IsMontant()
   montant!: string;
 
   // --- Mêmes informations qu'un bon normal ---

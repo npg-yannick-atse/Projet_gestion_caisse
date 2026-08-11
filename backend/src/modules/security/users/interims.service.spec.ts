@@ -190,10 +190,24 @@ describe('InterimsService.create — validations métier', () => {
     ).rejects.toThrow(/antérieure/i);
   });
 
-  it('refuse une date de début dans le passé', async () => {
+  it('refuse une date de début antérieure à aujourd’hui', async () => {
     await expect(
       service().create({ ...base, dateDebut: new Date(Date.now() - 86_400_000).toISOString() }, '10'),
-    ).rejects.toThrow(/passé/i);
+    ).rejects.toThrow(/antérieure à aujourd/i);
+  });
+
+  it('accepte un début situé plus tôt AUJOURD’HUI', async () => {
+    // Le contrôle portait sur l'instant : choisir 11h54 puis envoyer à 11h56
+    // suffisait à faire rejeter le formulaire (constaté en test le 10/08/2026).
+    // Un intérim qui démarre aujourd'hui est légitime.
+    const ceMatin = new Date();
+    ceMatin.setHours(0, 30, 0, 0);
+    await expect(
+      service().create(
+        { ...base, dateDebut: ceMatin.toISOString(), dateFin: new Date(Date.now() + 86_400_000).toISOString() },
+        '10',
+      ),
+    ).resolves.toBeDefined();
   });
 
   it("exige qu'on précise ce qui est délégué (rôle, profil ou permission)", async () => {

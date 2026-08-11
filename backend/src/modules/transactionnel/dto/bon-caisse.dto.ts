@@ -6,6 +6,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class PrepareBonCaisseDto {
   @ApiProperty({ description: 'Id du bon source' })
@@ -40,7 +41,7 @@ export class UpdateBonCaisseDto {
 
   @ApiProperty({ required: false, description: 'Surcharge du montant DECIMAL(19,4) en string' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montantAjuste?: string;
 
   @ApiProperty({ required: false })

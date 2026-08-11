@@ -20,9 +20,15 @@ export class ProfilsService {
   ) {}
 
   async createProfil(dto: CreateProfilDto): Promise<Profil> {
-    const existing = await this.profilRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : la contrainte UNIQUE compte les lignes soft-deleted, que
+    // `findOne` masque par défaut — sinon l'écran reçoit une erreur SQL brute.
+    const existing = await this.profilRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Profil avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par un profil supprimé. Choisissez un autre code.`
+          : `Profil avec le code ${dto.code} existe déjà`,
+      );
     }
     const profil = this.profilRepo.create(dto);
     return this.profilRepo.save(profil);
@@ -41,9 +47,13 @@ export class ProfilsService {
   async updateProfil(id: string, dto: UpdateProfilDto): Promise<Profil> {
     const profil = await this.findProfil(id);
     if (dto.code && dto.code !== profil.code) {
-      const existing = await this.profilRepo.findOne({ where: { code: dto.code } });
+      const existing = await this.profilRepo.findOne({ where: { code: dto.code }, withDeleted: true });
       if (existing) {
-        throw new ConflictException(`Profil avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(
+          existing.deletedAt
+            ? `Le code ${dto.code} est encore occupé par un profil supprimé. Choisissez un autre code.`
+            : `Profil avec le code ${dto.code} existe déjà`,
+        );
       }
     }
     Object.assign(profil, dto);

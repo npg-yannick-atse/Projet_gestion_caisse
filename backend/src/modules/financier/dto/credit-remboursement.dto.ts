@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsInt, IsNumberString, IsOptional, IsString, Min, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Min, MaxLength } from 'class-validator';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateRemboursementDto {
   @ApiPropertyOptional({
@@ -15,7 +16,7 @@ export class CreateRemboursementDto {
     description: 'Montant versé. Par défaut, la mensualité théorique.',
   })
   @IsOptional()
-  @IsNumberString({}, { message: 'Le montant doit être un nombre.' })
+  @IsMontant()
   montant?: string;
 
   @ApiPropertyOptional({

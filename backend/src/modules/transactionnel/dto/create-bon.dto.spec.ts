@@ -134,7 +134,21 @@ describe('CreateBonDto — champs structurants', () => {
   it('refuse un montant qui n’est pas un nombre', () => {
     expect(
       valider({ ...bon, soubons: [{ ...sousBon, montant: 'beaucoup' }] }),
-    ).toContain('Le montant doit être un nombre.');
+    ).toContain('Montant invalide : chiffres uniquement, avec un point comme séparateur décimal.');
+  });
+
+  it('refuse un montant dépassant la capacité de la colonne', () => {
+    // DECIMAL(19,4) s'arrête à 15 chiffres entiers. Au-delà, le pilote SQL
+    // échouait avec un message technique affiché tel quel à l'utilisateur.
+    expect(
+      valider({ ...bon, soubons: [{ ...sousBon, montant: '1'.repeat(20) }] }),
+    ).toContain('Montant trop grand (maximum 999 999 999 999 999,9999).');
+  });
+
+  it('accepte le montant maximal exact', () => {
+    expect(
+      valider({ ...bon, soubons: [{ ...sousBon, montant: '999999999999999.9999' }] }),
+    ).toHaveLength(0);
   });
 
   it('refuse un identifiant de rattachement non numérique', () => {

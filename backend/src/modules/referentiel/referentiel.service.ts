@@ -138,9 +138,15 @@ export class ReferentielService {
   }
 
   async createPartenaire(dto: CreatePartenaireDto, userId: string): Promise<Partenaire> {
-    const existing = await this.partenaireRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : la contrainte UNIQUE compte les lignes soft-deleted, que
+    // `findOne` masque par défaut — sinon l'écran reçoit une erreur SQL brute.
+    const existing = await this.partenaireRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Un partenaire avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par un partenaire supprimé. Choisissez un autre code.`
+          : `Un partenaire avec le code ${dto.code} existe déjà`,
+      );
     }
     const p = this.partenaireRepo.create({
       code: dto.code,
@@ -163,9 +169,13 @@ export class ReferentielService {
   async updatePartenaire(id: string, dto: UpdatePartenaireDto, userId: string): Promise<Partenaire> {
     const p = await this.findPartenaire(id);
     if (dto.code && dto.code !== p.code) {
-      const dup = await this.partenaireRepo.findOne({ where: { code: dto.code } });
+      const dup = await this.partenaireRepo.findOne({ where: { code: dto.code }, withDeleted: true });
       if (dup && String(dup.id) !== String(p.id)) {
-        throw new ConflictException(`Un partenaire avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(
+          dup.deletedAt
+            ? `Le code ${dto.code} est encore occupé par un partenaire supprimé. Choisissez un autre code.`
+            : `Un partenaire avec le code ${dto.code} existe déjà`,
+        );
       }
       p.code = dto.code;
     }
@@ -229,9 +239,14 @@ export class ReferentielService {
   }
 
   async createCostCenter(dto: CreateCostCenterDto, userId: string): Promise<CostCenter> {
-    const existing = await this.costCenterRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : voir createPartenaire — un code supprimé reste occupé en base.
+    const existing = await this.costCenterRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Un centre de coût avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par un centre de coût supprimé. Choisissez un autre code.`
+          : `Un centre de coût avec le code ${dto.code} existe déjà`,
+      );
     }
     const cc = this.costCenterRepo.create({
       code: dto.code,

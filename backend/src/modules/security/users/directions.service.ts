@@ -12,9 +12,13 @@ export class DirectionsService {
   ) {}
 
   async create(dto: CreateDirectionDto): Promise<Direction> {
-    const existing = await this.directionRepo.findOne({ where: { code: dto.code } });
+    const existing = await this.directionRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Direction avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par une direction supprimée. Choisissez un autre code.`
+          : `Direction avec le code ${dto.code} existe déjà`,
+      );
     }
 
     const direction = this.directionRepo.create(dto);
@@ -44,9 +48,13 @@ export class DirectionsService {
     const direction = await this.findOne(id);
     
     if (dto.code && dto.code !== direction.code) {
-      const existing = await this.directionRepo.findOne({ where: { code: dto.code } });
+      const existing = await this.directionRepo.findOne({ where: { code: dto.code }, withDeleted: true });
       if (existing) {
-        throw new ConflictException(`Direction avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(
+          existing.deletedAt
+            ? `Le code ${dto.code} est encore occupé par une direction supprimée. Choisissez un autre code.`
+            : `Direction avec le code ${dto.code} existe déjà`,
+        );
       }
     }
 

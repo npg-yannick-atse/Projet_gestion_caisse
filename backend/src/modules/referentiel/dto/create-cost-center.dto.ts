@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateCostCenterDto {
   @ApiProperty()
@@ -21,6 +22,6 @@ export class CreateCostCenterDto {
 
   @ApiProperty({ required: false, description: 'Budget mensuel — DECIMAL(19,4) en string' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   budgetMensuel?: string;
 }

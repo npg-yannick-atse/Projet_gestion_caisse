@@ -1,5 +1,6 @@
 import { IsIn, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateCreditDto {
   @ApiProperty()
@@ -9,7 +10,7 @@ export class CreateCreditDto {
 
   @ApiProperty({ description: 'Montant du crédit. DECIMAL(19,4) en string.' })
   @IsNotEmpty()
-  @IsNumberString()
+  @IsMontant()
   montant!: string;
 
   @ApiProperty({ description: 'Nombre de mois de remboursement' })
@@ -35,7 +36,7 @@ export class CreateCreditDto {
 export class UpdateCreditDto {
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montant?: string;
 
   @ApiProperty({ required: false })

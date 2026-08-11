@@ -7,6 +7,52 @@ Dernière mise à jour : **10/08/2026**.
 
 ---
 
+## 0. Un code supprimé reste réservé pour toujours
+
+**Statut : à préparer — le symptôme est traité, la cause non.**
+
+Supprimer ne supprime pas : `deleted_at` est renseignée, la ligne reste. Or les
+contraintes `UNIQUE (code)` **ne distinguent pas** une ligne vivante d'une ligne
+supprimée. Un code libéré par une suppression demeure donc pris définitivement.
+
+**Constaté deux fois le 10/08/2026 :**
+
+- `ref_pays` — la Côte d'Ivoire, premier pays du référentiel (2236 partenaires),
+  était introuvable : l'import ISO n'avait pu la recréer, son code étant retenu
+  par une ligne supprimée. Débloqué au cas par cas par la migration `0049`.
+- `fin_caisse` — la testeuse a créé une caisse `CAT_CAISSIER` le 05/08, l'a
+  supprimée 34 secondes plus tard, et n'a pas pu la recréer le 10/08.
+
+**Déjà fait (10/08)** : les 14 garde-fous applicatifs interrogent désormais la
+base avec `withDeleted: true` et renvoient un **409 avec un message clair**
+(« le code est encore occupé par une caisse supprimée ») au lieu de laisser
+remonter l'erreur SQL brute « Violation of UNIQUE KEY constraint ». Verrouillé
+par `caisses-code-unique.spec.ts`, validé par mutation.
+
+Ces garde-fous étaient aveugles parce que `deleted_at` est un
+`@DeleteDateColumn` : TypeORM masque les lignes supprimées par défaut, alors que
+la contrainte les compte. Le code et la base n'étaient pas d'accord sur le sens
+du mot « exister ».
+
+**Ce qui reste** : le code demeure inutilisable. Le correctif de fond est un
+**index unique filtré**, qui ne compte que les lignes vivantes :
+
+```sql
+CREATE UNIQUE INDEX UQ_fin_caisse_code
+  ON dbo.fin_caisse(code) WHERE deleted_at IS NULL;
+```
+
+À appliquer sur toutes les tables concernées : `fin_caisse`, `fin_portefeuille`,
+`ref_pays`, `ref_partenaire`, `ref_cost_center`, `ref_division`, `sec_role`,
+`sec_permission`, `sec_profil`, `ref_direction`.
+
+**Points de vigilance** : il faut supprimer l'ancienne contrainte avant de créer
+l'index, vérifier qu'aucun doublon n'existe déjà parmi les lignes vivantes, et
+mesurer l'effet sur les requêtes qui s'appuyaient sur l'index actuel. À faire
+hors session de test.
+
+---
+
 ## 1. Alimenter une caisse dans une devise étrangère
 
 **Statut : à arbitrer — bloquant à l'usage.**
@@ -127,3 +173,63 @@ référentiel local, sans appel SAP).
 En interne en revanche, `verifierSapAvantEnvoi` et l'état `sapCheck`
 (`BonCreatePage.tsx`) couvrent aussi le contrôle local. À renommer pour que le
 code raconte la même histoire que l'écran.
+
+---
+
+## 6. Les avances sur salaire ne sont jamais récupérées
+
+**Statut : à arbitrer — de l'argent dû n'est tracé nulle part.**
+
+L'avance existe sous **deux formes**, et aucune n'est récupérée :
+
+- **Type de bon `AVANCE`** — un décaissement pur, sans partenaire ni client.
+  **4 bons** déjà créés.
+- **Type de bénéfice `AVANCE` (« Avance sur salaire »)** — enregistre un droit,
+  ne prélève rien.
+
+Le paiement du salaire ne retient **que** les mensualités d'un `fin_credit` dont
+le prélèvement a été autorisé. Ni les avances ni les bénéfices n'entrent dans le
+calcul. Un employé qui prend une avance de 200 000 le 15 touche donc son salaire
+**entier** le jour de la paie.
+
+**La configuration, elle, a été pensée pour la retenue** — et elle est intacte :
+
+```
+AVANCE · jour_min_mois = 15 · plafond_pourcentage_salaire = 50 %
+```
+
+Ces deux règles n'ont de sens que si l'avance est reprise sur la paie suivante :
+on n'avance que sur un demi-mois **déjà travaillé**, et le plafond à 50 % garantit
+que la retenue tient **sur une seule paie** en laissant la moitié du salaire à
+l'employé. Un crédit, lui, n'a ni jour minimum ni plafond, parce qu'il s'étale.
+
+**Comparaison avec le crédit :**
+
+| | Crédit | Avance |
+|---|---|---|
+| Table dédiée | `fin_credit` | ❌ |
+| Échéancier | ✅ | ❌ |
+| Prélèvement sur salaire | ✅ | ❌ |
+| Replanification | ✅ | ❌ |
+| Écran de suivi | ✅ | ❌ |
+
+**Deux mises en œuvre possibles :**
+
+1. **Réutiliser le crédit** avec `nbMois = 1`. Tout existe déjà — autorisation de
+   prélèvement, retenue à la paie, salaire insuffisant, replanification. Aucune
+   logique neuve. *Réserve* : impose le circuit d'approbation du DAF à chaque
+   avance, peut-être lourd pour un geste courant et plafonné.
+2. **Une retenue dédiée** : l'avance produit une ligne « à retenir sur la
+   prochaine paie », sans approbation. Plus léger à l'usage, mais c'est un second
+   mécanisme à écrire et à tester.
+
+Recommandation : commencer par (1). Le comportement est éprouvé ; alléger ensuite
+si le circuit s'avère trop lourd coûte moins que l'inverse.
+
+**Questions ouvertes :**
+
+1. **L'approbation du DAF est-elle requise pour une avance**, ou doit-elle
+   pouvoir être accordée directement ? C'est ce qui départage les deux options.
+2. **Les 4 avances déjà décaissées ont-elles été récupérées ?** Si non, c'est une
+   créance que l'application ne suit pas, et il faudra décider comment la
+   régulariser.

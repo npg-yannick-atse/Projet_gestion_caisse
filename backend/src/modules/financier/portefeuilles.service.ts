@@ -34,9 +34,17 @@ export class PortefeuillesService {
   }
 
   async create(dto: CreatePortefeuilleDto, userId: string): Promise<Portefeuille> {
-    const existing = await this.portefeuilleRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : la contrainte UNIQUE en base compte aussi les lignes
+    // soft-deleted, que `findOne` masque par défaut. Sans cette option, le code
+    // d'un portefeuille supprimé passait le contrôle et faisait remonter une
+    // erreur SQL brute à l'écran.
+    const existing = await this.portefeuilleRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Un portefeuille avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par un portefeuille supprimé. Choisissez un autre code.`
+          : `Un portefeuille avec le code ${dto.code} existe déjà`,
+      );
     }
     // Portefeuille de DIRECTION : le budget mensuel est hérité (non saisi) du centre
     // de coût de la direction. Portefeuille USER : budget saisi manuellement.
@@ -65,8 +73,14 @@ export class PortefeuillesService {
   async update(id: string, dto: UpdatePortefeuilleDto, userId: string): Promise<Portefeuille> {
     const pf = await this.findOne(id);
     if (dto.code && dto.code !== pf.code) {
-      const conflict = await this.portefeuilleRepo.findOne({ where: { code: dto.code } });
-      if (conflict) throw new ConflictException(`Un portefeuille avec le code ${dto.code} existe déjà`);
+      const conflict = await this.portefeuilleRepo.findOne({ where: { code: dto.code }, withDeleted: true });
+      if (conflict) {
+        throw new ConflictException(
+          conflict.deletedAt
+            ? `Le code ${dto.code} est encore occupé par un portefeuille supprimé. Choisissez un autre code.`
+            : `Un portefeuille avec le code ${dto.code} existe déjà`,
+        );
+      }
       pf.code = dto.code;
     }
     if (dto.libelle !== undefined) pf.libelle = dto.libelle;

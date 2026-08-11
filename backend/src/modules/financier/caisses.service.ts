@@ -31,9 +31,18 @@ export class CaissesService {
   ) {}
 
   async create(dto: CreateCaisseDto, userId: string): Promise<Caisse> {
-    const existing = await this.caisseRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : `UQ_fin_caisse_code` n'est pas filtrée sur `deleted_at`, donc
+    // un code libéré par une suppression reste occupé en base. Sans cette option,
+    // `findOne` masque les lignes soft-deleted (@DeleteDateColumn) : le contrôle
+    // laissait passer ce que la base refuse, et l'écran affichait l'erreur SQL
+    // brute « Violation of UNIQUE KEY constraint ».
+    const existing = await this.caisseRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Une caisse avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par une caisse supprimée. Choisissez un autre code.`
+          : `Une caisse avec le code ${dto.code} existe déjà`,
+      );
     }
     const caisse = this.caisseRepo.create({
       code: dto.code,
@@ -50,8 +59,14 @@ export class CaissesService {
   async update(id: string, dto: UpdateCaisseDto, userId: string): Promise<Caisse> {
     const caisse = await this.findOne(id);
     if (dto.code && dto.code !== caisse.code) {
-      const conflict = await this.caisseRepo.findOne({ where: { code: dto.code } });
-      if (conflict) throw new ConflictException(`Une caisse avec le code ${dto.code} existe déjà`);
+      const conflict = await this.caisseRepo.findOne({ where: { code: dto.code }, withDeleted: true });
+      if (conflict) {
+        throw new ConflictException(
+          conflict.deletedAt
+            ? `Le code ${dto.code} est encore occupé par une caisse supprimée. Choisissez un autre code.`
+            : `Une caisse avec le code ${dto.code} existe déjà`,
+        );
+      }
       caisse.code = dto.code;
     }
     if (dto.libelle !== undefined) caisse.libelle = dto.libelle;

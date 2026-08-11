@@ -124,8 +124,17 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('La date de début doit être antérieure à la date de fin');
     }
 
-    if (dateDebut < new Date()) {
-      throw new BadRequestException('La date de début ne peut pas être dans le passé');
+    // Comparaison au JOUR, pas à l'instant : un intérim qui démarre aujourd'hui
+    // est légitime même si l'heure choisie vient de passer. Comparer à `new Date()`
+    // refusait un formulaire rempli en deux minutes — constaté en test le
+    // 10/08/2026 : début choisi à 11:54, envoyé à 11:56, rejeté.
+    const debutJour = new Date(dateDebut);
+    debutJour.setHours(0, 0, 0, 0);
+    const aujourdhui = new Date();
+    aujourdhui.setHours(0, 0, 0, 0);
+
+    if (debutJour < aujourdhui) {
+      throw new BadRequestException("La date de début ne peut pas être antérieure à aujourd'hui");
     }
 
     if (!dto.permissionId && !dto.roleTransfereId && !dto.profilTransfereId) {

@@ -1,5 +1,7 @@
 import { IsNotEmpty, IsOptional, IsNumberString, IsString, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
+import { RequisAvec } from '@common/validators/requis-avec.validator';
 
 export class EncaissementDto {
   @ApiProperty({ description: 'Caisse qui reçoit l\'argent (doit être OUVERTE)' })
@@ -9,7 +11,7 @@ export class EncaissementDto {
 
   @ApiProperty({ description: 'Montant encaissé. DECIMAL(19,4) en string.', example: '100000.0000' })
   @IsNotEmpty()
-  @IsNumberString()
+  @IsMontant()
   montant!: string;
 
   @ApiProperty({
@@ -22,10 +24,19 @@ export class EncaissementDto {
   @IsNumberString()
   deviseId?: string;
 
-  @ApiProperty({ required: false, description: 'Nom du client qui paie' })
+  @ApiProperty({
+    required: false,
+    description:
+      "Nom du client qui paie. Ne peut être renseigné qu'avec son code client : " +
+      'il découle du client choisi dans le référentiel, il ne se saisit pas librement.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(200)
+  @RequisAvec(
+    'clientNumero',
+    "Choisissez le client dans la liste : un nom de client ne peut pas être enregistré sans son code client.",
+  )
   clientNom?: string;
 
   @ApiProperty({ required: false, description: 'Numéro / identifiant du client' })

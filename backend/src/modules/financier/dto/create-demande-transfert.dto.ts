@@ -1,6 +1,7 @@
 import { IsBoolean, IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import type { TransfertCompteType } from '../entities/demande-transfert.entity';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateDemandeTransfertDto {
   @ApiProperty({ enum: ['CAISSE', 'PORTEFEUILLE'] })
@@ -23,7 +24,7 @@ export class CreateDemandeTransfertDto {
 
   @ApiProperty({ description: 'Montant DECIMAL(19,4) en string' })
   @IsNotEmpty()
-  @IsNumberString()
+  @IsMontant()
   montant!: string;
 
   @ApiProperty()

@@ -1,6 +1,7 @@
 import { IsBoolean, IsIn, IsNumberString, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import type { ProprietaireType } from '../entities/portefeuille.entity';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class UpdatePortefeuilleDto {
   @ApiProperty({ required: false })
@@ -42,7 +43,7 @@ export class UpdatePortefeuilleDto {
 
   @ApiProperty({ required: false, description: 'Solde initial du portefeuille' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   soldeInitial?: string;
 
   @ApiProperty({ required: false, description: 'Plafond budgétaire mensuel (réajusté chaque mois, sans report). Vide = pas de plafond mensuel.' })
@@ -50,7 +51,7 @@ export class UpdatePortefeuilleDto {
   // Chaîne vide = effacer le plafond : on saute la validation numérique dans ce cas
   // (le service interprète '' comme null). @IsNumberString rejette '' sinon.
   @ValidateIf((o) => o.budgetMensuel !== '')
-  @IsNumberString()
+  @IsMontant()
   budgetMensuel?: string;
 
   @ApiProperty({ required: false })

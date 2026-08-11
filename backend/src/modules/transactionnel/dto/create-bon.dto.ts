@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 /**
  * Création d'un bon et de ses sous-bons.
@@ -36,7 +37,7 @@ export class CreateSousBonDto {
 
   @ApiProperty({ example: '50000' })
   @IsNotEmpty()
-  @IsNumberString({}, { message: 'Le montant doit être un nombre.' })
+  @IsMontant()
   montant!: string;
 
   @ApiProperty({ required: false })

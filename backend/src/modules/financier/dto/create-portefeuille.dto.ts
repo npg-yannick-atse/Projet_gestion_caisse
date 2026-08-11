@@ -1,6 +1,7 @@
 import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ProprietaireType } from '../entities/portefeuille.entity';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreatePortefeuilleDto {
   @ApiProperty()
@@ -41,11 +42,11 @@ export class CreatePortefeuilleDto {
 
   @ApiProperty({ required: false, default: '0' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   soldeInitial?: string;
 
   @ApiProperty({ required: false, description: 'Plafond budgétaire mensuel (réajusté chaque mois, sans report). Vide = pas de plafond mensuel.' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   budgetMensuel?: string;
 }

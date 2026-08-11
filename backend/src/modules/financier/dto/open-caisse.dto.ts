@@ -1,5 +1,6 @@
-import { IsOptional, IsNumberString } from 'class-validator';
+import { IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class OpenCaisseDto {
   @ApiProperty({
@@ -8,6 +9,6 @@ export class OpenCaisseDto {
     example: '0',
   })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   soldeOuverture?: string;
 }

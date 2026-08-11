@@ -2,6 +2,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logge
 import { Request, Response } from 'express';
 import { QueryFailedError } from 'typeorm';
 import { testLogger } from '@common/logging/test-logger';
+import { messageErreurSql } from '@common/errors/message-erreur-sql';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -15,6 +16,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | object = 'Erreur interne du serveur';
     let code = 'INTERNAL_ERROR';
+    /** Texte d'origine, réservé aux journaux — jamais renvoyé au client. */
+    let messageBrut: string | null = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -23,9 +26,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
       code = (resp as any)?.error ?? exception.constructor.name;
     } else if (exception instanceof QueryFailedError) {
       status = HttpStatus.BAD_REQUEST;
-      message = exception.message;
+      // Le texte brut du pilote SQL ne sort JAMAIS vers le client : illisible
+      // pour l'utilisateur, et il expose tables, colonnes et contraintes. Il
+      // reste intégralement journalisé juste en dessous.
+      message = messageErreurSql(exception.message);
+      messageBrut = exception.message;
       code = 'DB_QUERY_FAILED';
-      this.logger.error(`SQL: ${(exception as any).query ?? ''}`, exception.stack);
+      this.logger.error(
+        `SQL: ${(exception as any).query ?? ''} — ${exception.message}`,
+        exception.stack,
+      );
     } else if (exception instanceof Error) {
       message = exception.message;
       this.logger.error(exception.message, exception.stack);
@@ -43,6 +53,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         path: String(request.originalUrl || request.url || '').split('?')[0],
         userId: (request as { user?: { sub?: string } }).user?.sub ?? null,
         message: typeof message === 'string' ? message : JSON.stringify(message),
+        // Le texte SQL d'origine reste consigné ICI : c'est lui qui permet de
+        // diagnostiquer, alors que `message` est désormais la version montrée
+        // à l'utilisateur.
+        messageBrut: messageBrut ?? undefined,
         stack: exception instanceof Error ? exception.stack : undefined,
       });
     }

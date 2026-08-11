@@ -1,5 +1,6 @@
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 /**
  * Mise à jour d'un centre de coût.
@@ -20,6 +21,6 @@ export class UpdateCostCenterDto {
 
   @ApiProperty({ required: false, description: 'Budget mensuel — DECIMAL(19,4) en string, ou "" pour vider' })
   @IsOptional()
-  @IsString()
+  @IsMontant({ autoriserVide: true })
   budgetMensuel?: string;
 }

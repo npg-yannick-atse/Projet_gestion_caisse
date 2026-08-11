@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsMontant } from '@common/validators/montant.validator';
 
 export class CreateDemandeRechargeDto {
   @ApiProperty({ description: 'Montant demandé (DECIMAL 19,4)' })
   @IsNotEmpty()
   @IsString()
-  @Matches(/^\d+(\.\d{1,4})?$/, { message: 'Montant invalide' })
+  @IsMontant()
   montant!: string;
 
   @ApiProperty({ required: false })
@@ -28,7 +29,7 @@ export class TraiterDemandeRechargeDto {
   @ApiProperty({ required: false, description: 'Montant réellement rechargé (défaut = montant demandé)' })
   @IsOptional()
   @IsString()
-  @Matches(/^\d+(\.\d{1,4})?$/, { message: 'Montant invalide' })
+  @IsMontant()
   montant?: string;
 }
 

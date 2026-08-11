@@ -21,9 +21,15 @@ export class RolesService {
   ) {}
 
   async createRole(dto: CreateRoleDto): Promise<Role> {
-    const existing = await this.roleRepo.findOne({ where: { code: dto.code } });
+    // withDeleted : la contrainte UNIQUE compte les lignes soft-deleted, que
+    // `findOne` masque par défaut — sinon l'écran reçoit une erreur SQL brute.
+    const existing = await this.roleRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Rôle avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par un rôle supprimé. Choisissez un autre code.`
+          : `Rôle avec le code ${dto.code} existe déjà`,
+      );
     }
 
     const role = this.roleRepo.create(dto);
@@ -31,9 +37,13 @@ export class RolesService {
   }
 
   async createPermission(dto: CreatePermissionDto): Promise<Permission> {
-    const existing = await this.permissionRepo.findOne({ where: { code: dto.code } });
+    const existing = await this.permissionRepo.findOne({ where: { code: dto.code }, withDeleted: true });
     if (existing) {
-      throw new ConflictException(`Permission avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(
+        existing.deletedAt
+          ? `Le code ${dto.code} est encore occupé par une permission supprimée. Choisissez un autre code.`
+          : `Permission avec le code ${dto.code} existe déjà`,
+      );
     }
 
     const permission = this.permissionRepo.create(dto);
@@ -74,9 +84,13 @@ export class RolesService {
     }
 
     if (dto.code && dto.code !== role.code) {
-      const existing = await this.roleRepo.findOne({ where: { code: dto.code } });
+      const existing = await this.roleRepo.findOne({ where: { code: dto.code }, withDeleted: true });
       if (existing) {
-        throw new ConflictException(`Rôle avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(
+          existing.deletedAt
+            ? `Le code ${dto.code} est encore occupé par un rôle supprimé. Choisissez un autre code.`
+            : `Rôle avec le code ${dto.code} existe déjà`,
+        );
       }
     }
 
@@ -88,9 +102,13 @@ export class RolesService {
     const permission = await this.findPermission(id);
 
     if (dto.code && dto.code !== permission.code) {
-      const existing = await this.permissionRepo.findOne({ where: { code: dto.code } });
+      const existing = await this.permissionRepo.findOne({ where: { code: dto.code }, withDeleted: true });
       if (existing) {
-        throw new ConflictException(`Permission avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(
+          existing.deletedAt
+            ? `Le code ${dto.code} est encore occupé par une permission supprimée. Choisissez un autre code.`
+            : `Permission avec le code ${dto.code} existe déjà`,
+        );
       }
     }
 

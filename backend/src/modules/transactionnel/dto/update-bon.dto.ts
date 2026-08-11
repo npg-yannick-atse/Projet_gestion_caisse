@@ -6,6 +6,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsMontant } from '@common/validators/montant.validator';
 
 /**
  * Modification d'un bon (enveloppe). Seuls les champs portés par le bon lui-même
@@ -35,7 +36,7 @@ export class UpdateSousBonDto {
 
   @ApiProperty({ required: false, description: 'Montant DECIMAL(19,4) en string (> 0)' })
   @IsOptional()
-  @IsNumberString()
+  @IsMontant()
   montant?: string;
 
   @ApiProperty({ required: false, description: 'Chaîne vide => efface' })
