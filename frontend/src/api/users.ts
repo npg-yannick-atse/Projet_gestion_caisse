@@ -7,13 +7,18 @@ export interface UsersFilters {
   search?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
+  /** 'ACTIF' | 'INACTIF' — absent = les deux. */
+  statut?: StatutUtilisateur;
 }
+
+export type StatutUtilisateur = 'ACTIF' | 'INACTIF';
 
 export async function listUsers(filters: UsersFilters = {}): Promise<User[]> {
   const params: Record<string, string> = {};
   if (filters.search) params.search = filters.search;
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;
+  if (filters.statut) params.statut = filters.statut;
   const { data } = await api.get<User[]>('/users', { params });
   return data;
 }

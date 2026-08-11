@@ -99,6 +99,8 @@ export interface NatureOperation {
   id: string;
   code: string;
   libelle: string;
+  /** Centre de coût imposé par la nature — il n'est pas choisi séparément. */
+  costCenterId?: string | null;
   estActif: boolean;
 }
 

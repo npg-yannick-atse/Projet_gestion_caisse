@@ -165,6 +165,13 @@ function NaturesOperationPageInner() {
   const compteById = new Map(
     (naturesComptable ?? []).map((n) => [String(n.id), n.codeComptableSap ? `${n.codeComptableSap} — ${n.libelle}` : n.libelle]),
   );
+  // Le centre de coût d'une nature n'est plus une simple valeur par défaut : il
+  // s'impose au bon et y verrouille le champ. Le voir dans la liste permet de
+  // repérer d'un coup d'œil les natures qui n'en portent pas.
+  const { data: costCentersListe } = useCostCenters();
+  const ccById = new Map(
+    (costCentersListe ?? []).map((c) => [String(c.id), `${c.code} — ${c.libelle}`]),
+  );
   // null = formulaire fermé ; { } = création ; un objet = édition de cette nature.
   const [form, setForm] = useState<{ editing: NatureOperation | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NatureOperation | null>(null);
@@ -261,6 +268,7 @@ function NaturesOperationPageInner() {
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
+                <th className="px-4 py-2.5 font-semibold">Centre de coût</th>
                 <th className="px-4 py-2.5 font-semibold">Compte PCGG</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
@@ -270,7 +278,7 @@ function NaturesOperationPageInner() {
             <tbody>
               {natures && natures.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
                     Aucune nature comptable. Créez-en une pour pouvoir créer des bons.
                   </td>
                 </tr>
@@ -279,6 +287,13 @@ function NaturesOperationPageInner() {
                 <tr key={n.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{n.code}</td>
                   <td className="px-4 py-3">{n.libelle}</td>
+                  <td className="px-4 py-3 text-[#64748B]">
+                    {n.costCenterId ? (
+                      <span className="text-[11px]">{ccById.get(String(n.costCenterId)) ?? '—'}</span>
+                    ) : (
+                      <span className="text-[11px] text-[#B45309]">non rattaché</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[#64748B]">
                     {n.natureComptableId ? (
                       <span className="font-mono text-[11px]">{compteById.get(String(n.natureComptableId)) ?? '—'}</span>

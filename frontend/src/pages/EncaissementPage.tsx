@@ -4,7 +4,7 @@ import { useDevises } from '@/api/financierRef';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useEncaissement } from '@/api/encaissement';
-import { apiErrorMessage, formatMontant } from '@/lib/utils';
+import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { ClientSelect } from '@/components/ClientSelect';
@@ -12,6 +12,7 @@ import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
 import { useCaisseDevise } from '@/hooks/useCaisseDevise';
+import { AucuneCaisseMessage } from '@/components/AucuneCaisseMessage';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
@@ -185,7 +186,7 @@ export function EncaissementPage() {
                 </option>
               ))}
             </select>
-            {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+            <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
             {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
                 à la place du caissier, l'argent est dans un coffre précis. */}
             {!caisseId && deviseId && caissesPourDevise(deviseId).length > 1 && (
@@ -241,19 +242,6 @@ export function EncaissementPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="clientNom" className={labelClass}>
-              Client (nom)
-            </label>
-            <input
-              id="clientNom"
-              className={inputClass}
-              value={clientNom}
-              onChange={(e) => setClientNom(e.target.value)}
-              placeholder="Nom du client / payeur"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
             <label htmlFor="clientNumero" className={labelClass}>
               Client (numéro)
             </label>
@@ -264,10 +252,25 @@ export function EncaissementPage() {
               value={clientNumero}
               onChange={(numero, raisonSociale) => {
                 setClientNumero(numero);
-                // Le nom déjà saisi à la main n'est pas écrasé sans raison.
-                if (raisonSociale && !clientNom.trim()) setClientNom(raisonSociale);
+                // Le nom DÉCOULE du client choisi : il n'est plus saisissable,
+                // sans quoi un encaissement pouvait porter n'importe quel nom
+                // sans qu'aucun client réel n'y corresponde.
+                setClientNom(numero ? (raisonSociale ?? '') : '');
               }}
               placeholder="Rechercher un client (optionnel)…"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="clientNom" className={labelClass}>
+              Client (nom)
+            </label>
+            <input
+              id="clientNom"
+              className={cn(inputClass, 'bg-[#F8FAFC] text-[#64748B]')}
+              value={clientNom}
+              readOnly
+              placeholder="Découle du client sélectionné"
             />
           </div>
 

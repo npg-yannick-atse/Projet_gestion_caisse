@@ -355,6 +355,9 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           }
           tone="amber"
           sparkValues={validatedTimeline?.map((p) => p.count)}
+          // La file d'attente : les bons validés qu'il reste à décaisser.
+          to="/bons"
+          searchObj={{ statut: 'VALIDE' }}
         />
         <Kpi
           icon={ArrowUpCircle}
@@ -373,12 +376,17 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           sparkValues={decaissedTimeline?.map((p) => p.count)}
           to="/operations"
         />
+        {/* Mêmes destinations que leurs homologues « aujourd'hui » : sans `to`,
+            ces tuiles se soulevaient au survol comme les autres mais ne menaient
+            nulle part — signalé en test le 11/08/2026 comme « le bouton ne
+            fonctionne pas ». */}
         <Kpi
           icon={ArrowUpCircle}
           label="Encaissé ce mois"
           value={encaissementsMois.length}
           sub={formatMontant(encaissementsMoisSum)}
           tone="green"
+          to="/encaissement"
         />
         <Kpi
           icon={Banknote}
@@ -387,6 +395,7 @@ export function CaissierDashboard({ user, showHero = true }: Props) {
           sub={formatMontant(decaissementsMoisSum)}
           tone="red"
           sparkValues={decaissedTimeline?.map((p) => Number(p.montant || 0))}
+          to="/operations"
         />
         <Kpi
           icon={XCircle}

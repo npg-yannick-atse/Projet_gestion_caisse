@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
@@ -484,17 +484,31 @@ export function Layout() {
     if (meQuery.data) setUser(meQuery.data);
   }, [meQuery.data, setUser]);
 
-  useEffect(() => {
-    if (meQuery.isError) {
-      logout();
-      navigate({ to: '/login' });
-    }
-  }, [meQuery.isError, logout, navigate]);
-
-  const handleLogout = () => {
+  /**
+   * Déconnexion : purge les jetons ET le cache des requêtes.
+   *
+   * Vider le cache sert deux fins — effacer l'erreur de `useMe` qui bloquait la
+   * reconnexion, et empêcher que les données du compte précédent restent
+   * visibles au suivant sur un poste partagé.
+   */
+  const viderSession = useCallback(() => {
     logout();
+    queryClient.clear();
     navigate({ to: '/login' });
-  };
+  }, [logout, queryClient, navigate]);
+
+  useEffect(() => {
+    // `&& !user` est indispensable : désactiver une requête n'efface pas son
+    // erreur. Après une déconnexion, `useMe` s'active (plus d'utilisateur),
+    // part sans jeton et prend un 401 ; cette erreur RESTE en cache. Sans cette
+    // garde, la reconnexion était annulée dans la foulée — l'utilisatrice
+    // devait actualiser la page pour pouvoir revenir (signalé le 10/08/2026).
+    if (meQuery.isError && !user) {
+      viderSession();
+    }
+  }, [meQuery.isError, user, viderSession]);
+
+  const handleLogout = viderSession;
 
   // Déconnexion automatique après 1 h d'inactivité (souris/clavier), onglet ouvert ou non.
   useIdleLogout(handleLogout, !!user);

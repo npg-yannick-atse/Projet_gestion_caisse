@@ -78,6 +78,8 @@ export default function NouvelleDemandeScreen() {
   }, [typeBonsList, typeBonId]);
 
   const selectedPf = portefeuilles.find((p) => p.id === portefeuilleId);
+  // Le centre de coût est verrouillé dès que la nature choisie en impose un.
+  const ccImpose = !!naturesList.find((n) => n.id === natureOperationId)?.costCenterId;
 
   // Champs conditionnels selon le type de bon (comme le web).
   const selectedType = typeBonsList.find((t) => t.id === typeBonId);
@@ -215,15 +217,28 @@ export default function NouvelleDemandeScreen() {
                 Aucun portefeuille ne vous est rattaché. Contactez un administrateur.
               </Text>
             )}
-            <Select label="Centre de coût" required value={costCenterId} options={ccOptions} onChange={setCostCenterId} />
+            {/* La nature vient AVANT le centre de coût : c'est elle qui le décide. */}
             <Select
               label="Nature comptable"
               required
               searchable
               value={natureOperationId}
               options={natureOptions}
-              onChange={setNatureOperationId}
+              onChange={(v) => {
+                setNatureOperationId(v);
+                // Chaque nature est rattachée à son centre de coût. Les choisir
+                // séparément produisait des couples incohérents.
+                const cc = naturesList.find((n) => n.id === v)?.costCenterId;
+                if (cc) setCostCenterId(String(cc));
+              }}
               placeholder="— Choisir —"
+            />
+            <Select
+              label={ccImpose ? 'Centre de coût (déterminé par la nature)' : 'Centre de coût'}
+              required
+              value={costCenterId}
+              options={ccImpose ? ccOptions.filter((o) => o.value === costCenterId) : ccOptions}
+              onChange={setCostCenterId}
             />
             {perimeter && naturesList.length === 0 && (
               <Text style={{ color: '#DC2626', fontSize: 12, marginTop: -6, marginBottom: 4 }}>

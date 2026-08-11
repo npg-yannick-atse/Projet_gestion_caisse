@@ -200,6 +200,9 @@ export function GestionnaireDashboard({ user }: Props) {
           sub="Total période"
           tone="green"
           sparkValues={timeline?.slice(-7).map((p) => Number(p.montant || 0))}
+          // Seule tuile de la rangée sans destination : elle se soulevait au
+          // survol sans rien faire (signalé en test le 11/08/2026).
+          to="/operations"
         />
         <Kpi
           icon={XCircle}

@@ -108,6 +108,32 @@ export class BonsService {
       })),
     );
 
+    // Cohérence nature ↔ centre de coût : une nature d'opération rattachée à un
+    // centre de coût l'IMPOSE. Les deux champs se choisissaient séparément, d'où
+    // des couples contradictoires (la nature RECHARGE, du 22100-DSI, enregistrée
+    // sur 22100 puis sur 1-DBTSI — cf. BON-0027 et BON-0028). L'écran verrouille
+    // désormais le centre de coût ; ce contrôle ferme la porte côté API.
+    const natureIds = [...new Set(input.soubons.map((sb) => String(sb.natureOperationId)).filter(Boolean))];
+    if (natureIds.length > 0) {
+      const natures = await this.dataSource
+        .getRepository(NatureOperation)
+        .find({ where: { id: In(natureIds) as any } });
+      const ccParNature = new Map(
+        natures.filter((n) => n.costCenterId).map((n) => [String(n.id), String(n.costCenterId)]),
+      );
+      for (let i = 0; i < input.soubons.length; i++) {
+        const sb = input.soubons[i];
+        const attendu = ccParNature.get(String(sb.natureOperationId));
+        if (attendu && String(sb.costCenterId) !== attendu) {
+          const nature = natures.find((n) => String(n.id) === String(sb.natureOperationId));
+          throw new BadRequestException(
+            `Sous-bon ${i + 1} : la nature « ${nature?.code ?? sb.natureOperationId} » impose son centre de coût. ` +
+              `Le centre de coût transmis ne correspond pas.`,
+          );
+        }
+      }
+    }
+
     // Restitution client : pays + division obligatoires, et l'utilisateur qui crée
     // doit avoir l'ACCÈS à la division choisie (sauf admin).
     const typeBon = await this.dataSource

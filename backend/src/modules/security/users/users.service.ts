@@ -201,11 +201,23 @@ export class UsersService {
   };
 
   findAll(
-    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+    opts: {
+      search?: string;
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
+      /** 'ACTIF' | 'INACTIF' — absent = les deux. */
+      statut?: string;
+    } = {},
   ): Promise<User[]> {
     const col = UsersService.USER_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'desc' ? 'DESC' : 'ASC';
     const qb = this.userRepo.createQueryBuilder('u').where('u.deleted_at IS NULL');
+
+    // Filtre par statut, EN BASE comme le reste. La liste mêlait actifs et
+    // inactifs sans moyen de les séparer : la tuile « Inactifs » du tableau de
+    // bord menait donc à une liste majoritairement active (test du 10/08/2026).
+    if (opts.statut === 'ACTIF') qb.andWhere('u.estActif = :a', { a: true });
+    else if (opts.statut === 'INACTIF') qb.andWhere('u.estActif = :a', { a: false });
 
     // Recherche EN BASE sur nom, prénom (dans les deux ordres), matricule et email.
     if (opts.search && opts.search.trim()) {

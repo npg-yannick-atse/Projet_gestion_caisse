@@ -139,7 +139,9 @@ export function BonCreatePage() {
   // Mémo des éléments sélectionnés (libellé + méta), pour affichage et contrôles
   // sans recharger toute la liste.
   const [partMeta, setPartMeta] = useState<Record<string, { label: string; numeroFournisseur?: string | null }>>({});
-  const [natMeta, setNatMeta] = useState<Record<string, { label: string; compteFull?: string; compteNum?: string }>>({});
+  const [natMeta, setNatMeta] = useState<
+    Record<string, { label: string; compteFull?: string; compteNum?: string; costCenterId?: string }>
+  >({});
 
   // Parmi les portefeuilles du périmètre, on met en avant ceux que l'utilisateur possède
   // (propriétaire direct ou via sa direction) pour la pré-sélection et le groupe « Mes portefeuilles ».
@@ -710,17 +712,31 @@ export function BonCreatePage() {
                   })()}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label>Centre de coût</Label>
-                <select className={selectClass} {...register(`soubons.${index}.costCenterId`)}>
-                  <option value="">— Choisir —</option>
-                  {costCenters?.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} — {c.libelle}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {(() => {
+                // Verrouillé dès que la nature en impose un : c'est elle qui décide.
+                const natChoisie = natMeta[watch(`soubons.${index}.natureOperationId`) ?? ''];
+                const impose = !!natChoisie?.costCenterId;
+                return (
+                  <div className="space-y-2">
+                    <Label>Centre de coût</Label>
+                    <select
+                      className={cn(selectClass, impose && 'bg-[#F8FAFC] text-[#64748B]')}
+                      disabled={impose}
+                      {...register(`soubons.${index}.costCenterId`)}
+                    >
+                      <option value="">— Choisir —</option>
+                      {costCenters?.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code} — {c.libelle}
+                        </option>
+                      ))}
+                    </select>
+                    {impose && (
+                      <p className="text-[11px] text-[#64748B]">Déterminé par la nature choisie.</p>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="space-y-2">
                 <Label>Nature comptable</Label>
                 <RemoteSearchableSelect
@@ -729,6 +745,15 @@ export function BonCreatePage() {
                   onChange={(v, opt) => {
                     setValue(`soubons.${index}.natureOperationId`, v, { shouldValidate: true });
                     const n = opt?.data as NatureOperation | undefined;
+                    // La nature COMMANDE le centre de coût : chaque nature est
+                    // rattachée au sien. Le laisser choisir à part produisait des
+                    // couples incohérents (RECHARGE, du 22100-DSI, enregistrée
+                    // sur 22100 ou 1-DBTSI — cf. BON-0027 et BON-0028).
+                    if (n?.costCenterId) {
+                      setValue(`soubons.${index}.costCenterId`, String(n.costCenterId), {
+                        shouldValidate: true,
+                      });
+                    }
                     if (n)
                       setNatMeta((m) => ({
                         ...m,
@@ -738,6 +763,7 @@ export function BonCreatePage() {
                           compteFull: n.natureComptable?.codeComptableSap
                             ? `${n.natureComptable.codeComptableSap} — ${n.natureComptable.libelle}`
                             : undefined,
+                          costCenterId: n.costCenterId ? String(n.costCenterId) : undefined,
                         },
                       }));
                   }}

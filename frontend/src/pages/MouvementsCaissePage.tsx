@@ -15,6 +15,7 @@ import { CharCounter } from '@/components/ui/char-counter';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useCaisseDevise } from '@/hooks/useCaisseDevise';
+import { AucuneCaisseMessage } from '@/components/AucuneCaisseMessage';
 
 const MVT_SORT_COLUMNS = ['dateOperation', 'montant'] as const;
 type MvtSortCol = (typeof MVT_SORT_COLUMNS)[number];
@@ -371,7 +372,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                     </option>
                   ))}
                 </select>
-                {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+                <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
                 {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
                     à la place du caissier, l'argent est dans un coffre précis. */}
                 {!encCaisseId && encDeviseId && caissesPourDevise(encDeviseId).length > 1 && (
@@ -540,7 +541,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                       </option>
                     ))}
                   </select>
-                  {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+                  <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
                 </div>
               )}
 

@@ -10,7 +10,6 @@ import { ProfilPermission } from './entities/profil-permission.entity';
 import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { Interim } from './entities/interim.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
-import { UserCaisseAccess } from './entities/user-caisse-access.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
 import { UserNatureOperation } from './entities/user-nature-operation.entity';
 
@@ -289,16 +288,23 @@ export class AuthorizationService {
    * (= aucune caisse), plus de « filet de sécurité ». Il faut donc peupler
    * sec_user_caisse_access pour chaque caissier, sinon il est bloqué.
    */
-  async getCaissePerimeter(userId: string): Promise<Set<string> | null> {
-    if (await this.isAdmin(userId)) return null;
-    const rows = await this.dataSource
-      .getRepository(UserCaisseAccess)
-      .find({ where: { userId: userId as any } });
-    const set = new Set<string>();
-    for (const a of rows) {
-      if (a.niveauAcces === 'ECRITURE' || a.niveauAcces === 'ADMIN') set.add(String(a.caisseId));
-    }
-    return set;
+  async getCaissePerimeter(_userId: string): Promise<Set<string> | null> {
+    // DÉCISION MÉTIER (11/08/2026) : chez NPG, un caissier n'est PAS rattaché à
+    // une caisse précise — il opère indifféremment sur les caisses de
+    // l'entreprise. Le cloisonnement par caisse est donc supprimé : c'est la
+    // PERMISSION qui autorise l'action (encaisser, recharger, décaisser…), pas
+    // une liste de caisses. `null` = aucune restriction.
+    //
+    // La table `sec_user_caisse_access` n'a jamais été alimentée — aucun écran
+    // ni endpoint ne le permettait — si bien que tout utilisateur non-admin
+    // avait un périmètre VIDE et se voyait refuser l'encaissement, la recharge,
+    // les transferts et le paiement des salaires. Les quatre comptes portant le
+    // rôle CAISSIER étant aussi administrateurs, le défaut est resté invisible
+    // jusqu'aux tests du 11/08/2026.
+    //
+    // L'entité et la table subsistent, inutilisées : les supprimer est une
+    // décision de schéma à part (cf. Document/Points_en_attente.md).
+    return null;
   }
 
   /**

@@ -198,34 +198,40 @@ describe('AuthorizationService — périmètre caisses', () => {
     await expect(svc.assertCaisseInPerimeter('1', '7')).resolves.toBeUndefined();
   });
 
-  it('ne retient que les accès ECRITURE ou ADMIN (LECTURE ne suffit pas)', async () => {
-    const svc = build({
-      UserCaisseAccess: {
-        find: [
-          { caisseId: '1', niveauAcces: 'ECRITURE' },
-          { caisseId: '2', niveauAcces: 'ADMIN' },
-          { caisseId: '3', niveauAcces: 'LECTURE' },
-        ],
-      },
-    });
-    jest.spyOn(svc, 'isAdmin').mockResolvedValue(false);
-    const perim = await svc.getCaissePerimeter('1');
-    expect([...perim!].sort()).toEqual(['1', '2']);
-  });
-
-  it('refuse une caisse hors périmètre', async () => {
-    const svc = build({ UserCaisseAccess: { find: [{ caisseId: '1', niveauAcces: 'ECRITURE' }] } });
-    jest.spyOn(svc, 'isAdmin').mockResolvedValue(false);
-    await expect(svc.assertCaisseInPerimeter('1', '9')).rejects.toThrow(/périmètre/i);
-  });
-
-  it('un non-admin sans aucun accès obtient un périmètre VIDE (sémantique stricte)', async () => {
+  /**
+   * DÉCISION MÉTIER (11/08/2026) : un caissier n'est pas rattaché à une caisse
+   * précise chez NPG. Le cloisonnement par caisse est supprimé — c'est la
+   * PERMISSION qui autorise l'action, pas une liste de caisses.
+   *
+   * Les trois tests précédents verrouillaient la règle inverse (accès ECRITURE
+   * ou ADMIN, périmètre vide par défaut). Ils sont remplacés, et non supprimés :
+   * la règle a changé, elle doit rester testée.
+   *
+   * Le contexte de la bascule : `sec_user_caisse_access` n'a jamais pu être
+   * alimentée, faute d'écran. Tout non-admin avait donc un périmètre vide et se
+   * voyait refuser encaissement, recharge, transfert et paie.
+   */
+  it('un non-admin n’est pas restreint non plus : le rôle suffit', async () => {
     const svc = build({ UserCaisseAccess: { find: [] } });
     jest.spyOn(svc, 'isAdmin').mockResolvedValue(false);
-    const perim = await svc.getCaissePerimeter('1');
-    // Vide ≠ null : surtout pas de repli « il voit tout ».
-    expect(perim).not.toBeNull();
-    expect(perim!.size).toBe(0);
+    await expect(svc.getCaissePerimeter('1')).resolves.toBeNull();
+  });
+
+  it('accepte n’importe quelle caisse, y compris sans accès déclaré', async () => {
+    const svc = build({ UserCaisseAccess: { find: [] } });
+    jest.spyOn(svc, 'isAdmin').mockResolvedValue(false);
+    await expect(svc.assertCaisseInPerimeter('1', '9')).resolves.toBeUndefined();
+  });
+
+  it('ignore le contenu de sec_user_caisse_access, devenue sans effet', async () => {
+    // La table subsiste mais ne gouverne plus rien : y laisser des lignes ne
+    // doit surtout pas ré-introduire une restriction en douce.
+    const svc = build({
+      UserCaisseAccess: { find: [{ caisseId: '1', niveauAcces: 'LECTURE' }] },
+    });
+    jest.spyOn(svc, 'isAdmin').mockResolvedValue(false);
+    await expect(svc.getCaissePerimeter('1')).resolves.toBeNull();
+    await expect(svc.assertCaisseInPerimeter('1', '99')).resolves.toBeUndefined();
   });
 });
 

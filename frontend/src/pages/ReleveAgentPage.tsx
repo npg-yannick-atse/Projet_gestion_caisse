@@ -12,8 +12,26 @@ import { useClientSort } from '@/hooks/useClientSort';
 
 // Convention du relevé (validée) : ce qui fait ENTRER de l'argent = Crédit,
 // ce qui le fait SORTIR = Débit. Solde = Σcrédit − Σdébit.
-const CREDIT_TYPES: TypeOperation[] = ['ENCAISSEMENT', 'RECHARGE', 'REMBOURSEMENT_CREDIT'];
-const DEBIT_TYPES: TypeOperation[] = ['DECAISSEMENT', 'CREDIT'];
+/**
+ * Ce relevé retrace l'argent qui est réellement passé entre les mains de
+ * l'agent — pas les réorganisations internes.
+ *
+ * Une RECHARGE déplace de l'argent de la caisse vers un portefeuille : rien
+ * n'entre ni ne sort de l'entreprise, l'argent change simplement de poche. Elle
+ * était pourtant comptée comme une entrée, ce qui gonflait le total sans qu'un
+ * centime soit rentré. Même raisonnement pour AJUSTEMENT (réajustement mensuel
+ * d'un budget) et TRANSFERT.
+ *
+ * Ces trois types restent donc sans montant, et sont signalés « interne » à
+ * l'écran plutôt que laissés vides — un tiret nu passait pour un oubli.
+ */
+const CREDIT_TYPES: TypeOperation[] = ['ENCAISSEMENT', 'REMBOURSEMENT_CREDIT'];
+// SALAIRE est une SORTIE : l'agent remet l'argent à l'employé. Il en était
+// absent, si bien que les lignes de paie s'affichaient sans montant et
+// n'entraient pas dans le solde du relevé — un salaire versé restait invisible.
+const DEBIT_TYPES: TypeOperation[] = ['DECAISSEMENT', 'CREDIT', 'SALAIRE'];
+/** Mouvements internes : ni entrée ni sortie, mais volontairement affichés. */
+const INTERNE_TYPES: TypeOperation[] = ['RECHARGE', 'AJUSTEMENT', 'TRANSFERT'];
 
 const TYPE_LABELS: Record<TypeOperation, string> = {
   RECHARGE: 'Recharge',
@@ -25,6 +43,83 @@ const TYPE_LABELS: Record<TypeOperation, string> = {
   SALAIRE: 'Salaire',
   REMBOURSEMENT_CREDIT: 'Remboursement crédit',
 };
+
+/** « août 2026 » à partir d'un 'AAAA-MM' trouvé dans un texte, sinon null. */
+function moisDe(texte?: string | null): string | null {
+  const m = /(\d{4})-(\d{2})/.exec(texte ?? '');
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)).toLocaleDateString('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/** « d'août 2026 » ou « de juin 2026 » — l'élision devant voyelle. */
+function duMois(mois: string): string {
+  return /^[aeiouâéèêîôû]/i.test(mois) ? `d'${mois}` : `de ${mois}`;
+}
+
+/**
+ * Libellé d'une ligne de relevé.
+ *
+ * Le type seul ne suffit pas dès qu'il se répète : une colonne alignant
+ * « Salaire », « Salaire », « Salaire » ou quatre « Ajustement » n'apprend rien.
+ * Chaque opération porte pourtant de quoi se distinguer — période, numéro de
+ * bon, échéance, client — dans sa référence, son motif ou son nom de client.
+ *
+ * En l'absence de cette information, on retombe sur le type seul : mieux vaut
+ * un libellé pauvre qu'un détail inventé.
+ */
+function libelleOperation(op: {
+  typeOperation: TypeOperation;
+  reference?: string | null;
+  motif?: string | null;
+  clientNom?: string | null;
+}): string {
+  const base = TYPE_LABELS[op.typeOperation] ?? op.typeOperation;
+  const ref = op.reference ?? '';
+
+  switch (op.typeOperation) {
+    case 'SALAIRE': {
+      const mois = moisDe(ref);
+      if (!mois) return base;
+      // Une annulation porte la même période : sans ce test, un remboursement
+      // de salaire s'afficherait comme un paiement.
+      return /annulation/i.test(ref)
+        ? `Annulation du salaire ${duMois(mois)}`
+        : `Salaire du mois ${duMois(mois)}`;
+    }
+    case 'AJUSTEMENT': {
+      const mois = moisDe(ref);
+      return mois ? `Ajustement — budget ${duMois(mois)}` : base;
+    }
+    case 'REMBOURSEMENT_CREDIT': {
+      const e = /échéance\s*([\d/]+)/i.exec(ref);
+      return e ? `Remboursement crédit — échéance ${e[1]}` : base;
+    }
+    case 'DECAISSEMENT': {
+      if (!ref) return base;
+      // « MANUEL-BM-00001 » : le préfixe technique n'apporte rien à l'écran.
+      const manuel = /^MANUEL-(.+)$/.exec(ref);
+      return manuel ? `Décaissement — bon manuel ${manuel[1]}` : `Décaissement — ${ref}`;
+    }
+    case 'ENCAISSEMENT': {
+      const qui = op.clientNom?.trim() || op.motif?.trim();
+      return qui ? `Encaissement — ${qui}` : base;
+    }
+    case 'CREDIT': {
+      const mat = /employé\s+(\S+)/i.exec(ref);
+      return mat ? `Crédit — ${mat[1]}` : base;
+    }
+    default: {
+      if (!ref) return base;
+      // Certaines références répètent déjà le type (« Recharge DR-2026… ») :
+      // les préfixer donnerait « Recharge — Recharge DR-2026… ».
+      return ref.toLowerCase().startsWith(base.toLowerCase()) ? ref : `${base} — ${ref}`;
+    }
+  }
+}
 
 function sensOf(t: TypeOperation): 'CREDIT' | 'DEBIT' | null {
   if (CREDIT_TYPES.includes(t)) return 'CREDIT';
@@ -86,7 +181,10 @@ export function ReleveAgentPage() {
   const sort = useTableSort<ReleveSortCol>('/releve-agent', RELEVE_SORT_COLUMNS);
   const lignesTriees = useClientSort(releve.lignes, sort.state, {
     date: (l) => new Date(l.op.dateOperation),
-    type: (l) => l.op.typeOperation,
+    // Le type d'abord, puis la période pour les salaires : sans elle, les lignes
+    // « Salaire du mois de… » resteraient groupées mais dans un ordre de mois
+    // arbitraire, ce qui donne l'impression d'un tri cassé.
+    type: (l) => `${l.op.typeOperation} ${/(\d{4})-(\d{2})/.exec(l.op.reference ?? '')?.[0] ?? ''}`,
     debit: (l) => l.debit,
     credit: (l) => l.credit,
   });
@@ -201,13 +299,35 @@ export function ReleveAgentPage() {
                     <td className="px-4 py-3 text-[#64748B]">
                       {new Date(op.dateOperation).toLocaleDateString('fr-FR')}
                     </td>
-                    <td className="px-4 py-3">{TYPE_LABELS[op.typeOperation] ?? op.typeOperation}</td>
-                    <td className="px-4 py-3 text-right font-medium text-[#B91C1C]">
-                      {debit ? formatMontant(debit) : '—'}
+                    <td className="px-4 py-3">
+                      {libelleOperation(op)}
+                      {INTERNE_TYPES.includes(op.typeOperation) && (
+                        <span
+                          className="ml-2 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-medium text-[#64748B]"
+                          title="Mouvement interne : l'argent change de poche sans entrer ni sortir. Il ne compte pas dans le solde."
+                        >
+                          interne
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-[#15803D]">
-                      {credit ? formatMontant(credit) : '—'}
-                    </td>
+                    {INTERNE_TYPES.includes(op.typeOperation) ? (
+                      // Le montant existe et doit rester lisible — le cacher
+                      // faisait perdre une information réelle. Il enjambe les
+                      // deux colonnes en gris : il n'appartient ni aux sorties
+                      // ni aux entrées, et n'entre pas dans le NET.
+                      <td colSpan={2} className="px-4 py-3 text-center text-[#94A3B8] tabular-nums">
+                        {formatMontant(op.montant)}
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-right font-medium text-[#B91C1C]">
+                          {debit ? formatMontant(debit) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-[#15803D]">
+                          {credit ? formatMontant(credit) : '—'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatMontant(solde)}</td>
                   </tr>
                 ))}

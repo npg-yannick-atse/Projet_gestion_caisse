@@ -84,6 +84,7 @@ export function SuperAdminDashboard({ user }: Props) {
             value={stats.usersActifs}
             sub={`sur ${stats.usersTotal}`}
             to="/users"
+            searchObj={{ statut: 'ACTIF' }}
           />
           <SysTile
             icon={UsersIcon}
@@ -92,6 +93,10 @@ export function SuperAdminDashboard({ user }: Props) {
             sub={stats.usersInactifs > 0 ? 'Comptes désactivés' : 'Aucun'}
             warn={stats.usersInactifs > 0}
             to="/users"
+            // Sans ce filtre, la tuile menait à la liste complète — donc
+            // majoritairement des comptes ACTIFS. Signalé en test le 10/08/2026 :
+            // « en cliquant sur inactifs, l'application renvoie vers les actifs ».
+            searchObj={{ statut: 'INACTIF' }}
           />
           <SysTile
             icon={Network}
@@ -171,6 +176,7 @@ function SysTile({
   warn = false,
   ok = false,
   to,
+  searchObj,
 }: {
   icon: typeof Briefcase;
   label: string;
@@ -179,6 +185,8 @@ function SysTile({
   warn?: boolean;
   ok?: boolean;
   to?: string;
+  /** Filtre transmis à la page cible (ex. n'afficher que les comptes inactifs). */
+  searchObj?: Record<string, unknown>;
 }) {
   const body = (
     <div className={cn('flex flex-col gap-1 bg-white p-3 transition-colors hover:bg-[#FAFBFF]')}>
@@ -204,5 +212,11 @@ function SysTile({
       )}
     </div>
   );
-  return to ? <Link to={to}>{body}</Link> : body;
+  return to ? (
+    <Link to={to} search={searchObj as any}>
+      {body}
+    </Link>
+  ) : (
+    body
+  );
 }

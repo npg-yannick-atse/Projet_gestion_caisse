@@ -9,6 +9,7 @@ import type { RechargeSens } from '@/types/api';
 import { StatCard } from '@/components/ui/stat-card';
 import { Panel, PanelHeader } from '@/components/ui/panel';
 import { CharCounter } from '@/components/ui/char-counter';
+import { AucuneCaisseMessage } from '@/components/AucuneCaisseMessage';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5] disabled:opacity-50';
@@ -96,7 +97,7 @@ export function RechargePage() {
           </option>
         ))}
       </select>
-      {openCaisses.length === 0 && <p className="text-[11px] text-[#64748B]">Aucune caisse ouverte.</p>}
+      <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
     </div>
   );
 

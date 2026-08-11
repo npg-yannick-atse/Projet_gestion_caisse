@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
+  type StatutUtilisateur,
   useCreateUser,
   useDeleteUser,
   useUpdateUser,
@@ -528,9 +529,21 @@ function UsersPageInner() {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-  // Recherche (nom, prénom, matricule, email) et tri exécutés EN BASE.
+
+  // Statut initialisé depuis l'URL, comme le tri : la tuile « Inactifs » du
+  // tableau de bord y arrive avec ?statut=INACTIF. Sans ça, elle menait à la
+  // liste complète, donc majoritairement active.
+  const [statut, setStatut] = useState<'' | StatutUtilisateur>(() => {
+    const v = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get(
+      'statut',
+    );
+    return v === 'ACTIF' || v === 'INACTIF' ? v : '';
+  });
+
+  // Recherche (nom, prénom, matricule, email), statut et tri exécutés EN BASE.
   const { data: users, isLoading, isError } = useUsers({
     search: debouncedSearch || undefined,
+    statut: statut || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
@@ -581,6 +594,17 @@ function UsersPageInner() {
             placeholder="Rechercher un utilisateur…"
             className="flex-1 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5] focus:bg-white"
           />
+
+          <select
+            value={statut}
+            onChange={(e) => setStatut(e.target.value as '' | StatutUtilisateur)}
+            aria-label="Filtrer par statut"
+            className="rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2 py-1.5 text-[11px] text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+          >
+            <option value="">Tous les statuts</option>
+            <option value="ACTIF">Actifs</option>
+            <option value="INACTIF">Inactifs</option>
+          </select>
 
           {/* Tri serveur — URL-synced */}
           <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2 py-1">

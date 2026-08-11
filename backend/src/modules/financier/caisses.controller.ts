@@ -93,7 +93,8 @@ export class CaissesController {
     // OU caisse qui alimente l'un de ses portefeuilles (cas du gestionnaire).
     if (!(await this.authz.isAdmin(user.sub))) {
       const caisses = await this.authz.getCaissePerimeter(user.sub);
-      let autorise = caisses?.has(String(id)) ?? false;
+      // Un périmètre `null` signifie « aucune restriction » (cf. getCaissePerimeter).
+      let autorise = caisses === null || caisses.has(String(id));
       if (!autorise) {
         const ptfs = await this.authz.getPortefeuillePerimeter(user.sub);
         if (ptfs && ptfs.size > 0) {
@@ -118,7 +119,8 @@ export class CaissesController {
     // Même périmètre que le solde-timeline : accès direct OU caisse-source d'un portefeuille géré.
     if (!(await this.authz.isAdmin(user.sub))) {
       const caisses = await this.authz.getCaissePerimeter(user.sub);
-      let autorise = caisses?.has(String(id)) ?? false;
+      // Un périmètre `null` signifie « aucune restriction » (cf. getCaissePerimeter).
+      let autorise = caisses === null || caisses.has(String(id));
       if (!autorise) {
         const ptfs = await this.authz.getPortefeuillePerimeter(user.sub);
         if (ptfs && ptfs.size > 0) {

@@ -35,7 +35,18 @@ interface KpiProps {
 export function Kpi({ icon: Icon, label, value, sub, tone, sparkValues, to, searchObj }: KpiProps) {
   const t = TONE[tone];
   const body = (
-    <div className="relative h-full overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white p-[18px] transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,76,129,0.1)]">
+    // Le soulèvement au survol n'est appliqué QUE si la tuile mène quelque part.
+    // Sans `to`, elle l'affichait quand même et se faisait passer pour un bouton :
+    // « le bouton ne fonctionne pas », signalé en test le 11/08/2026 sur les
+    // quatre tuiles alors dépourvues de destination. Les indicateurs purs — taux
+    // d'approbation, délai moyen — n'ont pas de page cible et ne doivent donc
+    // rien promettre.
+    <div
+      className={cn(
+        'relative h-full overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white p-[18px] transition',
+        to && 'hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,76,129,0.1)]',
+      )}
+    >
       <div className="mb-3 flex items-center justify-between">
         <div className={cn('flex h-9 w-9 items-center justify-center rounded-[10px]', t.chip)}>
           <Icon className="h-[18px] w-[18px]" />

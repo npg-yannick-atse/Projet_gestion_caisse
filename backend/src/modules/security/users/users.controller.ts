@@ -63,11 +63,13 @@ export class UsersController {
     @Query('search') search?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
+    @Query('statut') statut?: string,
   ) {
     return this.usersService.findAll({
       search,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
+      statut: statut === 'ACTIF' || statut === 'INACTIF' ? statut : undefined,
     });
   }
 
