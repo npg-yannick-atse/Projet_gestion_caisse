@@ -172,18 +172,30 @@ function BudgetGauge({ portefeuilleId, label }: { portefeuilleId: string; label:
 }
 
 export function DemandeurDashboard({ user }: Props) {
-  const { data: bons } = useBons();
+  /**
+   * Restriction au demandeur EN BASE, et non après coup dans le navigateur.
+   *
+   * Le tableau de bord rapatriait tous les bons pour n'en garder que les siens.
+   * Surtout, les tuiles comptaient MES bons alors que leur lien menait à TOUS
+   * ceux du statut : un utilisateur privilégié lisait « En attente 0 » puis
+   * trouvait un bon en cliquant — celui d'un autre demandeur. Le compte et le
+   * lien portent désormais la même restriction.
+   *
+   * Un demandeur PUR n'est de toute façon jamais concerné : le backend force
+   * déjà le filtre sur son propre identifiant (anti-IDOR).
+   */
+  const filtreMien = { demandeurId: user.id };
+  const { data: myBons } = useBons(filtreMien);
   const { data: portefeuilles } = usePortefeuilles();
   const { data: myTimeline } = useBonsTimeline({ days: 14, demandeurId: user.id });
 
-  const myBons = useMemo(() => (bons ?? []).filter((b) => b.demandeurId === user.id), [bons, user.id]);
-
-  const countBy = (s: BonStatut) => myBons.filter((b) => b.statut === s).length;
-  const countByList = (list: BonStatut[]) => myBons.filter((b) => list.includes(b.statut)).length;
+  const mesBons = myBons ?? [];
+  const countBy = (s: BonStatut) => mesBons.filter((b) => b.statut === s).length;
+  const countByList = (list: BonStatut[]) => mesBons.filter((b) => list.includes(b.statut)).length;
 
   const myRecent = useMemo(
-    () => [...myBons].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
-    [myBons],
+    () => [...mesBons].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5),
+    [mesBons],
   );
 
   const myPortefeuilles = useMemo(() => {
@@ -195,7 +207,7 @@ export function DemandeurDashboard({ user }: Props) {
     );
   }, [portefeuilles, user]);
 
-  const recurrents = useMemo(() => myBons.filter((b) => b.estRecurrent).slice(0, 3), [myBons]);
+  const recurrents = useMemo(() => mesBons.filter((b) => b.estRecurrent).slice(0, 3), [mesBons]);
 
   const budget = usePortefeuillesBudget(myPortefeuilles.map((p) => p.id));
 
@@ -222,7 +234,7 @@ export function DemandeurDashboard({ user }: Props) {
         <Kpi
           icon={Files}
           label="Mes bons"
-          value={myBons.length}
+          value={mesBons.length}
           sub="Total émis"
           tone="blue"
           sparkValues={myTimeline?.map((p) => p.count)}
@@ -235,7 +247,7 @@ export function DemandeurDashboard({ user }: Props) {
           sub="À valider"
           tone="amber"
           to="/bons"
-          searchObj={{ statut: 'CREE' }}
+          searchObj={{ statut: 'CREE', ...filtreMien }}
         />
         <Kpi
           icon={BadgeCheck}
@@ -244,7 +256,7 @@ export function DemandeurDashboard({ user }: Props) {
           sub="Prêts à décaisser"
           tone="green"
           to="/bons"
-          searchObj={{ statut: 'VALIDE' }}
+          searchObj={{ statut: 'VALIDE', ...filtreMien }}
         />
         <Kpi
           icon={Banknote}
@@ -253,7 +265,7 @@ export function DemandeurDashboard({ user }: Props) {
           sub="Paiements effectués"
           tone="gray"
           to="/bons"
-          searchObj={{ statut: 'DECAISSE' }}
+          searchObj={{ statut: 'DECAISSE', ...filtreMien }}
         />
         <Kpi
           icon={XCircle}
@@ -262,7 +274,7 @@ export function DemandeurDashboard({ user }: Props) {
           sub="Refusés ou annulés"
           tone="red"
           to="/bons"
-          searchObj={{ statut: 'REFUSE' }}
+          searchObj={{ statut: 'REFUSE', ...filtreMien }}
         />
       </div>
 

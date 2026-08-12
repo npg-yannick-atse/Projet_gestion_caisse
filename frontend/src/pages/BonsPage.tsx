@@ -90,6 +90,9 @@ export function BonsPage() {
       // Marqueur « tout afficher » : le défaut du jour étant implicite, il faut
       // un signe explicite pour dire qu'on l'a délibérément retiré.
       showAll: sp.get('range') === 'all',
+      // Restriction à un demandeur, transmise par les tuiles du tableau de bord :
+      // sans elle, « En attente 0 » menait à la liste de TOUT LE MONDE.
+      demandeurId: /^\d+$/.test(sp.get('demandeurId') ?? '') ? (sp.get('demandeurId') as string) : '',
       dateFrom: isIsoDate(rawFrom) ? rawFrom : '',
       dateTo: isIsoDate(rawTo) ? rawTo : '',
     };
@@ -162,6 +165,7 @@ export function BonsPage() {
     period: (urlParams.period as 'today' | 'week' | 'month' | null) ?? undefined,
     extension: urlParams.extension || undefined,
     search: search.trim() || undefined,
+    demandeurId: urlParams.demandeurId || undefined,
     // Un onglet de statut est une file d'attente : les dates n'y sont pas
     // appliquées, sinon « Validés » ne montrerait que ceux du jour.
     dateFrom: datesActives ? effFrom || undefined : undefined,
@@ -181,6 +185,9 @@ export function BonsPage() {
   const { data: bonsForCounters } = useBons({
     period: (urlParams.period as 'today' | 'week' | 'month' | null) ?? undefined,
     extension: urlParams.extension || undefined,
+    // La restriction au demandeur EST reprise : sinon la tuile « En attente 0 »
+    // du tableau de bord mènerait à des compteurs qui en annoncent d'autres.
+    demandeurId: urlParams.demandeurId || undefined,
   });
 
   const filter: 'all' | BonStatut = urlParams.statut ?? 'all';
@@ -211,6 +218,7 @@ export function BonsPage() {
     urlParams.statut != null ||
     urlParams.period === 'today' ||
     urlParams.extension ||
+    !!urlParams.demandeurId ||
     !!urlParams.dateFrom ||
     !!urlParams.dateTo ||
     dateImplicite;
@@ -246,6 +254,11 @@ export function BonsPage() {
           {urlParams.extension && (
             <span className="rounded-full bg-[#FEF3F2] px-2 py-0.5 text-[10px] font-semibold text-[#B42318]">
               avec demande d'extension
+            </span>
+          )}
+          {urlParams.demandeurId && (
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">
+              mes bons uniquement
             </span>
           )}
           {dateImplicite && (
