@@ -8,15 +8,35 @@
 import 'reflect-metadata';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../app.module';
-import { DataSource } from 'typeorm';
+import { config as loadEnv } from 'dotenv';
+import { DataSource, DataSourceOptions } from 'typeorm';
+import databaseConfig from '@config/database.config';
 
 const MIGRATIONS_DIR = join(__dirname, '..', '..', 'migrations');
 
+/**
+ * Connexion DÉDIÉE aux migrations.
+ *
+ * On n'amorce volontairement PAS l'AppModule : il démarre aussi les traitements
+ * de fond (réajustement des budgets mensuels, intérims, tâches planifiées). Or
+ * ces traitements écrivent de vraies écritures comptables — lancer une migration
+ * pouvait donc déclencher une recharge de portefeuille, puis la couper en plein
+ * vol au moment où le script referme la connexion (« Connection is closing »).
+ *
+ * On reprend la MÊME configuration que l'application, notamment `appName` :
+ * les déclencheurs SQL des tables de sécurité n'acceptent que cette identité.
+ * `entities: []` car les migrations sont du SQL brut, aucune entité n'est requise.
+ */
+function ouvrirConnexion(): DataSource {
+  loadEnv({ path: '.env.local' });
+  loadEnv({ path: '.env' });
+  const { autoLoadEntities, ...options } = databaseConfig() as Record<string, unknown>;
+  void autoLoadEntities; // option propre à Nest, sans objet pour une DataSource nue
+  return new DataSource({ ...options, type: 'mssql', entities: [] } as DataSourceOptions);
+}
+
 async function main() {
-  const app = await NestFactory.createApplicationContext(AppModule);
-  const ds = app.get(DataSource);
+  const ds = await ouvrirConnexion().initialize();
 
   try {
     // Table de suivi des migrations appliquées.
@@ -69,7 +89,7 @@ async function main() {
 
     console.log(`\nTerminé. ${count} migration(s) appliquée(s) sur ${files.length} fichier(s).`);
   } finally {
-    await app.close();
+    await ds.destroy();
   }
 }
 
