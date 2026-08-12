@@ -49,8 +49,18 @@ const CIBLES: Record<string, { table: string; label: string }> = {
   bons: { table: 'trx_bon', label: 'numero' },
   bonId: { table: 'trx_bon', label: 'numero' },
   'bons-manuels': { table: 'trx_bon_manuel', label: 'numero' },
-  // `trx_bon_caisse` n'a pas de numéro propre : il ajuste un bon existant.
-  'bons-caisse': { table: 'trx_bon_caisse', label: 'libelle_ajuste' },
+  /**
+   * `trx_bon_caisse` n'a pas de numéro propre : c'est l'ajustement d'un bon
+   * existant. On le nomme donc par le NUMÉRO DE CE BON, plus son bénéficiaire —
+   * `libelle_ajuste` est le plus souvent vide, et un « #14 » ne disait rien.
+   */
+  'bons-caisse': {
+    table: 'trx_bon_caisse',
+    label:
+      "ISNULL((SELECT TOP 1 b.numero FROM dbo.trx_bon b WHERE b.id = trx_bon_caisse.bon_source_id), " +
+      "'bon #' + CAST(trx_bon_caisse.bon_source_id AS nvarchar(20)))" +
+      " + ISNULL(' — ' + NULLIF(trx_bon_caisse.beneficiaire, ''), '')",
+  },
   carnets: { table: 'trx_carnet', label: 'libelle' },
   'demandes-recharge': { table: 'fin_demande_recharge', label: 'numero' },
   'demandes-transfert': { table: 'fin_demande_transfert', label: 'numero' },
@@ -132,6 +142,10 @@ const VERBE: Record<string, string> = {
   'ecriture/post': 'a envoyé une écriture à',
   'ecriture/check': 'a contrôlé une écriture sur',
   'ecriture/contrepasser': 'a contrepassé une écriture sur',
+  DECAISSEMENT: 'a décaissé',
+  prepare: 'a préparé',
+  mapping: 'a modifié le mapping de',
+  'operations/envoyer': 'a envoyé à SAP une opération depuis',
 };
 
 /** Une ligne d'audit, augmentée de sa lecture en clair. */
