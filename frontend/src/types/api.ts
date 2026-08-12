@@ -255,6 +255,9 @@ export interface Bon {
   statutExtension?: StatutExtension;
   extensionMode?: ExtensionMode | null;
   extensionCommentaire?: string | null;
+  /** Nom du demandeur, résolu par le serveur — y compris si son compte a été supprimé. */
+  demandeurNom?: string | null;
+  demandeurMatricule?: string | null;
   /** Personne qui se présentera à la caisse pour le retrait (texte libre, optionnel). */
   porteur?: string | null;
   createdAt: string;

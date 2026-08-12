@@ -636,6 +636,10 @@ export class BonsService {
     statut: 'bon.statut',
     montantTotal: 'bon.montant_total',
     createdAt: 'bon.created_at',
+    // Trier sur le NOM du demandeur, pas sur son identifiant : la liste
+    // l'affiche en clair, un tri par id n'aurait aucun sens pour qui la lit.
+    // La jointure n'est posée que si ce tri est demandé (cf. plus bas).
+    demandeur: 'demandeur.nom',
   };
 
   async findAll(opts: {
@@ -652,6 +656,25 @@ export class BonsService {
     sortDir?: 'asc' | 'desc';
   } = {}): Promise<Bon[]> {
     const query = this.bonRepo.createQueryBuilder('bon').where('1=1');
+
+    /**
+     * Nom du demandeur, joint pour TOUTE la liste — sinon l'écran n'a que des
+     * identifiants et doit rapatrier l'annuaire entier pour les traduire.
+     *
+     * La jointure passe par une SOUS-REQUÊTE, et non par la table `sec_user`
+     * directement : TypeORM ajoute alors d'office `AND deleted_at IS NULL`, et
+     * les 11 bons sur 28 dont le demandeur a été supprimé perdraient leur nom.
+     * Un bon garde son auteur même si le compte n'existe plus.
+     */
+    query
+      .leftJoin(
+        '(SELECT id, nom, prenom, matricule FROM dbo.sec_user)',
+        'demandeur',
+        'demandeur.id = bon.demandeur_id',
+      )
+      .addSelect('demandeur.nom', 'demandeurNom')
+      .addSelect('demandeur.prenom', 'demandeurPrenom')
+      .addSelect('demandeur.matricule', 'demandeurMatricule');
 
     if (opts.statut) {
       /**
@@ -731,19 +754,62 @@ export class BonsService {
     const column = BonsService.BON_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
     if (column) {
-      query.orderBy(column, direction);
+      // La jointure du demandeur est déjà posée plus haut : le tri porte donc
+      // sur son NOM, pas sur son identifiant, et vaut aussi pour les comptes
+      // supprimés.
+      if (opts.sortBy === 'demandeur') {
+        query.orderBy('demandeur.nom', direction).addOrderBy('demandeur.prenom', direction);
+      } else {
+        query.orderBy(column, direction);
+      }
     } else {
       query.orderBy('bon.created_at', 'DESC');
     }
 
     const { entities, raw } = await query.getRawAndEntities();
-    return entities.map((bon, i) => {
-      const md = (raw[i] as Record<string, unknown>)?.montantDecaisse;
+
+    /**
+     * On apparie raw et entities PAR IDENTIFIANT, jamais par position.
+     *
+     * TypeORM ne garantit pas que `entities` conserve l'ordre de `raw` : dès
+     * que le tri porte sur une colonne jointe non sélectionnée, il le perd.
+     * L'appariement positionnel qui se trouvait ici attachait alors le montant
+     * décaissé au MAUVAIS bon — un montant juste, en face du mauvais numéro.
+     *
+     * `raw` conserve, lui, l'ordre du SQL : on le prend comme référence pour
+     * l'ordre final. Le tri reste donc entièrement fait par la base.
+     */
+    const parId = new Map<string, Bon>(entities.map((b) => [String(b.id), b]));
+    const vus = new Set<string>();
+    const ordonnes: Bon[] = [];
+
+    for (const ligne of raw as Array<Record<string, unknown>>) {
+      const id = String(ligne.bon_id ?? '');
+      const bon = parId.get(id);
+      if (!bon || vus.has(id)) continue;
+      vus.add(id);
+      const md = ligne.montantDecaisse;
       // null si rien décaissé ; sinon le total effectif (string DECIMAL).
-      (bon as Bon & { montantDecaisse?: string | null }).montantDecaisse =
-        md != null && Number(md) > 0 ? String(md) : null;
-      return bon;
-    });
+      const enrichi = bon as Bon & {
+        montantDecaisse?: string | null;
+        demandeurNom?: string | null;
+        demandeurMatricule?: string | null;
+      };
+      enrichi.montantDecaisse = md != null && Number(md) > 0 ? String(md) : null;
+
+      const prenom = (ligne.demandeurPrenom as string) ?? '';
+      const nom = (ligne.demandeurNom as string) ?? '';
+      const complet = `${prenom} ${nom}`.trim();
+      enrichi.demandeurNom = complet || null;
+      enrichi.demandeurMatricule = (ligne.demandeurMatricule as string) ?? null;
+      ordonnes.push(bon);
+    }
+
+    // Filet : un bon que `raw` n'aurait pas nommé ne doit pas disparaître.
+    for (const bon of entities) {
+      if (!vus.has(String(bon.id))) ordonnes.push(bon);
+    }
+    return ordonnes;
   }
 
   /**

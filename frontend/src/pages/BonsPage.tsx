@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { CalendarRange, CircleCheck, Clock, Eye, FileCheck2, Files, Search, X } from 'lucide-react';
 import { useBons } from '@/api/bons';
 import { useUserRoles, useMyPermissions } from '@/api/users';
+import { useTypeBons } from '@/api/referentiel';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Bon, BonStatut } from '@/types/api';
 import { formatMontant } from '@/lib/utils';
@@ -12,7 +13,7 @@ import { StatutBadge } from '@/components/StatutBadge';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 
-const BONS_SORT_COLUMNS = ['numero', 'statut', 'montantTotal', 'createdAt'] as const;
+const BONS_SORT_COLUMNS = ['numero', 'statut', 'montantTotal', 'demandeur', 'createdAt'] as const;
 type BonSortCol = (typeof BONS_SORT_COLUMNS)[number];
 
 /** Date du jour au format YYYY-MM-DD (heure locale). */
@@ -76,6 +77,9 @@ export function BonsPage() {
   const currentUser = useAuthStore((s) => s.user);
   const { data: myRoles } = useUserRoles(currentUser?.id ?? null);
   const { data: myPermissions } = useMyPermissions(currentUser?.id ?? null);
+  // Annuaires : la liste ne porte que des identifiants, on les rend lisibles.
+  const { data: typeBons } = useTypeBons();
+  const typeBonById = useMemo(() => new Map((typeBons ?? []).map((t) => [t.id, t])), [typeBons]);
 
   /**
    * Mêmes règles que le serveur : `assertPermission` = bypass administrateur OU
@@ -439,6 +443,13 @@ export function BonsPage() {
                 >
                   Montant
                 </SortableHeader>
+                {/* Qui a demandé le bon : l'information la plus attendue après
+                    le montant, et la liste ne la portait pas. Triée EN BASE sur
+                    le nom, via une jointure posée pour ce tri seulement. */}
+                <SortableHeader column="demandeur" state={sort.state} onSort={sort.setSort}>
+                  Demandeur
+                </SortableHeader>
+                <th className="px-4 py-2.5 font-semibold">Type</th>
                 <SortableHeader
                   column="createdAt"
                   state={sort.state}
@@ -453,7 +464,7 @@ export function BonsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[#64748B]">
                     <div className="mb-2 text-2xl opacity-25">📋</div>
                     Aucun bon trouvé
                   </td>
@@ -468,6 +479,14 @@ export function BonsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <StatutBadge statut={bon.statut} />
+                    {bon.demandeExtension && (
+                      <span
+                        className="ml-1.5 rounded-full bg-[#FEF3F2] px-1.5 py-0.5 text-[9px] font-semibold text-[#B42318]"
+                        title="Une extension a été demandée sur ce bon"
+                      >
+                        extension
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold tabular-nums">
                     {(() => {
@@ -489,6 +508,26 @@ export function BonsPage() {
                       }
                       return formatMontant(bon.montantTotal);
                     })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      // Nom résolu PAR LE SERVEUR : 11 bons sur 28 ont un
+                      // demandeur dont le compte a été supprimé, et l'annuaire
+                      // du navigateur ne le connaît plus. Un bon garde pourtant
+                      // son auteur.
+                      if (!bon.demandeurNom) return <span className="text-[#94A3B8]">—</span>;
+                      return (
+                        <>
+                          <div className="text-[#0F172A]">{bon.demandeurNom}</div>
+                          {bon.demandeurMatricule && (
+                            <div className="text-[10px] text-[#94A3B8]">{bon.demandeurMatricule}</div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 text-[#64748B]">
+                    {typeBonById.get(bon.typeBonId)?.libelle ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-[#64748B]">{new Date(bon.createdAt).toLocaleDateString('fr-FR')}</td>
                   <td className="px-4 py-3">
