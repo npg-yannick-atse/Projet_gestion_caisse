@@ -9,7 +9,7 @@ import { EncaissementService } from './encaissement.service';
  * devise de la caisse : un règlement en dollars dans une caisse tenue en XOF
  * était enregistré en francs, et le solde par devise devenait faux.
  */
-function monter(opts: { caisse?: any; devises?: any[] } = {}) {
+function monter(opts: { caisse?: any; devises?: any[]; reference?: any } = {}) {
   const caisse = opts.caisse ?? { id: '1', code: 'CI01', statut: 'OUVERTE', deviseId: '1' };
   const devises = opts.devises ?? [
     { id: '1', code: 'XOF', estActif: true },
@@ -35,6 +35,7 @@ function monter(opts: { caisse?: any; devises?: any[] } = {}) {
       return [{}, {}];
     },
   };
+  const reference = opts.reference ?? { id: '1', code: 'XOF', nbDecimales: 0 };
   const service = new EncaissementService(
     { transaction: async (cb: any) => cb(manager) } as any,
     ledger as any,
@@ -42,6 +43,7 @@ function monter(opts: { caisse?: any; devises?: any[] } = {}) {
       assertPermission: async () => undefined,
       assertCaisseInPerimeter: async () => undefined,
     } as any,
+    { deviseReference: async () => reference } as any,
   );
   return { service, ecritures, operations };
 }
@@ -95,5 +97,63 @@ describe('EncaissementService — devise reçue', () => {
   it('refuse d’encaisser dans une caisse fermée', async () => {
     const { service } = monter({ caisse: { id: '1', code: 'CI01', statut: 'FERMEE', deviseId: '1' } });
     await expect(service.encaisser({ ...base })).rejects.toThrow(/fermée/i);
+  });
+});
+
+/**
+ * Le taux appliqué à l'opération (migration 0057).
+ *
+ * Distinct du cours du jour : deux encaissements du même jour peuvent porter
+ * deux taux différents. Ce qui est enregistré ici est ce que le caissier a
+ * VALIDÉ, pas une estimation — d'où le refus de combler les trous tout seul.
+ */
+describe('EncaissementService — taux appliqué', () => {
+  it('fige le taux ET la contre-valeur quand un taux est validé', async () => {
+    const { service, operations } = monter();
+    await service.encaisser({ ...base, montant: '1000', deviseId: '3', tauxApplique: '590' });
+    expect(operations[0].tauxApplique).toBe('590');
+    expect(operations[0].contreValeur).toBe('590000'); // XOF : 0 décimale
+    expect(operations[0].deviseContreValeurId).toBe('1');
+  });
+
+  it('arrondit la contre-valeur aux décimales de la devise de RÉFÉRENCE', async () => {
+    const { service, operations } = monter();
+    await service.encaisser({ ...base, montant: '10', deviseId: '3', tauxApplique: '590.55' });
+    expect(operations[0].contreValeur).toBe('5906'); // 5905,5 → pas de centime de franc
+  });
+
+  it('accepte deux taux DIFFÉRENTS pour deux encaissements identiques', async () => {
+    // C'est toute la raison d'être de la colonne : le cours du jour n'a qu'une
+    // valeur, la journée peut en connaître plusieurs.
+    const { service, operations } = monter();
+    await service.encaisser({ ...base, montant: '1000', deviseId: '3', tauxApplique: '590' });
+    await service.encaisser({ ...base, montant: '1000', deviseId: '3', tauxApplique: '585' });
+    expect(operations.map((o) => o.contreValeur)).toEqual(['590000', '585000']);
+  });
+
+  it('ne fige RIEN quand aucun taux n’est fourni', async () => {
+    // Retomber sur le cours du jour inscrirait une estimation dans une colonne
+    // qui promet un fait. L'absence est une information.
+    const { service, operations } = monter();
+    await service.encaisser({ ...base, deviseId: '3' });
+    expect(operations[0].tauxApplique).toBeUndefined();
+    expect(operations[0].contreValeur).toBeUndefined();
+    expect(operations[0].deviseContreValeurId).toBeUndefined();
+  });
+
+  it('refuse un taux sur un encaissement déjà en devise de référence', async () => {
+    const { service } = monter();
+    await expect(
+      service.encaisser({ ...base, deviseId: '1', tauxApplique: '590' }),
+    ).rejects.toThrow(/déjà en XOF/);
+  });
+
+  it('refuse un taux nul ou négatif', async () => {
+    const { service } = monter();
+    for (const t of ['0', '-590']) {
+      await expect(
+        service.encaisser({ ...base, deviseId: '3', tauxApplique: t }),
+      ).rejects.toThrow(/supérieur à zéro/);
+    }
   });
 });

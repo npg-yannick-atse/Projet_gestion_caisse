@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Caisse, CreateCaissePayload, SessionCaisse, SoldeResponse, UpdateCaissePayload } from '@/types/api';
+import type {
+  Caisse,
+  CreateCaissePayload,
+  SessionCaisse,
+  SoldeConsolideResponse,
+  SoldeResponse,
+  UpdateCaissePayload,
+} from '@/types/api';
 
 export async function listCaisses(): Promise<Caisse[]> {
   const { data } = await api.get<Caisse[]>('/caisses');
@@ -23,6 +30,11 @@ export async function deleteCaisse(id: string): Promise<void> {
 
 export async function getCaisseSolde(id: string): Promise<SoldeResponse> {
   const { data } = await api.get<SoldeResponse>(`/caisses/${id}/solde`);
+  return data;
+}
+
+export async function getCaisseSoldeConsolide(id: string): Promise<SoldeConsolideResponse> {
+  const { data } = await api.get<SoldeConsolideResponse>(`/caisses/${id}/solde-consolide`);
   return data;
 }
 
@@ -85,6 +97,19 @@ export function useToggleCaisseActive() {
 
 export function useCaisseSolde(id: string) {
   return useQuery({ queryKey: ['caisse', id, 'solde'], queryFn: () => getCaisseSolde(id) });
+}
+
+/**
+ * Total converti dans la devise de référence. Sous la clé ['caisse', id, …]
+ * comme les autres soldes : le rafraîchissement périodique de CaissesPage
+ * invalide déjà ce préfixe, donc le total ne se fige pas derrière les soldes.
+ */
+export function useCaisseSoldeConsolide(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ['caisse', id, 'solde-consolide'],
+    queryFn: () => getCaisseSoldeConsolide(id),
+    enabled,
+  });
 }
 
 export interface SoldePoint {

@@ -27,6 +27,10 @@ import { EncaissementService } from './encaissement.service';
 import { EncaissementController } from './encaissement.controller';
 import { DevisesService } from './devises.service';
 import { DevisesController } from './devises.controller';
+import { TauxChangeService } from './taux-change.service';
+import { TauxApiService } from './taux-api.service';
+import { TauxChangeController } from './taux-change.controller';
+import { TauxImportJob } from './jobs/taux-import.job';
 import { PortefeuillesService } from './portefeuilles.service';
 import { PortefeuillesController } from './portefeuilles.controller';
 import { DemandesTransfertService } from './demandes-transfert.service';
@@ -70,10 +74,13 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     CreditService,
     CreditRemboursementService,
     DevisesService,
+    TauxChangeService,
+    TauxApiService,
     PortefeuillesService,
     DemandesTransfertService,
     DemandesRechargeService,
     CaisseAutoCloseJob,
+    TauxImportJob,
     PaiementSalaireService,
   ],
   controllers: [
@@ -82,6 +89,7 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     EncaissementController,
     CreditController,
     DevisesController,
+    TauxChangeController,
     PortefeuillesController,
     DemandesTransfertController,
     DemandesRechargeController,
@@ -91,6 +99,8 @@ import { ReferentielModule } from '@modules/referentiel/referentiel.module';
     CaissesService,
     RechargeService,
     DevisesService,
+    TauxChangeService,
+    TauxApiService,
     PortefeuillesService,
     DemandesTransfertService,
     DemandesRechargeService,

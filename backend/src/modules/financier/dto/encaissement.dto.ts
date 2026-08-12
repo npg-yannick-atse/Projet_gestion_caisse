@@ -1,6 +1,7 @@
 import { IsNotEmpty, IsOptional, IsNumberString, IsString, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsMontant } from '@common/validators/montant.validator';
+import { IsTaux } from '@common/validators/taux.validator';
 import { RequisAvec } from '@common/validators/requis-avec.validator';
 
 export class EncaissementDto {
@@ -23,6 +24,18 @@ export class EncaissementDto {
   @IsOptional()
   @IsNumberString()
   deviseId?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "Taux RÉELLEMENT obtenu, quand la devise n'est pas celle de référence. L'écran le " +
+      'pré-remplit avec le cours du jour et le caissier le corrige si besoin. Absent = non ' +
+      'renseigné : rien n’est figé, la consolidation retombera sur le cours du jour.',
+    example: '590.00000000',
+  })
+  @IsOptional()
+  @IsTaux()
+  tauxApplique?: string;
 
   @ApiProperty({
     required: false,

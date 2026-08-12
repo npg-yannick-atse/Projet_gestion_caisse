@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Calendar, Landmark, TrendingUp, User } from 'lucide-react';
 import { useDevises } from '@/api/financierRef';
+import { useDeviseReference, useTauxCourants } from '@/api/tauxChange';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useEncaissement } from '@/api/encaissement';
@@ -60,6 +61,11 @@ export function EncaissementPage() {
   const [clientNumero, setClientNumero] = useState('');
   const [motif, setMotif] = useState('');
   const [done, setDone] = useState(false);
+  // Taux réellement obtenu. `tauxTouche` distingue « le caissier a saisi ce
+  // taux » de « c'est le cours du jour pré-rempli » : sans ce drapeau, changer
+  // de devise écraserait un taux que le caissier venait de taper.
+  const [taux, setTaux] = useState('');
+  const [tauxTouche, setTauxTouche] = useState(false);
 
   const openCaisses = useMemo(
     () => (caisses ?? []).filter((c) => c.statut === 'OUVERTE'),
@@ -83,9 +89,54 @@ export function EncaissementPage() {
     if (evidente) setCaisseId(evidente);
   };
 
+  /* ---- Taux de change ---------------------------------------------------- */
+  const { data: reference } = useDeviseReference();
+  const { data: tauxCourants } = useTauxCourants();
+
+  /** Une devise étrangère demande un taux ; la devise de référence, non. */
+  const besoinTaux = !!deviseId && !!reference && String(deviseId) !== String(reference.id);
+
+  /**
+   * Cours du jour pour cette devise, dans le sens qui nous intéresse. Le
+   * référentiel ne tient qu'UN sens par couple : si c'est l'autre qui est
+   * stocké, on prend le taux inverse, déjà calculé par le serveur.
+   */
+  const coursDuJour = useMemo(() => {
+    if (!besoinTaux || !reference) return undefined;
+    const direct = (tauxCourants ?? []).find(
+      (t) => t.deviseSourceId === String(deviseId) && t.deviseCibleId === String(reference.id),
+    );
+    if (direct) return { valeur: direct.taux, perime: direct.perime };
+    const inverse = (tauxCourants ?? []).find(
+      (t) => t.deviseSourceId === String(reference.id) && t.deviseCibleId === String(deviseId),
+    );
+    if (inverse) return { valeur: inverse.tauxInverse, perime: inverse.perime };
+    return undefined;
+  }, [besoinTaux, tauxCourants, deviseId, reference]);
+
+  // Pré-remplissage : uniquement tant que le caissier n'a rien tapé lui-même.
+  useEffect(() => {
+    if (!besoinTaux) {
+      setTaux('');
+      setTauxTouche(false);
+      return;
+    }
+    if (!tauxTouche) setTaux(coursDuJour?.valeur ?? '');
+  }, [besoinTaux, coursDuJour, tauxTouche]);
+
+  const contreValeur = useMemo(() => {
+    const m = Number(montant);
+    const t = Number(taux);
+    if (!besoinTaux || !(m > 0) || !(t > 0)) return null;
+    return (m * t).toFixed(reference?.nbDecimales ?? 0);
+  }, [besoinTaux, montant, taux, reference]);
+
   // La devise est EXIGÉE : sans elle, le serveur retomberait sur celle de la
   // caisse et l'écriture porterait une monnaie que l'écran n'affichait pas.
-  const valid = !!caisseId && !!deviseId && Number(montant) > 0;
+  // Le taux l'est aussi dès que la devise est étrangère : c'est précisément ce
+  // qu'on ne savait pas enregistrer jusqu'ici.
+  const valid =
+    !!caisseId && !!deviseId && Number(montant) > 0 && (!besoinTaux || Number(taux) > 0);
 
   const codeOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId)?.code ?? '';
 
@@ -107,6 +158,9 @@ export function EncaissementPage() {
     setClientNom('');
     setClientNumero('');
     setMotif('');
+    // Le taux redevient une proposition : l'encaissement suivant peut très bien
+    // avoir été négocié à un autre cours.
+    setTauxTouche(false);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -119,6 +173,9 @@ export function EncaissementPage() {
         montant,
         clientNom: clientNom.trim() || undefined,
         deviseId: deviseId || undefined,
+        // Envoyé seulement pour une devise étrangère : le serveur refuse un
+        // taux sur un encaissement déjà en devise de référence.
+        tauxApplique: besoinTaux ? taux : undefined,
         clientNumero: clientNumero.trim() || undefined,
         motif: motif.trim() || undefined,
       },
@@ -240,6 +297,49 @@ export function EncaissementPage() {
               </p>
             )}
           </div>
+
+          {/* Taux réellement obtenu. Le cours du jour n'est qu'une proposition :
+              deux encaissements du même jour peuvent avoir été négociés
+              différemment, et c'est ce qui s'est passé qu'on enregistre. */}
+          {besoinTaux && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="taux" className={labelClass}>
+                Taux obtenu — 1 {codeOf(deviseId)} en {reference?.code}
+              </label>
+              <input
+                id="taux"
+                inputMode="decimal"
+                placeholder="Ex : 590"
+                className={inputClass}
+                value={taux}
+                onChange={(e) => {
+                  setTaux(e.target.value);
+                  setTauxTouche(true);
+                }}
+              />
+              {contreValeur ? (
+                <p className="text-[11px] text-[#0F172A]">
+                  Soit <strong>{formatMontant(contreValeur)} {reference?.code}</strong>
+                  {coursDuJour && taux !== coursDuJour.valeur && (
+                    <span className="text-[#B45309]">
+                      {' '}· cours du jour : {coursDuJour.valeur}
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-[11px] text-[#B42318]">
+                  {coursDuJour
+                    ? 'Corrigez le taux si vous avez obtenu autre chose.'
+                    : `Aucun cours connu pour ${codeOf(deviseId)} — saisissez le taux obtenu.`}
+                </p>
+              )}
+              {coursDuJour?.perime && (
+                <p className="text-[11px] text-[#B45309]">
+                  Le cours proposé n’a pas été rafraîchi depuis longtemps — vérifiez-le.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="clientNumero" className={labelClass}>

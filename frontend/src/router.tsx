@@ -32,6 +32,7 @@ import { DirectionsPage } from '@/pages/DirectionsPage';
 import { PaysDivisionsPage } from '@/pages/PaysDivisionsPage';
 import { EmployesPage } from '@/pages/EmployesPage';
 import { TypesBeneficePage } from '@/pages/TypesBeneficePage';
+import { TauxChangePage } from '@/pages/TauxChangePage';
 import { OperationsPage } from '@/pages/OperationsPage';
 import { NaturesOperationPage } from '@/pages/NaturesOperationPage';
 import { NaturesComptablePage } from '@/pages/NaturesComptablePage';
@@ -316,6 +317,17 @@ const naturesOperationRoute = createRoute({
   ),
 });
 
+/**
+ * La CONSULTATION des taux est ouverte à tout authentifié (ils alimentent des
+ * affichages partout) ; c'est l'écriture que garde `TAUX_GERER`, côté serveur
+ * comme dans la page, qui masque alors les boutons.
+ */
+const tauxChangeRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/taux-change',
+  component: () => <TauxChangePage />,
+});
+
 const naturesComptableRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/natures-comptable',
@@ -382,6 +394,7 @@ const routeTree = rootRoute.addChildren([
     paysDivisionsRoute,
     operationsRoute,
     naturesOperationRoute,
+    tauxChangeRoute,
     naturesComptableRoute,
     extensionsRoute,
     transfertsRoute,

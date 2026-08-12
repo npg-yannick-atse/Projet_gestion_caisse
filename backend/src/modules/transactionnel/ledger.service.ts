@@ -31,6 +31,15 @@ interface CreateOperationInput {
   clientNom?: string;
   clientNumero?: string;
   motif?: string;
+  /**
+   * Taux RÉELLEMENT appliqué, sa contre-valeur figée et la devise de celle-ci.
+   * Les trois vont ensemble ou aucun (CK_trx_op_conversion_complete) : c'est
+   * l'appelant qui les calcule, car lui seul sait si l'utilisateur a saisi un
+   * taux ou si l'on retombe sur le cours du jour.
+   */
+  tauxApplique?: string | null;
+  contreValeur?: string | null;
+  deviseContreValeurId?: string | null;
 }
 
 interface CreateEcritureInput {
@@ -130,6 +139,9 @@ export class LedgerService {
       clientNom: input.clientNom ?? null,
       clientNumero: input.clientNumero ?? null,
       motif: input.motif ?? null,
+      tauxApplique: input.tauxApplique ?? null,
+      contreValeur: input.contreValeur ?? null,
+      deviseContreValeurId: input.deviseContreValeurId ?? null,
     });
 
     return repo.save(operation);

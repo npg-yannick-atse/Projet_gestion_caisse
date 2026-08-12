@@ -3,7 +3,7 @@
 Sujets identifiés, volontairement laissés ouverts. Chacun indique ce qui est
 déjà fait, ce qui bloque, et la décision à prendre.
 
-Dernière mise à jour : **10/08/2026**.
+Dernière mise à jour : **11/08/2026**.
 
 ---
 
@@ -233,3 +233,38 @@ si le circuit s'avère trop lourd coûte moins que l'inverse.
 2. **Les 4 avances déjà décaissées ont-elles été récupérées ?** Si non, c'est une
    créance que l'application ne suit pas, et il faudra décider comment la
    régulariser.
+
+---
+
+## 7. Le serveur joint-il l'API de taux de change ?
+
+**Statut : à vérifier — bloque l'automatisation, pas l'usage.**
+
+L'alimentation des taux par `open.er-api.com` fonctionne (migrations `0055` et
+`0056`, import vérifié le 11/08/2026 : USD → XOF = 568,028634). Mais le test
+d'accès Internet a été fait depuis un **poste de développement**, pas depuis
+l'hôte du backend. Les réseaux d'entreprise filtrent couramment les sorties.
+
+`TAUX_API_ENABLED` vaut donc **`false`** : rien ne se déclenche tout seul, et
+l'import se lance à la main depuis l'écran des taux.
+
+**Pour trancher**, lancer sur le serveur :
+
+```
+npx ts-node -r tsconfig-paths/register src/scripts/essai-taux.ts
+```
+
+L'étape 2 affiche `ECHEC` avec le motif si la sortie est bloquée. Si c'est le
+cas, deux voies : ouvrir le flux vers `open.er-api.com`, ou faire passer l'appel
+par le proxy de l'entreprise (`TAUX_API_URL` est un paramètre en base, mais un
+proxy demanderait un peu de code en plus).
+
+Si tout passe, mettre `TAUX_API_ENABLED` à `true` : l'import tourne alors chaque
+jour à l'heure de `TAUX_API_HEURE` (6 h par défaut).
+
+**À noter** : les cours de l'API s'écartent de SAP d'environ **5,6 %** sur l'USD
+(568,03 contre 600,00 daté du 15/12/2025). Sans conséquence comptable — la
+conversion reste de l'affichage — mais les totaux consolidés ne coïncideront pas
+avec un état SAP. C'est un choix assumé : SAP maintient ses cours à la main et
+sporadiquement. Le script `Document/sap-taux.ps1` permet de comparer quand on
+veut.

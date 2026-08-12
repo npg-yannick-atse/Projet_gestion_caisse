@@ -8,6 +8,7 @@ import { CloseCaisseDto } from './dto/close-caisse.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '@modules/security/authorization.service';
+import { TauxChangeService } from './taux-change.service';
 
 @ApiTags('Financier / Caisses')
 @ApiBearerAuth()
@@ -17,6 +18,7 @@ export class CaissesController {
   constructor(
     private readonly caissesService: CaissesService,
     private readonly authz: AuthorizationService,
+    private readonly tauxChange: TauxChangeService,
   ) {}
 
   @Post()
@@ -80,6 +82,24 @@ export class CaissesController {
   @ApiOperation({ summary: 'Ventilation du solde de la caisse par devise' })
   async getSoldesParDevise(@Param('id') id: string) {
     return { caisseId: id, soldes: await this.caissesService.getSoldesParDevise(id) };
+  }
+
+  @Get(':id/solde-consolide')
+  @ApiOperation({
+    summary: 'Ce que contient la caisse, converti dans la devise de référence',
+    description:
+      "Total INDICATIF : la conversion n'engendre aucune écriture comptable. Une devise sans " +
+      'taux exploitable est écartée du total et rendue dans `ignorees` — un total amputé qui se ' +
+      'présenterait comme complet serait pire que pas de total du tout.',
+  })
+  async getSoldeConsolide(@Param('id') id: string) {
+    const soldes = await this.caissesService.getSoldesParDevise(id);
+    // Le total se calcule ICI et non dans le navigateur : sinon chaque écran
+    // refait sa propre conversion, et ils finissent par ne plus dire la même chose.
+    const consolidation = await this.tauxChange.consolider(
+      soldes.map((s) => ({ montant: s.solde, deviseId: s.deviseId })),
+    );
+    return { caisseId: id, soldes, consolidation };
   }
 
   @Get(':id/solde-timeline')

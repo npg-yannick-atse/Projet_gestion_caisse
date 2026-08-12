@@ -135,6 +135,9 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/cost-centers', label: 'Centres de coût', icon: Briefcase, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'COST_CENTER_GERER' },
       { to: '/natures-operation', label: 'Natures comptables', icon: Tags, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'NATURE_OPERATION_GERER' },
       { to: '/pays-divisions', label: 'Pays & Divisions', icon: Globe, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR'], permission: 'PAYS_GERER' },
+      // La page est consultable par tout authentifié (route non gardée) ; l'entrée
+      // de menu vise ceux qui ont à y agir, pour ne pas encombrer les autres.
+      { to: '/taux-change', label: 'Taux de change', icon: Coins, exact: false, roles: ['SUPER_ADMIN', 'ADMINISTRATEUR', 'DAF'], permission: 'TAUX_GERER' },
     ],
   },
 ];

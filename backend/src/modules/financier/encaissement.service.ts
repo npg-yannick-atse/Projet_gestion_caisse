@@ -6,12 +6,22 @@ import { Operation } from '@modules/transactionnel/entities/operation.entity';
 import { EcritureComptable } from '@modules/transactionnel/entities/ecriture-comptable.entity';
 import { LedgerService } from '@modules/transactionnel/ledger.service';
 import { AuthorizationService } from '@modules/security/authorization.service';
+import { TauxChangeService } from './taux-change.service';
 
 interface EncaissementInput {
   caisseId: string;
   montant: string;
   /** Devise reçue. Par défaut, la devise déclarée de la caisse. */
   deviseId?: string;
+  /**
+   * Taux RÉELLEMENT obtenu pour cet encaissement. L'écran le pré-remplit avec
+   * le cours du jour et le caissier le corrige s'il a eu autre chose : ce qui
+   * arrive ici est donc ce qu'il a validé, pas une estimation.
+   *
+   * Absent = on ne sait pas ; rien n'est figé et la consolidation retombera sur
+   * le cours du jour.
+   */
+  tauxApplique?: string;
   userId: string;
   clientNom?: string;
   clientNumero?: string;
@@ -25,6 +35,7 @@ export class EncaissementService {
     private readonly dataSource: DataSource,
     private readonly ledgerService: LedgerService,
     private readonly authz: AuthorizationService,
+    private readonly tauxChange: TauxChangeService,
   ) {}
 
   /**
@@ -49,6 +60,47 @@ export class EncaissementService {
       throw new BadRequestException(`La devise ${devise.code} est désactivée.`);
     }
     return String(devise.id);
+  }
+
+  /**
+   * Fige ce que l'encaissement a valu, quand un taux a été validé à la saisie.
+   *
+   * On NE retombe PAS sur le cours du jour quand rien n'est fourni : ce serait
+   * enregistrer une estimation là où la colonne promet un fait. L'absence est
+   * une information — elle dit « on ne sait pas », et la consolidation sait
+   * déjà quoi en faire.
+   *
+   * Le résultat est arrondi aux décimales de la devise de référence, et figé :
+   * l'arrondi d'aujourd'hui ne doit pas dépendre d'un recalcul de demain.
+   */
+  private async figerConversion(
+    tauxSaisi: string | undefined,
+    deviseId: string,
+    montant: string,
+  ): Promise<{
+    tauxApplique?: string;
+    contreValeur?: string;
+    deviseContreValeurId?: string;
+  }> {
+    if (tauxSaisi === undefined || tauxSaisi === '') return {};
+
+    const reference = await this.tauxChange.deviseReference();
+    if (String(deviseId) === String(reference.id)) {
+      throw new BadRequestException(
+        `Un taux de change n'a pas de sens ici : l'encaissement est déjà en ${reference.code}.`,
+      );
+    }
+
+    const taux = parseFloat(tauxSaisi);
+    if (!Number.isFinite(taux) || taux <= 0) {
+      throw new BadRequestException('Le taux appliqué doit être un nombre supérieur à zéro.');
+    }
+
+    return {
+      tauxApplique: tauxSaisi,
+      contreValeur: (parseFloat(montant) * taux).toFixed(reference.nbDecimales),
+      deviseContreValeurId: String(reference.id),
+    };
   }
 
   /**
@@ -83,6 +135,7 @@ export class EncaissementService {
       // pas être enregistré en francs sous prétexte que la caisse est en XOF.
       // La devise de la caisse ne sert donc que de valeur par défaut.
       const deviseId = await this.resolveDevise(input.deviseId, caisse, manager);
+      const conversion = await this.figerConversion(input.tauxApplique, deviseId, input.montant);
 
       const operation = await this.ledgerService.createOperation(
         {
@@ -95,6 +148,7 @@ export class EncaissementService {
           clientNom: input.clientNom,
           clientNumero: input.clientNumero,
           motif: input.motif,
+          ...conversion,
         },
         manager,
       );

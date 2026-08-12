@@ -38,6 +38,31 @@ export class Operation {
   @Column({ name: 'devise_id', type: 'bigint' })
   deviseId!: string;
 
+  /**
+   * Taux RÉELLEMENT appliqué à cette opération, et ce qu'elle a valu.
+   *
+   * À ne pas confondre avec `fin_taux_echange`, qui donne le cours du JOUR :
+   * celui-ci est une estimation, ceux-ci sont un fait. Deux encaissements du
+   * même jour peuvent porter deux taux différents — c'est précisément la raison
+   * d'être de ces colonnes (migration 0057).
+   *
+   * `null` = pas de conversion à décrire : opération déjà dans la devise de
+   * référence, ou antérieure à la migration. La consolidation retombe alors sur
+   * le cours du jour.
+   *
+   * Les trois vont ensemble (CK_trx_op_conversion_complete).
+   */
+  @Column({ name: 'taux_applique', type: 'decimal', precision: 19, scale: 8, transformer: decimalToString, nullable: true })
+  tauxApplique?: string | null;
+
+  /** Montant × taux, figé au moment de l'opération — l'arrondi du jour est un fait. */
+  @Column({ name: 'contre_valeur', type: 'decimal', precision: 19, scale: 4, transformer: decimalToString, nullable: true })
+  contreValeur?: string | null;
+
+  /** Devise de `contre_valeur`. Stockée car DEVISE_REFERENCE est modifiable. */
+  @Column({ name: 'devise_contre_valeur_id', type: 'bigint', nullable: true })
+  deviseContreValeurId?: string | null;
+
   @Column({ name: 'date_operation', type: 'datetime2', precision: 3 })
   dateOperation!: Date;
 

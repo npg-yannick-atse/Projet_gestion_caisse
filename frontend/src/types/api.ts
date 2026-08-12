@@ -209,6 +209,26 @@ export interface SoldeResponse {
   budgetMensuel?: string | null;
 }
 
+/**
+ * Total INDICATIF d'un panier multi-devises ramené à la devise de référence.
+ * Aucune écriture comptable n'en découle.
+ */
+export interface Consolidation {
+  total: string;
+  devise: string;
+  converties: number;
+  /** Devises écartées faute de taux : le total est amputé, il faut le dire. */
+  ignorees: Array<{ deviseId: string; montant: string; raison: string }>;
+  /** Au moins un des taux employés est plus vieux que le seuil d'alerte. */
+  perime: boolean;
+}
+
+export interface SoldeConsolideResponse {
+  caisseId: string;
+  soldes: SoldeDevise[];
+  consolidation: Consolidation;
+}
+
 export type BonStatut = 'CREE' | 'VALIDE' | 'DECAISSE' | 'COMPTABILISE' | 'ANNULE' | 'REFUSE';
 
 export interface Bon {
@@ -291,6 +311,87 @@ export interface Devise {
   symbole?: string | null;
   nbDecimales: number;
   estActif: boolean;
+}
+
+/** D'où vient un taux : saisi, rapatrié de SAP, ou d'une API de cotation. */
+export type SourceTaux = 'MANUEL' | 'SAP' | 'API';
+
+/** Un taux en vigueur, tel que l'écran l'affiche (âge et inverse déjà calculés). */
+export interface TauxCourant {
+  id: string;
+  deviseSourceId: string;
+  deviseSource: string;
+  deviseCibleId: string;
+  deviseCible: string;
+  /** montantCible = montantSource × taux */
+  taux: string;
+  /** Sens opposé, calculé — jamais stocké (cf. TauxEchange côté backend). */
+  tauxInverse: string;
+  dateValiditeDebut: string;
+  source: SourceTaux;
+  motif: string | null;
+  /** Parité fixée par accord monétaire : ni importable, ni périssable. */
+  pariteFixe: boolean;
+  ageJours: number;
+  perime: boolean;
+}
+
+/** Une période de l'historique d'un couple. `dateValiditeFin` null = en vigueur. */
+export interface TauxPeriode {
+  id: string;
+  deviseSourceId: string;
+  deviseCibleId: string;
+  deviseSource?: Devise;
+  deviseCible?: Devise;
+  taux: string;
+  dateValiditeDebut: string;
+  dateValiditeFin?: string | null;
+  source: SourceTaux;
+  motif?: string | null;
+  pariteFixe: boolean;
+  createdAt: string;
+}
+
+export interface CreateTauxPayload {
+  deviseSourceId: string;
+  deviseCibleId: string;
+  taux: string;
+  dateValiditeDebut?: string;
+  motif?: string;
+  pariteFixe?: boolean;
+}
+
+export type VoieConversion = 'IDENTITE' | 'DIRECT' | 'INVERSE' | 'PIVOT';
+
+export interface Conversion {
+  montantSource: string;
+  deviseSource: string;
+  montantConverti: string;
+  deviseCible: string;
+  taux: string;
+  voie: VoieConversion;
+  dateTaux: string | null;
+  ageJours: number | null;
+  perime: boolean;
+}
+
+export interface LigneImportTaux {
+  devise: string;
+  statut: 'IMPORTE' | 'INCHANGE' | 'PARITE_FIXE' | 'ECHEC';
+  taux?: string;
+  ancienTaux?: string;
+  /** Variation en % par rapport au taux qui était en vigueur. */
+  variation?: string;
+  detail?: string;
+}
+
+export interface RapportImportTaux {
+  deviseReference: string;
+  /** Horodatage annoncé par l'API elle-même, pas celui de l'import. */
+  fraicheurApi: string | null;
+  lignes: LigneImportTaux[];
+  importes: number;
+  echecs: number;
 }
 
 export type ProprietaireType = 'USER' | 'DIRECTION';
@@ -672,6 +773,12 @@ export interface EncaissementPayload {
    * autre monnaie.
    */
   deviseId?: string;
+  /**
+   * Taux RÉELLEMENT obtenu, quand la devise reçue n'est pas celle de référence.
+   * Pré-rempli avec le cours du jour, corrigeable : deux encaissements du même
+   * jour peuvent porter deux taux différents.
+   */
+  tauxApplique?: string;
   clientNom?: string;
   clientNumero?: string;
   motif?: string;

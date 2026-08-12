@@ -19,6 +19,7 @@ export class EncaissementController {
       caisseId: dto.caisseId,
       montant: dto.montant,
       deviseId: dto.deviseId,
+      tauxApplique: dto.tauxApplique,
       userId: user.sub,
       clientNom: dto.clientNom,
       clientNumero: dto.clientNumero,

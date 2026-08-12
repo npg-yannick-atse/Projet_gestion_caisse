@@ -7,6 +7,7 @@ import { AlertTriangle, Landmark, Pencil, Plus, Power, PowerOff, Trash2, UserCog
 import {
   useCaisses,
   useCaisseSolde,
+  useCaisseSoldeConsolide,
   useOpenCaisse,
   useCloseCaisse,
   useCreateCaisse,
@@ -859,6 +860,9 @@ function CaisseCard({
   // Devises autres que celle de la caisse, et non nulles : les masquer donnerait
   // une image fausse de ce que le coffre contient réellement.
   const autresDevises = (solde?.soldes ?? []).filter((d) => !d.principale && Number(d.solde) !== 0);
+  // Le total converti n'a de sens qu'en présence de plusieurs devises : on ne le
+  // demande donc au serveur que dans ce cas.
+  const { data: consolide } = useCaisseSoldeConsolide(caisse.id, autresDevises.length > 0);
   const open = useOpenCaisse();
   const close = useCloseCaisse();
   const del = useDeleteCaisse();
@@ -982,6 +986,28 @@ function CaisseCard({
                 <span className="ml-1 text-white/55">{d.code ?? '—'}</span>
               </span>
             ))}
+          </div>
+        )}
+
+        {/* Total INDICATIF, uniquement quand la caisse détient plusieurs devises :
+            sur une caisse mono-devise il répéterait le solde ci-dessus. */}
+        {autresDevises.length > 0 && consolide && (
+          <div className="mt-2 text-[11px] text-white/70">
+            ≈{' '}
+            <span className="font-semibold tabular-nums text-white/90">
+              {formatMontant(consolide.consolidation.total)} {consolide.consolidation.devise}
+            </span>{' '}
+            au total
+            {consolide.consolidation.perime && (
+              <span title="Un des taux employés n'a pas été rafraîchi depuis longtemps"> · taux ancien</span>
+            )}
+            {consolide.consolidation.ignorees.length > 0 && (
+              <span
+                title={consolide.consolidation.ignorees.map((i) => i.raison).join(' · ')}
+              >
+                {' '}· {consolide.consolidation.ignorees.length} devise(s) sans taux, hors total
+              </span>
+            )}
           </div>
         )}
 
