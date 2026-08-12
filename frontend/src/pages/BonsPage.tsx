@@ -110,11 +110,17 @@ export function BonsPage() {
     const rawPeriod = sp.get('period');
     const rawFrom = sp.get('dateFrom') ?? '';
     const rawTo = sp.get('dateTo') ?? '';
+    // `statut` accepte PLUSIEURS valeurs séparées par des virgules : une tuile
+    // qui compte « les bons en cours » (créés OU validés) doit pouvoir mener à
+    // exactement ce qu'elle annonce.
+    const statuts = (rawStatut ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => VALID_STATUTS.includes(s as BonStatut)) as BonStatut[];
     return {
-      statut:
-        rawStatut && VALID_STATUTS.includes(rawStatut as BonStatut)
-          ? (rawStatut as BonStatut)
-          : null,
+      statut: statuts.length > 0 ? (statuts.join(',') as BonStatut) : null,
+      /** Un seul statut : sert aux onglets, qui ne savent en cocher qu'un. */
+      statutUnique: statuts.length === 1 ? statuts[0] : null,
       period: rawPeriod === 'today' || rawPeriod === 'week' || rawPeriod === 'month' ? rawPeriod : null,
       extension: sp.get('extension') === '1',
       // Marqueur « tout afficher » : le défaut du jour étant implicite, il faut
@@ -220,7 +226,9 @@ export function BonsPage() {
     demandeurId: urlParams.demandeurId || undefined,
   });
 
-  const filter: 'all' | BonStatut = urlParams.statut ?? 'all';
+  // Les onglets ne peuvent en cocher qu'un : avec plusieurs statuts dans l'URL,
+  // aucun n'est actif — le bandeau de filtre les annonce à leur place.
+  const filter: 'all' | BonStatut = urlParams.statutUnique ?? 'all';
   const setFilter = (next: 'all' | BonStatut) => {
     const sp = new URLSearchParams(window.location.search);
     if (next === 'all') sp.delete('statut');

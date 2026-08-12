@@ -654,7 +654,24 @@ export class BonsService {
     const query = this.bonRepo.createQueryBuilder('bon').where('1=1');
 
     if (opts.statut) {
-      query.andWhere('bon.statut = :statut', { statut: opts.statut });
+      /**
+       * Plusieurs statuts séparés par des virgules sont acceptés
+       * (`statut=CREE,VALIDE`).
+       *
+       * Une tuile de tableau de bord compte parfois un ENSEMBLE de statuts —
+       * « bons en cours » = créés ou validés. Sans cette forme, son lien devait
+       * se rabattre sur un seul statut, et la liste montrait moins que le
+       * compteur annoncé. Constaté le 12/08/2026 : tuile à 11, liste à 1.
+       */
+      const statuts = String(opts.statut)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (statuts.length > 1) {
+        query.andWhere('bon.statut IN (:...statuts)', { statuts });
+      } else {
+        query.andWhere('bon.statut = :statut', { statut: statuts[0] });
+      }
     }
     if (opts.typeBonId) {
       query.andWhere('bon.type_bon_id = :typeBonId', { typeBonId: opts.typeBonId });

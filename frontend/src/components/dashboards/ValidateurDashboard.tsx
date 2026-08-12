@@ -6,7 +6,6 @@ import {
   BadgeCheck,
   Clock,
   Flame,
-  type LucideIcon,
   TrendingUp,
   Users,
   XCircle,
@@ -14,54 +13,12 @@ import {
 import { useBons, useBonsSummary, useBonsTimeline } from '@/api/bons';
 import { useUsers } from '@/api/users';
 import { usePortefeuilles } from '@/api/financierRef';
-import { Sparkline } from '@/components/Sparkline';
 import { StatutBadge } from '@/components/StatutBadge';
 import { ageLabel, cn, formatMontant } from '@/lib/utils';
 import type { Bon, User } from '@/types/api';
-import { BudgetCard, usePortefeuillesBudget } from './_shared';
-
-interface KpiProps {
-  icon: LucideIcon;
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  tone: 'amber' | 'blue' | 'green' | 'red';
-  sparkValues?: number[];
-  to?: string;
-}
-
-const TONE = {
-  amber: { chip: 'bg-[#FFFBEB] text-[#92400E]', stroke: '#F59E0B', fill: 'rgba(245,158,11,0.12)' },
-  blue: { chip: 'bg-[#EFF6FF] text-[#1A6DB5]', stroke: '#1A6DB5', fill: 'rgba(26,109,181,0.12)' },
-  green: { chip: 'bg-[#ECFDF5] text-[#047857]', stroke: '#10B981', fill: 'rgba(16,185,129,0.12)' },
-  red: { chip: 'bg-[#FEF3F2] text-[#B42318]', stroke: '#EF4444', fill: 'rgba(239,68,68,0.12)' },
-};
-
-function Kpi({ icon: Icon, label, value, sub, tone, sparkValues, to }: KpiProps) {
-  const t = TONE[tone];
-  const body = (
-    <div className="relative h-full overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white p-[18px] transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,76,129,0.1)]">
-      <div className="mb-3 flex items-center justify-between">
-        <div className={cn('flex h-9 w-9 items-center justify-center rounded-[10px]', t.chip)}>
-          <Icon className="h-[18px] w-[18px]" />
-        </div>
-        {sparkValues && sparkValues.length > 0 && (
-          <Sparkline values={sparkValues} stroke={t.stroke} fill={t.fill} width={80} height={26} />
-        )}
-      </div>
-      <div className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.8px] text-[#64748B]">{label}</div>
-      <div className="font-display text-[26px] font-semibold leading-none text-[#0F172A] tabular-nums">{value}</div>
-      {sub && <div className="mt-1 text-[11px] text-[#64748B]">{sub}</div>}
-    </div>
-  );
-  return to ? (
-    <Link to={to} className="block">
-      {body}
-    </Link>
-  ) : (
-    body
-  );
-}
+// Kpi vient du composant PARTAGÉ : la copie locale de cet écran ne gérait pas
+// les filtres, d'où des liens `/bons?statut=...` que le routeur ne sait pas lire.
+import { Kpi, BudgetCard, usePortefeuillesBudget } from './_shared';
 
 interface Props {
   user: User;
@@ -151,7 +108,8 @@ export function ValidateurDashboard({ user }: Props) {
           sub={queueOver24h.length > 0 ? `${queueOver24h.length} > 24 h` : 'File à jour'}
           tone="amber"
           sparkValues={createdTimeline?.map((p) => p.count)}
-          to="/bons?statut=CREE"
+          to="/bons"
+          searchObj={{ statut: 'CREE' }}
         />
         <Kpi
           icon={Flame}
@@ -159,7 +117,8 @@ export function ValidateurDashboard({ user }: Props) {
           value={queueExtension.length}
           sub={queueExtension.length > 0 ? 'Arbitrage prioritaire' : 'Aucune'}
           tone="red"
-          to="/bons?extension=1"
+          to="/bons"
+          searchObj={{ extension: '1' }}
         />
         <Kpi
           icon={BadgeCheck}
@@ -168,7 +127,8 @@ export function ValidateurDashboard({ user }: Props) {
           sub="Cycle court"
           tone="green"
           sparkValues={validatedTimeline?.map((p) => p.count)}
-          to="/bons?statut=VALIDE&period=today"
+          to="/bons"
+          searchObj={{ statut: 'VALIDE', period: 'today' }}
         />
         <Kpi
           icon={TrendingUp}
@@ -188,7 +148,8 @@ export function ValidateurDashboard({ user }: Props) {
           value={summary?.byStatut?.REFUSE?.count ?? 0}
           sub="Période complète"
           tone="red"
-          to="/bons?statut=REFUSE"
+          to="/bons"
+          searchObj={{ statut: 'REFUSE' }}
         />
       </div>
 

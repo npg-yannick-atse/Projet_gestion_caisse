@@ -180,6 +180,8 @@ export function GestionnaireDashboard({ user }: Props) {
           to="/bons"
           searchObj={{ extension: '1' }}
         />
+        {/* La tuile compte les bons CRÉÉS **ou** VALIDÉS ; son lien ne menait
+            qu'aux créés — 11 annoncés, 1 affiché en cliquant. */}
         <Kpi
           icon={Banknote}
           label="Bons en cours"
@@ -187,7 +189,7 @@ export function GestionnaireDashboard({ user }: Props) {
           sub="Sur mes enveloppes"
           tone="blue"
           to="/bons"
-          searchObj={{ statut: 'CREE' }}
+          searchObj={{ statut: 'CREE,VALIDE' }}
         />
         <Kpi
           icon={TrendingDown}
