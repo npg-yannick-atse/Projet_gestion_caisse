@@ -20,6 +20,7 @@ import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { UpdateBonDto, UpdateSousBonDto } from './dto/update-bon.dto';
 import { CreateBonDto } from './dto/create-bon.dto';
+import { DecaisserBonDto } from './dto/decaisser-bon.dto';
 
 /**
  * Rôles qui ont accès à TOUS les bons (pas de restriction au demandeur).
@@ -275,7 +276,7 @@ export class BonsController {
   @ApiOperation({ summary: 'Décaisser un bon (permission BON_DECAISSER)' })
   async decaisser(
     @Param('id') id: string,
-    @Body() dto: { beneficiaire: string; beneficiairePiece?: string; modifications?: any },
+    @Body() dto: DecaisserBonDto,
     @CurrentUser() user: JwtPayload,
   ) {
     await this.authz.assertPermission(user.sub, 'BON_DECAISSER', 'décaisser un bon');
