@@ -12,7 +12,7 @@ import {
 import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useDirections } from '@/api/directions';
-import { useMyPermissions } from '@/api/users';
+import { useMyPermissions, useUserRoles } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -41,7 +41,19 @@ function libellePeriode(p: string): string {
 function SalairesPageInner() {
   const currentUser = useAuthStore((s) => s.user);
   const { data: myPerms } = useMyPermissions(currentUser?.id ?? null);
-  const peutPayer = (myPerms ?? []).includes('SALAIRE_PAYER');
+  const { data: myRoles } = useUserRoles(currentUser?.id ?? null);
+  /**
+   * Bypass administrateur OU permission, comme `assertPermission` côté serveur.
+   *
+   * La permission seule suffisait tant que tous les rôles administrateurs
+   * détiennent SALAIRE_PAYER — ce qui est le cas aujourd'hui. La retirer à l'un
+   * d'eux aurait suffi à créer un écart muet : le serveur laisse passer par le
+   * bypass, l'écran cache le bouton.
+   */
+  const estAdmin = (myRoles ?? []).some((r) =>
+    ['ADMINISTRATEUR', 'SUPER_ADMIN'].includes(r.code),
+  );
+  const peutPayer = estAdmin || (myPerms ?? []).includes('SALAIRE_PAYER');
 
   const [periode, setPeriode] = useState(periodeCourante());
   const [search, setSearch] = useState('');

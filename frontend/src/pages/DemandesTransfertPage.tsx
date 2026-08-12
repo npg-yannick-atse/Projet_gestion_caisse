@@ -27,7 +27,7 @@ import {
 import { useCaisses } from '@/api/caisses';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { useMyBonPerimeter } from '@/api/bons';
-import { useUsers, useUserRoles } from '@/api/users';
+import { useUsers, useUserRoles, useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type {
@@ -401,12 +401,23 @@ function DecisionModal({
 export function DemandesTransfertPage() {
   const me = useAuthStore((s) => s.user);
   const { data: userRoles } = useUserRoles(me?.id ?? null);
+  const { data: myPermissions } = useMyPermissions(me?.id ?? null);
   const isAdmin = (userRoles ?? []).some(
     (r) => r.code === 'SUPER_ADMIN' || r.code === 'ADMINISTRATEUR',
   );
-  const isGestionnaire = (userRoles ?? []).some(
-    (r) => r.code === 'GESTIONNAIRE_PORTEFEUILLE',
-  );
+
+  /**
+   * Mêmes règles que le serveur : bypass administrateur OU permission détenue.
+   *
+   * L'écran se basait sur le RÔLE `GESTIONNAIRE_PORTEFEUILLE` pour les deux
+   * boutons. C'était juste pour « Approuver » (TRANSFERT_VALIDER va bien aux
+   * admins et aux gestionnaires), mais faux pour « Exécuter » : le CAISSIER
+   * détient `TRANSFERT_EXECUTER` et ne voyait pas le bouton. Il avait le droit
+   * d'exécuter un transfert approuvé, et aucun moyen de le faire.
+   */
+  const perms = new Set(myPermissions ?? []);
+  const canValiderTransfert = isAdmin || perms.has('TRANSFERT_VALIDER');
+  const canExecuterTransfert = isAdmin || perms.has('TRANSFERT_EXECUTER');
 
   const [statutFilter, setStatutFilter] = useState<'ALL' | DemandeTransfertStatut>('ALL');
   const [search, setSearch] = useState('');
@@ -632,8 +643,8 @@ export function DemandesTransfertPage() {
                   const tone = STATUT_TONE[d.statut];
                   const dev = deviseById.get(d.deviseId);
                   const isMine = me?.id === d.demandeurId;
-                  const canDecide = !isMine && d.statut === 'CREE' && (isAdmin || isGestionnaire);
-                  const canExecute = d.statut === 'APPROUVEE' && (isAdmin || isGestionnaire);
+                  const canDecide = !isMine && d.statut === 'CREE' && canValiderTransfert;
+                  const canExecute = d.statut === 'APPROUVEE' && canExecuterTransfert;
                   const canCancel = isMine && d.statut === 'CREE';
 
                   return (
