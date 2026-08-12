@@ -53,6 +53,7 @@ const schema = z.object({
   typeBonId: z.string().trim().min(1, 'Requis'),
   estRecurrent: z.boolean().optional(),
   frequenceRecurrence: z.enum(['MENSUEL', 'TRIMESTRIEL', 'SEMESTRIEL', 'ANNUEL']).optional(),
+  dateProchaineEcheance: z.string().optional(),
   porteur: z.string().optional(),
   soubons: z.array(sousBonSchema).min(1, 'Au moins un sous-bon'),
 });
@@ -199,6 +200,8 @@ export function BonCreatePage() {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'soubons' });
   const estRecurrent = watch('estRecurrent');
+  // Le serveur exige une date strictement future : on l'impose dès le calendrier.
+  const demain = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   // Abonnement réactif dédié (plus fiable que watch() pour un field array) : la
   // simulation par portefeuille se recalcule dès qu'un montant ou un portefeuille change.
   const watchSoubons = useWatch({ control, name: 'soubons' });
@@ -301,6 +304,7 @@ export function BonCreatePage() {
         typeBonId: values.typeBonId,
         estRecurrent: values.estRecurrent,
         frequenceRecurrence: values.estRecurrent ? values.frequenceRecurrence : undefined,
+        dateProchaineEcheance: values.estRecurrent ? values.dateProchaineEcheance : undefined,
         porteur: values.porteur?.trim() || undefined,
         demandeExtension: extension != null,
         descriptionExtension: extension?.description || undefined,
@@ -467,6 +471,23 @@ export function BonCreatePage() {
                   <option value="SEMESTRIEL">Semestriel</option>
                   <option value="ANNUEL">Annuel</option>
                 </select>
+              </div>
+            )}
+            {/* Un bon récurrent sans échéance ne se rappelle jamais : depuis le
+                12/08/2026 le serveur exige la date, et un job notifie le
+                demandeur ce jour-là avant de reporter d'une période. */}
+            {estRecurrent && (
+              <div className="space-y-2">
+                <Label htmlFor="dateProchaineEcheance">Prochain rappel</Label>
+                <Input
+                  id="dateProchaineEcheance"
+                  type="date"
+                  min={demain}
+                  {...register('dateProchaineEcheance')}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Le demandeur sera notifié ce jour-là, puis à chaque échéance suivante.
+                </p>
               </div>
             )}
             <div className="space-y-2 sm:col-span-2">

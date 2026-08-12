@@ -17,6 +17,7 @@ import { BonCaisse } from './entities/bon-caisse.entity';
 import { Decaissement } from './entities/decaissement.entity';
 import { Operation } from './entities/operation.entity';
 import { EcritureComptable } from './entities/ecriture-comptable.entity';
+import { estDateIso } from './recurrence';
 import { LedgerService } from './ledger.service';
 import { PushService } from '@modules/notifications/push.service';
 import { User } from '@modules/security/entities/user.entity';
@@ -52,6 +53,8 @@ interface CreateBonInput {
   }>;
   estRecurrent?: boolean;
   frequenceRecurrence?: 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'ANNUEL';
+  /** Jour du premier rappel, AAAA-MM-JJ. Exigé si le bon est récurrent. */
+  dateProchaineEcheance?: string;
   creeParInterimId?: string;
   demandeExtension?: boolean;
   descriptionExtension?: string;
@@ -211,6 +214,16 @@ export class BonsService {
       await this.authz.assertNatureInPerimeter(currentUserId, String(sb.natureOperationId));
     }
 
+    /**
+     * Récurrence : fréquence ET première échéance, ou rien.
+     *
+     * Un bon coché « récurrent » sans échéance ne se rappelle jamais — c'était
+     * l'état de la fonctionnalité avant le 12/08/2026 : la case existait, elle
+     * ne produisait rien. Le contrôle est ici, et non dans le DTO, parce qu'il
+     * porte sur la COHÉRENCE de trois champs entre eux.
+     */
+    const echeance = this.echeanceInitiale(input);
+
     const montantTotal = input.soubons.reduce((sum, sb) => {
       return (parseFloat(sum) + parseFloat(sb.montant)).toString();
     }, '0');
@@ -234,7 +247,8 @@ export class BonsService {
         montantTotal,
         statut: statutInitial,
         estRecurrent: input.estRecurrent ?? false,
-        frequenceRecurrence: input.frequenceRecurrence ?? null,
+        frequenceRecurrence: input.estRecurrent ? (input.frequenceRecurrence ?? null) : null,
+        dateProchaineEcheance: echeance,
         demandeExtension: input.demandeExtension ?? false,
         descriptionExtension: input.descriptionExtension ?? null,
         statutExtension: input.demandeExtension ? 'EN_ATTENTE' : 'NON',
@@ -1145,6 +1159,50 @@ export class BonsService {
    * Autorisation de modification d'un bon/sous-bon :
    * rôle VALIDATEUR **ou** permission BON_MODIFIER_SPEC (les admins / DAF passent toujours).
    */
+  /**
+   * Valide et normalise l'échéance d'un bon récurrent.
+   *
+   * Rend `null` pour un bon ordinaire — y compris s'il porte une date, qui
+   * n'aurait alors aucun sens. La date doit être STRICTEMENT future : un rappel
+   * fixé à aujourd'hui partirait dans l'heure qui suit la création, ce que
+   * personne n'attend d'un « bon récurrent ».
+   */
+  private echeanceInitiale(input: {
+    estRecurrent?: boolean;
+    frequenceRecurrence?: string;
+    dateProchaineEcheance?: string;
+  }): string | null {
+    if (!input.estRecurrent) return null;
+
+    if (!input.frequenceRecurrence) {
+      throw new BadRequestException('Un bon récurrent doit indiquer sa fréquence.');
+    }
+    const brut = (input.dateProchaineEcheance ?? '').trim();
+    if (!brut) {
+      throw new BadRequestException(
+        'Un bon récurrent doit indiquer la date du prochain rappel.',
+      );
+    }
+    if (!estDateIso(brut)) {
+      throw new BadRequestException(
+        `Date de rappel invalide (« ${brut} ») : format attendu AAAA-MM-JJ.`,
+      );
+    }
+
+    const aujourdHui = new Date();
+    const jourCourant = Date.UTC(
+      aujourdHui.getUTCFullYear(),
+      aujourdHui.getUTCMonth(),
+      aujourdHui.getUTCDate(),
+    );
+    if (new Date(`${brut}T00:00:00.000Z`).getTime() <= jourCourant) {
+      throw new BadRequestException(
+        'La date de rappel doit être postérieure à aujourd’hui.',
+      );
+    }
+    return brut;
+  }
+
   private async assertPeutModifierBon(userId: string): Promise<void> {
     const codes = await this.authz.getUserRoleCodes(userId);
     if (this.authz.isAdminCodes(codes) || codes.has('VALIDATEUR')) return;

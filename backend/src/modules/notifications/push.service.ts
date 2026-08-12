@@ -128,6 +128,45 @@ export class PushService {
     }
   }
 
+  /**
+   * Rappelle au demandeur qu'un de ses bons récurrents arrive à échéance.
+   *
+   * Le destinataire est le DEMANDEUR et lui seul : c'est lui qui décide de
+   * relancer la dépense, pas le validateur, qui n'a rien à traiter tant que
+   * rien n'est soumis.
+   *
+   * Ne lève jamais : le job traite plusieurs bons à la suite, l'échec d'un
+   * envoi ne doit pas priver les autres de leur rappel.
+   */
+  async notifyEcheanceRecurrence(
+    demandeurId: string,
+    bon: { id: string; numero: string; montantTotal: string },
+  ): Promise<void> {
+    try {
+      const rows: Array<{ token: string }> = await this.dataSource
+        .createQueryBuilder()
+        .select('DISTINCT t.token', 'token')
+        .from('sec_push_token', 't')
+        .innerJoin('sec_user', 'u', 'u.id = t.user_id')
+        .where('u.id = :uid', { uid: demandeurId })
+        .andWhere('u.est_actif = 1')
+        .getRawMany();
+
+      const tokens = rows.map((r) => r.token).filter(Boolean);
+      if (tokens.length === 0) return;
+
+      const montant = Number(bon.montantTotal || 0).toLocaleString('fr-FR');
+      await this.sendExpoPush(
+        tokens,
+        'Bon récurrent à renouveler',
+        `${bon.numero} · ${montant}`,
+        { bonId: String(bon.id) },
+      );
+    } catch (e) {
+      this.logger.warn(`notifyEcheanceRecurrence échec : ${(e as Error).message}`);
+    }
+  }
+
   /** Envoie une notification via l'API Expo Push. */
   private async sendExpoPush(
     tokens: string[],

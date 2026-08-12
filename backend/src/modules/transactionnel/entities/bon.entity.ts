@@ -43,6 +43,15 @@ export class Bon extends AuditableEntity {
   @Column({ name: 'frequence_recurrence', type: 'nvarchar', length: 20, nullable: true })
   frequenceRecurrence?: FrequenceRecurrence | null;
 
+  /**
+   * Jour du prochain rappel. Un job quotidien notifie le demandeur quand il est
+   * atteint, puis reporte la date d'une période. Type DATE et non datetime :
+   * une échéance est un jour, pas un instant.
+   */
+  @ApiProperty({ required: false, description: 'Prochain rappel (YYYY-MM-DD), bons récurrents' })
+  @Column({ name: 'date_prochaine_echeance', type: 'date', nullable: true })
+  dateProchaineEcheance?: Date | string | null;
+
   @Column({ name: 'bon_parent_id', type: 'bigint', nullable: true })
   bonParentId?: string | null;
 

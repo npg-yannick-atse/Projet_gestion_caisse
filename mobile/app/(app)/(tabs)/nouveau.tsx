@@ -17,6 +17,7 @@ import { useCreateBon } from '@/api/bons';
 import { useMyBonPerimeter, useTypeBons, usePays } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
+import { DateField } from '@/components/DateField';
 import {
   SousBonCard,
   ligneValide,
@@ -27,7 +28,38 @@ import {
 import { useToast } from '@/store/toast';
 import { notifySuccess, notifyError } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
-import type { CostCenter, NatureOperation, Pays, Portefeuille, TypeBon } from '@/types';
+import type {
+  CostCenter,
+  FrequenceRecurrence,
+  NatureOperation,
+  Pays,
+  Portefeuille,
+  TypeBon,
+} from '@/types';
+
+const FREQUENCES: SelectOption[] = [
+  { value: 'MENSUEL', label: 'Tous les mois' },
+  { value: 'TRIMESTRIEL', label: 'Tous les trimestres' },
+  { value: 'SEMESTRIEL', label: 'Tous les semestres' },
+  { value: 'ANNUEL', label: 'Tous les ans' },
+];
+
+/**
+ * Aujourd'hui + un mois, en `YYYY-MM-DD`.
+ *
+ * Le jour est ramené au dernier du mois visé quand il n'existe pas : partir du
+ * 31 janvier donnerait sinon le 3 mars, JavaScript débordant sur le mois
+ * suivant. Même règle que le report d'échéance côté serveur.
+ */
+function dansUnMois(): string {
+  const n = new Date();
+  const cibleMois = n.getMonth() + 1;
+  const annee = n.getFullYear() + Math.floor(cibleMois / 12);
+  const mois = ((cibleMois % 12) + 12) % 12;
+  const dernierJour = new Date(annee, mois + 1, 0).getDate();
+  const jour = Math.min(n.getDate(), dernierJour);
+  return `${annee}-${String(mois + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+}
 
 /**
  * Création d'un bon et de SES sous-bons.
@@ -53,6 +85,13 @@ export default function NouvelleDemandeScreen() {
   const [typeBonId, setTypeBonId] = useState('');
   const [porteur, setPorteur] = useState('');
   const [estRecurrent, setEstRecurrent] = useState(false);
+  const [frequence, setFrequence] = useState<FrequenceRecurrence>('MENSUEL');
+  /**
+   * Jour du prochain rappel. Proposé à un mois d'ici — le cas le plus courant —
+   * et modifiable. Le serveur exige une date STRICTEMENT future : un rappel
+   * fixé à aujourd'hui partirait dans l'heure.
+   */
+  const [dateEcheance, setDateEcheance] = useState(() => dansUnMois());
   const [error, setError] = useState<string | null>(null);
   const showToast = useToast((s) => s.show);
 
@@ -161,11 +200,21 @@ export default function NouvelleDemandeScreen() {
   );
 
   const lignesValides = lignes.every((l) => ligneValide(l, exigences));
-  const canSubmit = !!typeBonId && lignes.length > 0 && lignesValides && !create.isPending;
+  // Même règle que le serveur : l'échéance doit être STRICTEMENT postérieure à
+  // aujourd'hui, sinon le rappel partirait dans l'heure suivant la création.
+  const echeanceFuture = dateEcheance > new Date().toISOString().slice(0, 10);
+  const canSubmit =
+    !!typeBonId &&
+    lignes.length > 0 &&
+    lignesValides &&
+    (!estRecurrent || echeanceFuture) &&
+    !create.isPending;
 
   function resetForm() {
     setPorteur('');
     setEstRecurrent(false);
+    setFrequence('MENSUEL');
+    setDateEcheance(dansUnMois());
     const uid = nouvelUid();
     setLignes([ligneVide(uid, { portefeuilleId: portefeuilleParDefaut?.id })]);
     setOuverts(new Set([uid]));
@@ -178,6 +227,10 @@ export default function NouvelleDemandeScreen() {
       const bon = await create.mutateAsync({
         typeBonId,
         estRecurrent,
+        // Les deux ne partent que si la case est cochée : le serveur refuse une
+        // échéance sur un bon qui ne se répète pas.
+        frequenceRecurrence: estRecurrent ? frequence : undefined,
+        dateProchaineEcheance: estRecurrent ? dateEcheance : undefined,
         porteur: porteur.trim() || undefined,
         soubons: lignes.map((l, i) => {
           // La caisse et la devise découlent du portefeuille DE LA LIGNE : deux
@@ -285,9 +338,29 @@ export default function NouvelleDemandeScreen() {
             </Field>
 
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Bon récurrent (renouvellement mensuel)</Text>
+              <Text style={styles.switchLabel}>Bon récurrent</Text>
               <Switch value={estRecurrent} onValueChange={setEstRecurrent} />
             </View>
+
+            {/* Un bon récurrent sans échéance ne se rappelle jamais : la
+                fréquence et la date sont exigées dès que la case est cochée. */}
+            {estRecurrent && (
+              <View style={styles.recurrence}>
+                <Select
+                  label="Fréquence"
+                  required
+                  value={frequence}
+                  options={FREQUENCES}
+                  onChange={(v) => setFrequence(v as FrequenceRecurrence)}
+                />
+                <DateField label="Prochain rappel" value={dateEcheance} onChange={setDateEcheance} />
+                <Text style={echeanceFuture ? styles.aide : styles.aideErreur}>
+                  {echeanceFuture
+                    ? 'Une notification vous sera envoyée ce jour-là, puis à chaque échéance suivante.'
+                    : 'Choisissez une date postérieure à aujourd’hui.'}
+                </Text>
+              </View>
+            )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -372,6 +445,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   switchLabel: { flex: 1, fontSize: 13, color: '#0F172A', paddingRight: 10 },
+  recurrence: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(15,76,129,0.12)',
+    padding: 14,
+    marginBottom: 14,
+  },
+  aide: { fontSize: 11, color: '#64748B', marginTop: -6 },
+  aideErreur: { fontSize: 11, color: '#B42318', marginTop: -6 },
   error: { color: '#EF4444', fontSize: 13, marginBottom: 12 },
   totalRow: {
     flexDirection: 'row',

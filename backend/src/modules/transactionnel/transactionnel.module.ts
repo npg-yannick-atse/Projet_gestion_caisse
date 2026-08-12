@@ -14,6 +14,7 @@ import { Transfert } from './entities/transfert.entity';
 import { EcritureComptable } from './entities/ecriture-comptable.entity';
 import { Carnet } from './entities/carnet.entity';
 import { BonManuel } from './entities/bon-manuel.entity';
+import { BonRecurrenceJob } from './jobs/bon-recurrence.job';
 import { BonsService } from './bons.service';
 import { BonsController } from './bons.controller';
 import { BonsCaisseService } from './bons-caisse.service';
@@ -43,7 +44,15 @@ import { BonsManuelsController } from './bons-manuels.controller';
     NotificationsModule,
     AuditModule,
   ],
-  providers: [BonsService, BonsCaisseService, LedgerService, BonsManuelsService, BudgetMensuelService],
+  providers: [
+    BonsService,
+    BonsCaisseService,
+    LedgerService,
+    BonsManuelsService,
+    BudgetMensuelService,
+    // Rappel quotidien des bons récurrents (@Cron 7h, fuseau Abidjan).
+    BonRecurrenceJob,
+  ],
   controllers: [BonsController, BonsCaisseController, LedgerController, BonsManuelsController],
   exports: [BonsService, BonsCaisseService, LedgerService, TypeOrmModule],
 })

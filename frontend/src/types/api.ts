@@ -523,6 +523,8 @@ export interface CreateBonPayload {
   soubons: SousBonInput[];
   estRecurrent?: boolean;
   frequenceRecurrence?: FrequenceRecurrence;
+  /** Jour du premier rappel, AAAA-MM-JJ. Exigé par le serveur si le bon est récurrent. */
+  dateProchaineEcheance?: string;
   demandeExtension?: boolean;
   descriptionExtension?: string;
   /** Personne qui se présentera à la caisse pour le retrait (texte libre, optionnel). */

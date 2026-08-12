@@ -142,6 +142,17 @@ export class CreateBonDto {
   @IsIn(['MENSUEL', 'TRIMESTRIEL', 'SEMESTRIEL', 'ANNUEL'])
   frequenceRecurrence?: 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'ANNUEL';
 
+  /**
+   * Jour du premier rappel, `YYYY-MM-DD`. Exigé dès que le bon est récurrent :
+   * un bon récurrent sans échéance ne se rappelle jamais, autant ne pas le
+   * cocher. Le contrôle de cohérence est fait dans le service, qui voit les
+   * trois champs ensemble.
+   */
+  @ApiProperty({ required: false, description: 'Prochain rappel (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  dateProchaineEcheance?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()

@@ -170,9 +170,14 @@ export interface SousBonInput {
   description?: string;
 }
 
+export type FrequenceRecurrence = 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'ANNUEL';
+
 export interface CreateBonPayload {
   typeBonId: string;
   soubons: SousBonInput[];
   estRecurrent?: boolean;
+  frequenceRecurrence?: FrequenceRecurrence;
+  /** Jour du premier rappel, AAAA-MM-JJ. Exigé par le serveur si le bon est récurrent. */
+  dateProchaineEcheance?: string;
   porteur?: string;
 }
