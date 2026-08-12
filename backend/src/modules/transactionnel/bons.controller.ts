@@ -144,6 +144,24 @@ export class BonsController {
     });
   }
 
+  @Get('stats/par-statut')
+  @ApiOperation({
+    summary: 'Nombre de bons par statut sur une plage — restriction automatique par rôle',
+  })
+  async getParStatut(
+    @CurrentUser() user: JwtPayload,
+    @Query('demandeurId') demandeurId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const effectiveDemandeurId = await this.resolveDemandeurFilter(user, demandeurId);
+    return this.bonsService.compterParStatut({
+      demandeurId: effectiveDemandeurId,
+      dateFrom,
+      dateTo,
+    });
+  }
+
   @Get('stats/timeline')
   @ApiOperation({ summary: 'Série journalière (sparklines) — restriction automatique par rôle' })
   async getTimeline(

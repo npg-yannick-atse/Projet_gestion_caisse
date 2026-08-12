@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMyBons } from '@/api/bons';
+import { useMyBons, useBonsParStatut } from '@/api/bons';
 import { useAuthStore } from '@/store/auth';
 import { DateField } from '@/components/DateField';
 import { STATUT_META, formatDate, formatMontant, todayISO } from '@/lib/format';
@@ -54,16 +54,31 @@ export default function MesBonsScreen() {
     [bons],
   );
 
-  /** Liste fixe : les puces ne dépendent plus de ce que la page a reçu. */
-  const STATUTS: (BonStatut | 'TOUTES')[] = [
-    'TOUTES',
-    'CREE',
-    'VALIDE',
-    'DECAISSE',
-    'COMPTABILISE',
-    'ANNULE',
-    'REFUSE',
-  ];
+  /**
+   * Puces : uniquement les statuts qui existent sur la période, comptés PAR LA
+   * BASE. Proposer les sept en permanence menait pour la plupart à une liste
+   * vide ; les déduire de la page reçue reviendrait à filtrer en mémoire.
+   *
+   * La puce sélectionnée reste affichée même si son compteur tombe à zéro,
+   * sinon elle disparaîtrait sous le doigt de l'utilisateur.
+   */
+  const { data: compteurs } = useBonsParStatut(user?.id, { dateFrom, dateTo });
+  const chips = useMemo(() => {
+    const presents = (compteurs ?? []).filter((c) => c.count > 0);
+    const ordre: BonStatut[] = ['CREE', 'VALIDE', 'DECAISSE', 'COMPTABILISE', 'ANNULE', 'REFUSE'];
+    const listeStatuts = ordre.filter(
+      (s) => presents.some((c) => c.statut === s) || statutFilter === s,
+    );
+    const total = presents.reduce((n, c) => n + c.count, 0);
+    return [
+      { key: 'TOUTES' as const, label: 'Tous', count: total },
+      ...listeStatuts.map((s) => ({
+        key: s,
+        label: STATUT_META[s]?.label ?? s,
+        count: presents.find((c) => c.statut === s)?.count ?? 0,
+      })),
+    ];
+  }, [compteurs, statutFilter]);
 
   const renderItem = useCallback(
     ({ item }: { item: Bon }) => {
@@ -133,17 +148,23 @@ export default function MesBonsScreen() {
       </View>
 
       {/* Puces de statut */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {STATUTS.map((s) => {
-            const active = statutFilter === s;
-            const label = s === 'TOUTES' ? 'Tous' : STATUT_META[s]?.label ?? s;
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsBar}
+        contentContainerStyle={styles.chips}
+      >
+          {chips.map((c) => {
+            const active = statutFilter === c.key;
             return (
               <Pressable
-                key={s}
-                onPress={() => setStatutFilter(s)}
+                key={c.key}
+                onPress={() => setStatutFilter(c.key)}
                 style={[styles.chip, active && styles.chipActive]}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {c.label} {c.count}
+                </Text>
               </Pressable>
             );
           })}
@@ -229,7 +250,15 @@ const styles = StyleSheet.create({
     height: 42,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#0F172A' },
-  chips: { gap: 8, paddingHorizontal: 14, paddingTop: 10 },
+  /**
+   * `flexGrow: 0` est indispensable : React Native donne d'office `flexGrow: 1`
+   * à une ScrollView horizontale. Dans une colonne, elle s'étire donc en
+   * HAUTEUR et écrase la liste des bons en dessous. Le défaut existait déjà,
+   * mais ne se voyait que les jours où la journée comptait plusieurs statuts ;
+   * depuis que les puces sont toutes affichées, il est devenu permanent.
+   */
+  chipsBar: { flexGrow: 0, flexShrink: 0 },
+  chips: { gap: 8, paddingHorizontal: 14, paddingTop: 10, alignItems: 'center' },
   chip: { borderRadius: 999, borderWidth: 1, borderColor: '#CBD5E1', paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#fff' },
   chipActive: { backgroundColor: '#0F4C81', borderColor: '#0F4C81' },
   chipText: { fontSize: 12, fontWeight: '600', color: '#475569' },

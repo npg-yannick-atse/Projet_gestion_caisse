@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { Bon, CreateBonPayload, SousBon, ValidateBonPayload } from '../types';
+import type { Bon, BonStatut, CreateBonPayload, SousBon, ValidateBonPayload } from '../types';
 
 export interface MyBonsFilter {
   dateFrom?: string;
@@ -33,6 +33,44 @@ export function useMyBons(demandeurId: string | null | undefined, filter: MyBons
       filter.statut ?? '',
     ],
     queryFn: () => getMyBons(demandeurId as string, filter),
+    enabled: !!demandeurId,
+  });
+}
+
+export interface CompteurStatut {
+  statut: BonStatut;
+  count: number;
+  montant: number;
+}
+
+/**
+ * Combien de bons par statut sur la plage affichée — compté par la base.
+ *
+ * Les puces de filtre s'en servent pour ne proposer que les statuts qui
+ * existent. Les déduire de la liste déjà reçue reviendrait à raisonner sur une
+ * page partielle : un statut présent au serveur mais absent de l'écran ne
+ * serait jamais proposé.
+ */
+export async function getBonsParStatut(
+  demandeurId: string,
+  filter: MyBonsFilter = {},
+): Promise<CompteurStatut[]> {
+  const params: Record<string, string> = { demandeurId };
+  if (filter.dateFrom) params.dateFrom = filter.dateFrom;
+  if (filter.dateTo) params.dateTo = filter.dateTo;
+  const { data } = await api.get<CompteurStatut[]>('/bons/stats/par-statut', { params });
+  return data;
+}
+
+export function useBonsParStatut(
+  demandeurId: string | null | undefined,
+  filter: MyBonsFilter = {},
+) {
+  return useQuery<CompteurStatut[]>({
+    // La recherche n'entre PAS dans la clé : les compteurs décrivent la
+    // période, pas le texte tapé — sinon ils se videraient à chaque frappe.
+    queryKey: ['bons-par-statut', demandeurId, filter.dateFrom ?? '', filter.dateTo ?? ''],
+    queryFn: () => getBonsParStatut(demandeurId as string, filter),
     enabled: !!demandeurId,
   });
 }

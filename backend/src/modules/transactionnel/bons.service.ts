@@ -853,6 +853,53 @@ export class BonsService {
   }
 
   /**
+   * Combien de bons par statut, sur la même plage que la liste.
+   *
+   * Sert aux puces de filtre du mobile : n'afficher que les statuts qui
+   * existent vraiment. Sans cette réponse, l'écran proposait les sept statuts
+   * en permanence, dont plusieurs ne menaient qu'à une liste vide — et les
+   * déduire de la page déjà reçue reviendrait à filtrer en mémoire, donc à
+   * ignorer tout ce que le serveur n'a pas encore envoyé.
+   *
+   * Le statut n'est délibérément PAS un filtre ici : les compteurs doivent
+   * rester complets même quand une puce est sélectionnée, sinon la sélection
+   * ferait disparaître toutes les autres.
+   */
+  async compterParStatut(opts: {
+    demandeurId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<Array<{ statut: string; count: number; montant: number }>> {
+    const qb = this.bonRepo
+      .createQueryBuilder('bon')
+      .select('bon.statut', 'statut')
+      .addSelect('COUNT(bon.id)', 'count')
+      .addSelect('SUM(CAST(bon.montant_total AS DECIMAL(19,4)))', 'montant')
+      .where('1=1')
+      .groupBy('bon.statut');
+
+    if (opts.demandeurId) {
+      qb.andWhere('bon.demandeur_id = :demandeurId', { demandeurId: opts.demandeurId });
+    }
+    if (opts.dateFrom) {
+      qb.andWhere('bon.created_at >= :df', { df: new Date(opts.dateFrom) });
+    }
+    if (opts.dateTo) {
+      const fin = new Date(opts.dateTo);
+      fin.setHours(23, 59, 59, 999);
+      qb.andWhere('bon.created_at <= :dt', { dt: fin });
+    }
+
+    const rows: Array<{ statut: string; count: string | number; montant: string | null }> =
+      await qb.getRawMany();
+    return rows.map((r) => ({
+      statut: r.statut,
+      count: Number(r.count) || 0,
+      montant: Number(r.montant ?? 0) || 0,
+    }));
+  }
+
+  /**
    * Série temporelle des bons par jour sur les `days` derniers jours.
    * Utilisé pour les sparklines des dashboards.
    * Filtres optionnels : statut, demandeur.

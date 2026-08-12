@@ -18,12 +18,28 @@ import { BonsService } from './bons.service';
 function fauxQueryBuilder() {
   const clauses: string[] = [];
   const params: Record<string, unknown> = {};
+  const selects: string[] = [];
+  const groupes: string[] = [];
   const qb: any = {
     clauses,
     params,
+    selects,
+    groupes,
     where: () => qb,
     leftJoin: () => qb,
-    addSelect: () => qb,
+    select: (s: string, alias?: string) => {
+      selects.push(`${s}${alias ? ` AS ${alias}` : ''}`);
+      return qb;
+    },
+    addSelect: (s: string, alias?: string) => {
+      selects.push(`${s}${alias ? ` AS ${alias}` : ''}`);
+      return qb;
+    },
+    groupBy: (s: string) => {
+      groupes.push(s);
+      return qb;
+    },
+    getRawMany: async () => [],
     orderBy: () => qb,
     addOrderBy: () => qb,
     andWhere: (clause: string, p?: Record<string, unknown>) => {
@@ -107,5 +123,56 @@ describe('findAll — filtre « bons que j’ai traités »', () => {
     await svc.findAll({ validateurId: '7', statut: 'DECAISSE' as any });
     expect(sql(qb)).toContain('bon.statut = :statut');
     expect(sql(qb)).toContain('v.validateur_id = :validateurId');
+  });
+});
+
+/**
+ * Compteurs par statut : ce qui alimente les puces de filtre du mobile.
+ *
+ * L'erreur à ne pas commettre serait d'y appliquer le statut sélectionné — les
+ * autres puces tomberaient alors toutes à zéro dès le premier clic, et
+ * l'utilisateur ne pourrait plus en changer sans revenir à « Tous ».
+ */
+describe('compterParStatut — compteurs des puces', () => {
+  it('agrège en base, par statut', async () => {
+    const { svc, qb } = service();
+    await svc.compterParStatut({});
+    expect(qb.groupes).toContain('bon.statut');
+    expect(qb.selects.join(' | ')).toContain('COUNT(bon.id)');
+  });
+
+  it('respecte la plage de dates de la liste', async () => {
+    const { svc, qb } = service();
+    await svc.compterParStatut({ dateFrom: '2026-08-01', dateTo: '2026-08-12' });
+    expect(sql(qb)).toContain('bon.created_at >= :df');
+    expect(sql(qb)).toContain('bon.created_at <= :dt');
+    const fin = qb.params.dt as Date;
+    expect(fin.getHours()).toBe(23);
+  });
+
+  it('se restreint au demandeur quand il est fourni', async () => {
+    const { svc, qb } = service();
+    await svc.compterParStatut({ demandeurId: '5' });
+    expect(sql(qb)).toContain('bon.demandeur_id = :demandeurId');
+    expect(qb.params.demandeurId).toBe('5');
+  });
+
+  it('n’accepte aucun filtre de statut : les compteurs restent complets', async () => {
+    const { svc, qb } = service();
+    await svc.compterParStatut({ demandeurId: '5', dateFrom: '2026-08-01' });
+    expect(sql(qb)).not.toContain('bon.statut =');
+  });
+
+  it('rend des nombres, jamais les chaînes brutes du pilote SQL', async () => {
+    const { svc, qb } = service();
+    qb.getRawMany = async () => [
+      { statut: 'CREE', count: '3', montant: '150000.0000' },
+      { statut: 'DECAISSE', count: 1, montant: null },
+    ];
+    const res = await svc.compterParStatut({});
+    expect(res).toEqual([
+      { statut: 'CREE', count: 3, montant: 150000 },
+      { statut: 'DECAISSE', count: 1, montant: 0 },
+    ]);
   });
 });
