@@ -43,3 +43,8 @@ Thumbs.db
 Document/sap.env
 Document/comptes_test.txt
 ~$*
+
+# Fichier de travail du banc d'essai des rôles : identifiants des comptes
+# temporaires, régénéré à chaque exécution de roles-1-creer.js.
+Document/tests-roles/comptes.json
+Document/tests-roles/resultats.json
