@@ -646,9 +646,23 @@ function WalletCard({
 }) {
   const { data } = usePortefeuilleSolde(pf.id);
   const { data: users } = useUsers();
+  const { data: directions } = useDirections();
   const toggleActive = useTogglePortefeuilleActive();
   const fp = useFinancePerms();
   const gestionnaire = pf.gestionnaireId ? users?.find((u) => u.id === pf.gestionnaireId) : undefined;
+
+  // La carte n'annonçait que la NATURE du propriétaire (« Direction »), jamais
+  // laquelle : six portefeuilles de direction se ressemblaient tous. On nomme
+  // le propriétaire, et on retombe sur le mot générique si le référentiel n'est
+  // pas encore chargé ou si l'entité a disparu.
+  const proprietaire = (() => {
+    if (pf.proprietaireType === 'DIRECTION') {
+      const d = directions?.find((x) => String(x.id) === String(pf.proprietaireId));
+      return d ? `Direction ${d.code}` : 'Direction';
+    }
+    const u = users?.find((x) => String(x.id) === String(pf.proprietaireId));
+    return u ? `${u.prenom} ${u.nom}` : 'Utilisateur';
+  })();
   const isInactive = pf.estActif === false;
   const busy = deleteBusy || (toggleActive.isPending && toggleActive.variables?.id === pf.id);
   const [confirmToggleOpen, setConfirmToggleOpen] = useState(false);
@@ -699,7 +713,7 @@ function WalletCard({
             {data ? formatMontant(data.solde) : '…'}
           </div>
           <div className="mt-1 text-[11px] text-white/50">
-            {deviseCode} · {pf.code} · {pf.proprietaireType === 'USER' ? 'Utilisateur' : 'Direction'}
+            {deviseCode} · {pf.code} · {proprietaire}
           </div>
           {gestionnaire && (
             <div
@@ -707,7 +721,7 @@ function WalletCard({
               title={`Gestionnaire : ${gestionnaire.prenom} ${gestionnaire.nom}`}
             >
               <UserCog className="h-2.5 w-2.5" />
-              {gestionnaire.prenom} {gestionnaire.nom}
+              Géré par {gestionnaire.prenom} {gestionnaire.nom}
             </div>
           )}
         </div>
