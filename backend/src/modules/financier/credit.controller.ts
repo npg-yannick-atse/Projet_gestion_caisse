@@ -22,7 +22,8 @@ export class CreditController {
 
   @Get()
   @ApiOperation({
-    summary: 'Lister les crédits (de sa direction ; tous pour un admin) — filtres date/direction + tri BD',
+    summary:
+      'Lister les crédits (de sa direction ; tous pour un admin) — dates, direction, statut, recherche et tri EN BASE',
   })
   list(
     @CurrentUser() user: JwtPayload,
@@ -31,11 +32,15 @@ export class CreditController {
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
     @Query('directionId') directionId?: string,
+    @Query('statut') statut?: string,
+    @Query('search') search?: string,
   ) {
     return this.creditService.list(user.sub, {
       dateFrom,
       dateTo,
       directionId,
+      statut,
+      search,
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
@@ -55,12 +60,14 @@ export class CreditController {
     @Query('directionId') directionId?: string,
     @Query('statut') statut?: string,
     @Query('enRetard') enRetard?: string,
+    @Query('search') search?: string,
   ) {
     const buf = await this.creditService.exportExcel(user.sub, {
       dateFrom,
       dateTo,
       directionId,
       statut,
+      search,
       enRetard: enRetard === 'true' || enRetard === '1',
       sortBy,
       sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,

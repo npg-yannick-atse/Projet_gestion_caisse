@@ -17,6 +17,10 @@ export interface CreditsFilters {
   sortDir?: 'asc' | 'desc';
   /** Restreint aux crédits des employés de cette direction. */
   directionId?: string;
+  /** Statut exact. « TOUTES » (ou omis) = pas de restriction. */
+  statut?: string;
+  /** Employé (nom, prénom, matricule), sa direction, ou le compte source. */
+  search?: string;
 }
 
 export async function listCredits(filters: CreditsFilters = {}): Promise<Credit[]> {
@@ -26,6 +30,8 @@ export async function listCredits(filters: CreditsFilters = {}): Promise<Credit[
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;
   if (filters.directionId) params.directionId = filters.directionId;
+  if (filters.statut && filters.statut !== 'TOUTES') params.statut = filters.statut;
+  if (filters.search) params.search = filters.search;
   const { data } = await api.get<Credit[]>('/credits', { params });
   return data;
 }
@@ -220,6 +226,9 @@ export async function exportCredits(
   if (filters.dateTo) params.dateTo = filters.dateTo;
   if (filters.directionId) params.directionId = filters.directionId;
   if (filters.statut && filters.statut !== 'TOUTES') params.statut = filters.statut;
+  // La recherche est appliquée en base : le fichier contient donc exactement
+  // les lignes affichées, ce que l'ancien export ne garantissait pas.
+  if (filters.search) params.search = filters.search;
   if (filters.enRetard) params.enRetard = 'true';
   if (filters.sortBy) params.sortBy = filters.sortBy;
   if (filters.sortDir) params.sortDir = filters.sortDir;

@@ -68,12 +68,6 @@ function useCreditPerms() {
   };
 }
 
-/** Date du jour au format YYYY-MM-DD (heure locale). */
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
@@ -147,13 +141,24 @@ function EmployeCell({ employe, fallback }: { employe?: Employe; fallback: strin
 
 export function CreditsPage() {
   const currentUser = useAuthStore((s) => s.user);
-  // Historique : par défaut la journée du JOUR, filtre date + tri côté serveur.
-  const today = todayLocal();
-  const [dateFrom, setDateFrom] = useState(() => todayLocal());
-  const [dateTo, setDateTo] = useState(() => todayLocal());
-  // Filtres client-side (sur la liste déjà chargée pour la période) : statut + recherche employé.
+  /**
+   * AUCUNE borne de date par défaut : un crédit se suit sur toute sa durée, pas
+   * sur la journée où il a été demandé. Le défaut « aujourd'hui » masquait toute
+   * demande en attente dès le lendemain — même défaut que les demandes de
+   * recharge et de transfert (constaté le 12/08/2026).
+   */
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  // Statut, recherche et direction sont exécutés EN BASE, comme les dates et le
+  // tri. Ils filtraient auparavant la liste déjà chargée dans le navigateur, ce
+  // qui obligeait à rapatrier tout l'historique dès qu'on tapait un mot.
   const [statutFilter, setStatutFilter] = useState<CreditStatut | 'TOUTES'>('TOUTES');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   const [directionFilter, setDirectionFilter] = useState('');
   // « Seulement les retards » : la question que pose le boss en premier.
   const [retardSeul, setRetardSeul] = useState(false);
@@ -162,11 +167,18 @@ export function CreditsPage() {
   const { data: credits } = useCredits({
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    directionId: directionFilter || undefined,
+    statut: statutFilter,
+    search: debouncedSearch.trim() || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
-  // Liste complète (non filtrée) : sert uniquement à détecter un crédit EN COURS
-  // même s'il date d'un autre jour que celui affiché.
+  /**
+   * Liste non filtrée, réservée à DEUX vérifications par employé — jamais à
+   * l'affichage de la liste : (1) prévenir qu'un employé a déjà un crédit
+   * actif, (2) montrer ses autres crédits dans l'échéancier. Ce sont des
+   * recherches ponctuelles, pas un filtre d'écran.
+   */
   const { data: allCredits } = useCredits();
   const [formOpen, setFormOpen] = useState(false);
   const { data: employes } = useEmployesSelectionnables();
@@ -310,41 +322,30 @@ export function CreditsPage() {
     return (portefeuilles ?? []).find((x) => x.id === c.sourceId)?.code ?? 'Portefeuille';
   };
 
-  // Filtrage : statut + recherche. Dès qu'un statut (≠ Tous) ou une recherche est
-  // actif, on cherche dans TOUT l'historique (on ignore la date, comme la page
-  // Opérations) → pas besoin de régler la date d'abord. Sinon, on reste sur la
-  // période choisie.
-  const rechercheGlobale = statutFilter !== 'TOUTES' || search.trim().length > 0 || retardSeul;
-  const filteredCredits = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const base = rechercheGlobale ? (allCredits ?? []) : (credits ?? []);
-    return base.filter((c) => {
-      if (statutFilter !== 'TOUTES' && c.statut !== statutFilter) return false;
-      if (directionFilter && String(employeById.get(c.employeId)?.directionId ?? '') !== directionFilter) {
-        return false;
-      }
-      // « En retard » : au moins une échéance échue sans versement. C'est le
-      // backend qui le dit, à partir des versements réellement encaissés.
-      if (retardSeul && (situations?.[c.id]?.echeancesEnRetard ?? 0) === 0) return false;
-      if (!q) return true;
-      return (
-        empLabel(c.employeId).toLowerCase().includes(q) ||
-        sourceLabel(c).toLowerCase().includes(q) ||
-        dirLabel(c.employeId).toLowerCase().includes(q)
-      );
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    credits, allCredits, rechercheGlobale, statutFilter, search, employeById,
-    caisses, portefeuilles, directionFilter, retardSeul, situations, directionById,
-  ]);
+  /**
+   * Statut, recherche, direction et dates sont déjà appliqués par la base : il
+   * ne reste ici que « seulement les retards ».
+   *
+   * Celui-là ne peut pas descendre en SQL sans y réécrire l'échéancier —
+   * « en retard » veut dire « au moins une échéance échue sans versement », ce
+   * que le backend calcule déjà et expose via `/credits/situations`. Le
+   * dupliquer en SQL, c'est se garantir deux vérités divergentes. Il porte donc
+   * sur une liste DÉJÀ restreinte par la base, pas sur tout l'historique.
+   */
+  const filteredCredits = useMemo(
+    () =>
+      (credits ?? []).filter(
+        (c) => !retardSeul || (situations?.[c.id]?.echeancesEnRetard ?? 0) > 0,
+      ),
+    [credits, retardSeul, situations],
+  );
 
   const nbEnRetard = useMemo(
     () =>
-      (rechercheGlobale ? (allCredits ?? []) : (credits ?? [])).filter(
+      (credits ?? []).filter(
         (c) => (situations?.[c.id]?.echeancesEnRetard ?? 0) > 0,
       ).length,
-    [credits, allCredits, rechercheGlobale, situations],
+    [credits, situations],
   );
 
   type ConfirmType = 'APPROUVER' | 'DECAISSER' | 'ANNULER' | 'SOLDER';
@@ -544,14 +545,14 @@ export function CreditsPage() {
               className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
             />
           </div>
-          {(dateFrom !== today || dateTo !== today) && (
+          {(dateFrom || dateTo) && (
             <button
               type="button"
               onClick={() => {
-                setDateFrom(today);
-                setDateTo(today);
+                setDateFrom('');
+                setDateTo('');
               }}
-              title="Revenir aux crédits du jour"
+              title="Retirer les bornes de dates"
               className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
             >
               Aujourd'hui
@@ -601,12 +602,13 @@ export function CreditsPage() {
             onClick={() => {
               setExporting(true);
               exportCredits({
-                // Le fichier reprend exactement ce que la liste montre — sauf la
-                // recherche texte, qui n'existe que côté écran.
-                dateFrom: rechercheGlobale ? undefined : dateFrom || undefined,
-                dateTo: rechercheGlobale ? undefined : dateTo || undefined,
+                // Le fichier reprend exactement ce que la liste montre : tous
+                // les filtres sont désormais appliqués en base, recherche comprise.
+                dateFrom: dateFrom || undefined,
+                dateTo: dateTo || undefined,
                 directionId: directionFilter || undefined,
                 statut: statutFilter,
+                search: debouncedSearch.trim() || undefined,
                 enRetard: retardSeul,
                 sortBy: sort.state.by ?? undefined,
                 sortDir: sort.state.by ? sort.state.dir : undefined,
@@ -617,12 +619,10 @@ export function CreditsPage() {
           >
             <Download className="h-3.5 w-3.5" /> {exporting ? 'Export…' : 'Exporter Excel'}
           </button>
+          {/* Plus de bandeau « date ignorée » : la recherche ne contourne plus
+              les bornes de dates, elle s'y ajoute — et sans borne par défaut,
+              elle porte de toute façon sur tout l'historique. */}
           <span className="ml-auto flex items-center gap-2 text-[11px] text-[#64748B]">
-            {rechercheGlobale && (
-              <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 font-medium text-[#1A6DB5]">
-                tout l'historique (date ignorée)
-              </span>
-            )}
             {filteredCredits.length} résultat{filteredCredits.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -677,9 +677,9 @@ export function CreditsPage() {
                 <td colSpan={11} className="px-4 py-10 text-center text-[#64748B]">
                   {search || statutFilter !== 'TOUTES'
                     ? 'Aucun crédit ne correspond aux filtres.'
-                    : dateFrom !== today || dateTo !== today
+                    : dateFrom || dateTo
                       ? 'Aucun crédit pour ces dates.'
-                      : "Aucun crédit aujourd'hui."}
+                      : 'Aucun crédit enregistré.'}
                 </td>
               </tr>
             )}

@@ -15,6 +15,12 @@ import type { SortDir, SortState } from '@/components/SortableHeader';
  *   <SortableHeader column="montant" state={sort.state} onSort={sort.setSort}>Montant</SortableHeader>
  *   useBons({ sortBy: sort.state.by ?? undefined, sortDir: sort.state.dir });
  */
+/**
+ * Valeur de `sortBy` signifiant « l'utilisateur a explicitement retiré le tri ».
+ * Ne doit jamais figurer dans une whitelist de colonnes.
+ */
+const SANS_TRI = 'none';
+
 export function useTableSort<TCol extends string>(
   routePath: string,
   whitelist: readonly TCol[],
@@ -31,7 +37,20 @@ export function useTableSort<TCol extends string>(
     const by =
       rawBy && (whitelist as readonly string[]).includes(rawBy) ? (rawBy as TCol) : null;
     const dir: SortDir = rawDir === 'desc' ? 'desc' : 'asc';
-    if (!by && defaultSort) return defaultSort;
+    // `sortBy` ABSENT           = on arrive sur la page → tri par défaut.
+    // `sortBy=none`             = l'utilisateur a choisi « Aucun » → respecté.
+    //
+    // Sans cette distinction, choisir « Aucun » retirait le paramètre, le défaut
+    // revenait au recalcul suivant, et le sélecteur se remettait tout seul sur la
+    // colonne par défaut — signalé en test comme « les boutons ne sont pas à
+    // jour ». Trois écrans exposent cette option : Utilisateurs, Employés,
+    // Natures d'opération.
+    //
+    // Un marqueur explicite plutôt qu'une chaîne vide : les sérialiseurs de
+    // querystring omettent volontiers les valeurs vides, ce qui ramènerait
+    // exactement le défaut qu'on corrige. `none` n'est dans aucune whitelist,
+    // donc il se résout naturellement en « pas de colonne ».
+    if (rawBy === null && defaultSort) return defaultSort;
     return { by, dir };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_href]);
@@ -42,7 +61,10 @@ export function useTableSort<TCol extends string>(
       sp.set('sortBy', next.by);
       sp.set('sortDir', next.dir);
     } else {
-      sp.delete('sortBy');
+      // Marqueur explicite, et non suppression : c'est ce qui distingue « je ne
+      // veux aucun tri » de « je n'ai rien demandé », et empêche le défaut de
+      // revenir se substituer au choix de l'utilisateur.
+      sp.set('sortBy', SANS_TRI);
       sp.delete('sortDir');
     }
     const obj: Record<string, string> = {};

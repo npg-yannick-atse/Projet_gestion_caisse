@@ -202,10 +202,33 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const toggleDivision = useToggleUserDivision(user.id);
   const divisionAccess = useMemo(() => new Set(userDivisions ?? []), [userDivisions]);
   // Natures d'opération autorisées (création de bons)
-  const { data: allNatures } = useNaturesOperation();
   const { data: userNatures } = useUserNaturesOperation(user.id);
   const toggleNature = useToggleUserNatureOperation(user.id);
   const natureAccess = useMemo(() => new Set(userNatures ?? []), [userNatures]);
+
+  /**
+   * Le référentiel compte ~181 natures : sans recherche, il fallait parcourir
+   * autant de cases pour en cocher une.
+   *
+   * La recherche ET le tri sont exécutés EN BASE, comme partout ailleurs dans
+   * l'application. Une première version filtrait la liste déjà chargée en
+   * JavaScript : plus court à écrire, mais c'est précisément ce que la
+   * convention interdit — le jour où le référentiel grossit, l'écran rapatrie
+   * tout pour n'en afficher que trois lignes.
+   */
+  const [natureSearch, setNatureSearch] = useState('');
+  const [natureSearchDebounced, setNatureSearchDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setNatureSearchDebounced(natureSearch), 300);
+    return () => clearTimeout(t);
+  }, [natureSearch]);
+
+  const { data: allNatures } = useNaturesOperation({
+    search: natureSearchDebounced.trim() || undefined,
+    sortBy: 'libelle',
+    sortDir: 'asc',
+  });
+  const naturesAffichees = allNatures ?? [];
   const { data: directions } = useDirections();
   const updateUser = useUpdateUser();
   const currentUser = useAuthStore((s) => s.user);
@@ -471,8 +494,25 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                 Limite les natures comptables utilisables à la création d'un bon.{' '}
                 <strong>Sans aucune coche, l'utilisateur ne peut créer aucun bon</strong> (les administrateurs ne sont pas concernés).
               </p>
-              <div className="grid grid-cols-2 gap-1">
-                {(allNatures ?? []).map((n) => {
+              <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+                <input
+                  value={natureSearch}
+                  onChange={(e) => setNatureSearch(e.target.value)}
+                  placeholder="Rechercher par code ou libellé…"
+                  className="flex-1 bg-transparent text-xs text-[#0F172A] outline-none"
+                />
+                {/* La base ne renvoie QUE les lignes correspondantes : il n'y a
+                    plus de « x sur n » à afficher, seulement ce qui remonte. */}
+                <span className="shrink-0 text-[10px] text-[#94A3B8]">
+                  {naturesAffichees.length}
+                </span>
+              </div>
+
+              {/* Hauteur bornée : la liste complète poussait le reste du panneau
+                  hors de l'écran et masquait les cases déjà cochées. */}
+              <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
+                {naturesAffichees.map((n) => {
                   const has = natureAccess.has(n.id);
                   return (
                     <label
@@ -493,9 +533,19 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                   );
                 })}
               </div>
-              {(allNatures ?? []).length === 0 && (
-                <p className="text-sm text-[#64748B]">Aucune nature d'opération. Créez-en depuis « Natures d'opération ».</p>
-              )}
+              {/* Une liste vide ne veut pas dire la même chose selon qu'on
+                  cherche ou non : référentiel vide d'un côté, recherche
+                  infructueuse de l'autre. */}
+              {naturesAffichees.length === 0 &&
+                (natureSearchDebounced.trim() ? (
+                  <p className="text-xs text-[#64748B]">
+                    Aucune nature ne correspond à « {natureSearchDebounced} ».
+                  </p>
+                ) : (
+                  <p className="text-sm text-[#64748B]">
+                    Aucune nature d'opération. Créez-en depuis « Natures d'opération ».
+                  </p>
+                ))}
             </div>
           )}
         </div>

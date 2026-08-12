@@ -61,12 +61,6 @@ const STATUT_TONE: Record<
   ANNULEE: { bg: 'bg-[#F1F5F9]', text: 'text-[#64748B]', label: 'Annulée' },
 };
 
-/** Date du jour au format YYYY-MM-DD (heure locale). */
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const FILTRES: { key: 'ALL' | DemandeTransfertStatut; label: string }[] = [
   { key: 'ALL', label: 'Toutes' },
   { key: 'CREE', label: 'En attente' },
@@ -421,10 +415,14 @@ export function DemandesTransfertPage() {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
-  // Par défaut, on n'affiche que les demandes du JOUR (comme les autres pages).
-  const today = todayLocal();
-  const [dateFrom, setDateFrom] = useState(() => todayLocal());
-  const [dateTo, setDateTo] = useState(() => todayLocal());
+  /**
+   * AUCUNE borne de date par défaut : c'est une FILE D'ATTENTE, pas un journal.
+   * Avec le défaut « aujourd'hui », les 3 demandes au statut CREE — donc en
+   * attente de décision — étaient invisibles au 12/08/2026, comme les 4
+   * demandes de recharge. Voir DemandesRechargePage pour le raisonnement.
+   */
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [decisionTarget, setDecisionTarget] = useState<{
     demande: DemandeTransfert;
@@ -467,11 +465,11 @@ export function DemandesTransfertPage() {
   };
 
   const filtered = demandes ?? [];
-  const isDefaultView = !search && dateFrom === today && dateTo === today;
+  const isDefaultView = !search && !dateFrom && !dateTo;
   const resetFilters = () => {
     setSearch('');
-    setDateFrom(today);
-    setDateTo(today);
+    setDateFrom('');
+    setDateTo('');
   };
 
   // Compteurs des onglets : GROUP BY en base, sans le filtre de statut — sinon

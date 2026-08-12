@@ -28,12 +28,6 @@ const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
-/** Date du jour au format YYYY-MM-DD (heure locale). */
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const STATUT_BADGE: Record<DemandeRechargeStatut, { label: string; cls: string }> = {
   EN_ATTENTE: { label: 'En attente', cls: 'bg-[#FFFBEB] text-[#92400E]' },
   TRAITEE: { label: 'Traitée', cls: 'bg-[#ECFDF5] text-[#047857]' },
@@ -346,10 +340,21 @@ function DemandesRechargePageInner() {
     return () => clearTimeout(t);
   }, [search]);
   const sort = useTableSort<DrSortCol>('/demandes-recharge', DR_SORT_COLUMNS);
-  // Par défaut, on n'affiche que les demandes du JOUR (comme Opérations / Audit).
-  const today = todayLocal();
-  const [dateFrom, setDateFrom] = useState(() => todayLocal());
-  const [dateTo, setDateTo] = useState(() => todayLocal());
+  /**
+   * AUCUNE borne de date par défaut.
+   *
+   * La page s'ouvrait sur la seule journée courante, par symétrie avec
+   * Opérations et Audit. Mais ces deux-là sont des JOURNAUX, qu'on consulte par
+   * période ; celle-ci est une FILE D'ATTENTE, qu'on vient vider. Une demande
+   * en attente depuis la veille disparaissait donc de l'écran de celui qui doit
+   * la traiter — au 12/08/2026, les 4 demandes EN_ATTENTE dataient du 01/07 et
+   * n'étaient visibles par personne.
+   *
+   * Le volume ne justifiait pas ce défaut : la table compte 19 lignes.
+   * Les bornes restent proposées pour restreindre volontairement.
+   */
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   // Recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: demandes, isLoading } = useDemandesRecharge({
     search: debouncedSearch || undefined,
@@ -373,11 +378,11 @@ function DemandesRechargePageInner() {
   const [showRequest, setShowRequest] = useState(false);
 
   const filtered = demandes ?? [];
-  const isDefaultView = !search && dateFrom === today && dateTo === today;
+  const isDefaultView = !search && !dateFrom && !dateTo;
   const resetFilters = () => {
     setSearch('');
-    setDateFrom(today);
-    setDateTo(today);
+    setDateFrom('');
+    setDateTo('');
   };
 
   const actionError =

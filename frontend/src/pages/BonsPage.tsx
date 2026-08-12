@@ -15,12 +15,6 @@ import { useTableSort } from '@/hooks/useTableSort';
 const BONS_SORT_COLUMNS = ['numero', 'statut', 'montantTotal', 'createdAt'] as const;
 type BonSortCol = (typeof BONS_SORT_COLUMNS)[number];
 
-/** Date du jour au format YYYY-MM-DD (heure locale). */
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 const FILTERS: { key: 'all' | BonStatut; label: string }[] = [
   { key: 'all', label: 'Tous' },
   { key: 'CREE', label: 'En attente' },
@@ -87,8 +81,6 @@ export function BonsPage() {
           : null,
       period: rawPeriod === 'today' || rawPeriod === 'week' || rawPeriod === 'month' ? rawPeriod : null,
       extension: sp.get('extension') === '1',
-      // Marqueur explicite « tout afficher » (désactive le défaut « aujourd'hui »).
-      showAll: sp.get('range') === 'all',
       dateFrom: isIsoDate(rawFrom) ? rawFrom : '',
       dateTo: isIsoDate(rawTo) ? rawTo : '',
     };
@@ -97,27 +89,29 @@ export function BonsPage() {
 
   const [search, setSearch] = useState('');
 
-  // « Visite fraîche » = URL sans aucun filtre ET sans marqueur « tout afficher ».
-  // Dans ce cas seulement, on applique le défaut « bons du jour ».
-  const isFreshVisit =
-    !urlParams.statut &&
-    !urlParams.period &&
-    !urlParams.extension &&
-    !urlParams.showAll &&
-    !urlParams.dateFrom &&
-    !urlParams.dateTo;
+  /**
+   * AUCUNE borne de date par défaut : la page s'ouvre sur TOUS les bons.
+   *
+   * Elle appliquait « aujourd'hui » à l'arrivée. Le filtre était pourtant
+   * INVISIBLE — le bandeau « Filtre actif », et donc son bouton
+   * « Réinitialiser », ne s'affichent que si un filtre figure dans l'URL, ce
+   * qui n'est pas le cas d'un défaut implicite. L'utilisateur arrivait donc sur
+   * quatre compteurs à zéro, sans rien pour comprendre ni pour en sortir
+   * (signalé en test le 12/08/2026 : « je vois tout à 0 »).
+   *
+   * Les bons validés attendent d'être décaissés parfois plusieurs jours : les
+   * masquer dès le lendemain cachait le travail à faire. Les bornes de dates
+   * restent disponibles pour restreindre volontairement.
+   */
+  const effFrom = urlParams.dateFrom;
+  const effTo = urlParams.dateTo;
 
-  // Date EFFECTIVE du filtre : ce qui est réellement envoyé au backend.
-  // → URL si fournie, sinon « aujourd'hui » par défaut (visite fraîche), sinon vide.
-  const effFrom = urlParams.dateFrom || (isFreshVisit ? todayLocal() : '');
-  const effTo = urlParams.dateTo || (isFreshVisit ? todayLocal() : '');
-
-  // Brouillon local des inputs date (initialisé sur la date effective → affiche aujourd'hui).
+  // Brouillon local des inputs date (vide tant que l'utilisateur n'a rien saisi).
   const [draftFrom, setDraftFrom] = useState(effFrom);
   const [draftTo, setDraftTo] = useState(effTo);
 
-  // Resynchronise les inputs quand l'URL change DE L'EXTÉRIEUR (drill-down/reset),
-  // sans écraser le défaut « aujourd'hui » au tout premier rendu.
+  // Resynchronise les inputs quand l'URL change DE L'EXTÉRIEUR (drill-down
+  // depuis un tableau de bord, réinitialisation), pas au premier rendu.
   const firstSync = useRef(true);
   useEffect(() => {
     if (firstSync.current) {
@@ -245,10 +239,10 @@ export function BonsPage() {
           <button
             type="button"
             onClick={() => {
-              // Réinitialiser = tout afficher (on désactive le défaut « aujourd'hui »).
+              // Réinitialiser : on retire tous les filtres de l'URL.
               setDraftFrom('');
               setDraftTo('');
-              navigate({ to: '/bons', search: { range: 'all' } as any, replace: true });
+              navigate({ to: '/bons', search: {} as any, replace: true });
             }}
             className="ml-auto rounded-[7px] border border-[#BFDBFE] bg-white px-2.5 py-1 text-[10px] font-medium text-[#1A6DB5] hover:bg-[#DBEAFE]"
           >
@@ -308,7 +302,6 @@ export function BonsPage() {
                     const sp = new URLSearchParams(window.location.search);
                     sp.delete('dateFrom');
                     sp.delete('dateTo');
-                    sp.set('range', 'all');
                     const obj: Record<string, string> = {};
                     sp.forEach((v, k) => {
                       obj[k] = v;

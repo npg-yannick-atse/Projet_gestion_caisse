@@ -79,6 +79,8 @@ export class CreditService {
       sortBy?: string;
       sortDir?: 'asc' | 'desc';
       directionId?: string;
+      statut?: string;
+      search?: string;
     } = {},
   ): Promise<Credit[]> {
     const qb = this.creditRepo.createQueryBuilder('c');
@@ -106,6 +108,38 @@ export class CreditService {
     // Filtre par date (sur la date de début du crédit ; date_debut est de type DATE).
     if (opts.dateFrom) qb.andWhere('c.date_debut >= :df', { df: opts.dateFrom });
     if (opts.dateTo) qb.andWhere('c.date_debut <= :dt', { dt: opts.dateTo });
+
+    if (opts.statut && opts.statut !== 'TOUTES') {
+      qb.andWhere('c.statut = :statut', { statut: opts.statut });
+    }
+
+    /**
+     * Recherche : employé (nom, prénom, matricule), sa direction, et le compte
+     * qui a financé le crédit.
+     *
+     * La source est POLYMORPHE (`source_type` + `source_id`) : d'où deux
+     * jointures conditionnelles plutôt qu'une relation. Elles sont posées
+     * seulement quand on cherche — inutile de les payer sur chaque listage.
+     *
+     * Ce filtrage vivait dans le navigateur, sur une liste rapatriée en entier.
+     */
+    const q = opts.search?.trim();
+    if (q) {
+      qb.leftJoin('ref_employe', 'e', 'e.id = c.employe_id')
+        // `sec_direction`, pas `ref_direction` : les directions vivent dans le
+        // module sécurité, pas dans le référentiel.
+        .leftJoin('sec_direction', 'd', 'd.id = e.direction_id')
+        .leftJoin('fin_caisse', 'ca', "c.source_type = 'CAISSE' AND ca.id = c.source_id")
+        .leftJoin('fin_portefeuille', 'pf', "c.source_type = 'PORTEFEUILLE' AND pf.id = c.source_id")
+        // `prenoms` au pluriel : c'est le nom réel de la colonne dans ref_employe.
+        .andWhere(
+          `(e.nom LIKE :q OR e.prenoms LIKE :q OR e.matricule LIKE :q
+            OR d.code LIKE :q OR d.libelle LIKE :q
+            OR ca.code LIKE :q OR ca.libelle LIKE :q
+            OR pf.code LIKE :q OR pf.libelle LIKE :q)`,
+          { q: `%${q}%` },
+        );
+    }
 
     const column = CreditService.CREDIT_SORT_MAP[opts.sortBy ?? ''];
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
@@ -365,15 +399,19 @@ export class CreditService {
       directionId?: string;
       enRetard?: boolean;
       statut?: string;
+      search?: string;
     } = {},
   ): Promise<Buffer> {
+    // `list` applique désormais le statut et la recherche EN BASE : le second
+    // filtrage en mémoire qui se trouvait ici faisait doublon.
     const credits = await this.list(userId, opts);
-    const filtresStatut = opts.statut && opts.statut !== 'TOUTES' ? credits.filter((c) => c.statut === opts.statut) : credits;
 
-    const situations = await this.remboursements.situations(filtresStatut.map((c) => String(c.id)));
+    // « En retard » reste calculé : il dépend des versements réellement
+    // encaissés, que seul l'échéancier sait rapprocher des dates d'échéance.
+    const situations = await this.remboursements.situations(credits.map((c) => String(c.id)));
     const lignes = opts.enRetard
-      ? filtresStatut.filter((c) => (situations[String(c.id)]?.echeancesEnRetard ?? 0) > 0)
-      : filtresStatut;
+      ? credits.filter((c) => (situations[String(c.id)]?.echeancesEnRetard ?? 0) > 0)
+      : credits;
 
     // Libellés résolus en une passe. `withDeleted` est indispensable ici : un
     // crédit ancien peut pointer sur une caisse ou un portefeuille depuis
