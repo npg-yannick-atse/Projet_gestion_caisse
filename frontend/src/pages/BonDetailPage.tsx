@@ -406,6 +406,9 @@ export function BonDetailPage() {
                     <th className="px-4 py-2 font-medium">Libellé</th>
                     <th className="px-4 py-2 font-medium">BL</th>
                     <th className="px-4 py-2 font-medium">Manutention</th>
+                    {/* D'où sort l'argent : depuis qu'une ligne porte son propre
+                        portefeuille, la question se pose ligne par ligne. */}
+                    <th className="px-4 py-2 font-medium">Portefeuille</th>
                     <th className="px-4 py-2 font-medium">Centre de coût</th>
                     <th className="px-4 py-2 font-medium">Nature comptable</th>
                     <th className="px-4 py-2 text-right font-medium">Montant</th>
@@ -445,6 +448,13 @@ export function BonDetailPage() {
                         <td className="px-4 py-2">{sb.libelle}</td>
                         <td className="px-4 py-2">{sb.numeroBl}</td>
                         <td className="px-4 py-2">{sb.codeManutention}</td>
+                        <td className="px-4 py-2">
+                          {sb.portefeuilleLibelle ? (
+                            <span>{sb.portefeuilleLibelle}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2">
                           {sb.costCenterId && costCenterById.get(String(sb.costCenterId)) ? (
                             <span title={costCenterById.get(String(sb.costCenterId))!.libelle}>
@@ -523,7 +533,7 @@ export function BonDetailPage() {
                   })}
                   {soubons.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground">
+                      <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground">
                         Aucun sous-bon.
                       </td>
                     </tr>

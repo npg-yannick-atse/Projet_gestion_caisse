@@ -85,6 +85,17 @@ export class SousBon extends AuditableEntity {
   @Column({ name: 'devise_id', type: 'bigint' })
   deviseId!: string;
 
+  /**
+   * « CODE — Libellé » du portefeuille et de la caisse, résolus par le serveur.
+   * NON PERSISTÉS : ils disent d'où sort l'argent, et un écran qui n'affiche
+   * qu'un identifiant n'affiche rien.
+   */
+  @ApiProperty({ required: false, description: 'Portefeuille qui finance la ligne (code — libellé)' })
+  portefeuilleLibelle?: string | null;
+
+  @ApiProperty({ required: false, description: 'Caisse de décaissement (code — libellé)' })
+  caisseLibelle?: string | null;
+
   @ApiProperty({ enum: ['CREE', 'VALIDE', 'DECAISSE', 'COMPTABILISE', 'ANNULE', 'REFUSE'] })
   @Column({ type: 'nvarchar', length: 20, default: 'CREE' })
   statut!: BonStatut;

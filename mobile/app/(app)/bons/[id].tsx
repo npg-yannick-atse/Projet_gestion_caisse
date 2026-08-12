@@ -127,6 +127,11 @@ export default function BonDetailScreen() {
                 {open ? (
                   <View style={styles.sbDetail}>
                     <DetailRow label="Montant" value={formatMontant(sb.montant)} />
+                    {/* D'où sort l'argent : c'est la première question devant un
+                        bon, et depuis qu'une ligne peut tirer sur son propre
+                        portefeuille, elle se pose ligne par ligne. */}
+                    <DetailRow label="Portefeuille" value={sb.portefeuilleLibelle || '—'} />
+                    <DetailRow label="Caisse" value={sb.caisseLibelle || '—'} />
                     <DetailRow label="N° BL" value={sb.numeroBl || '—'} />
                     <DetailRow label="Code manutention" value={sb.codeManutention || '—'} />
                     <DetailRow label="Centre de coût" value={ccName(sb.costCenterId)} />

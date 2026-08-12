@@ -294,6 +294,9 @@ export interface SousBon {
   caisseId?: string | null;
   portefeuilleId?: string | null;
   deviseId?: string | null;
+  /** « CODE — Libellé » résolus par le serveur : d'où sort l'argent de cette ligne. */
+  portefeuilleLibelle?: string | null;
+  caisseLibelle?: string | null;
   statut: BonStatut;
   dateDecaissement?: string | null;
 }

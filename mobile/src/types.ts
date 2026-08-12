@@ -54,6 +54,11 @@ export interface SousBon {
   partenaireId?: string | null;
   numeroClient?: string | null;
   description?: string | null;
+  caisseId?: string | null;
+  portefeuilleId?: string | null;
+  /** « CODE — Libellé » résolus par le serveur : d'où sort l'argent de cette ligne. */
+  portefeuilleLibelle?: string | null;
+  caisseLibelle?: string | null;
   statut: BonStatut;
 }
 

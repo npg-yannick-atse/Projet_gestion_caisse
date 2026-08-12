@@ -1149,10 +1149,50 @@ export class BonsService {
 
   async getSousBoinsOfBon(bonId: string): Promise<SousBon[]> {
     await this.findOne(bonId);
-    return this.sousBonRepo.find({
+    const lignes = await this.sousBonRepo.find({
       where: { bonId: bonId as any },
       order: { numeroSousBon: 'ASC' },
     });
+
+    /**
+     * Nom du portefeuille et de la caisse qui financent chaque ligne.
+     *
+     * C'est l'information la plus concrète du sous-bon : elle dit D'OÙ SORT
+     * L'ARGENT. Depuis qu'un bon peut porter plusieurs lignes tirant sur des
+     * portefeuilles différents, ne montrer que l'identifiant revient à ne rien
+     * montrer.
+     *
+     * Résolu ICI et non sur le téléphone : un validateur qui examine le bon
+     * d'un collègue n'a pas forcément ce portefeuille dans son périmètre, son
+     * annuaire local ne le connaîtrait donc pas.
+     */
+    if (lignes.length === 0) return lignes;
+
+    const idsPf = [...new Set(lignes.map((l) => String(l.portefeuilleId)).filter((v) => /^\d+$/.test(v)))];
+    const idsCaisse = [...new Set(lignes.map((l) => String(l.caisseId)).filter((v) => /^\d+$/.test(v)))];
+
+    const nommer = async (table: string) => {
+      const ids = table === 'fin_portefeuille' ? idsPf : idsCaisse;
+      const noms = new Map<string, string>();
+      if (ids.length === 0) return noms;
+      try {
+        const rows: Array<{ id: string | number; code: string; libelle: string }> =
+          await this.sousBonRepo.manager.query(
+            `SELECT id, code, libelle FROM dbo.${table} WHERE id IN (${ids.map(Number).join(',')})`,
+          );
+        for (const r of rows) noms.set(String(r.id), `${r.code} — ${r.libelle}`.trim());
+      } catch {
+        // Un libellé manquant ne doit pas priver l'écran de ses lignes.
+      }
+      return noms;
+    };
+
+    const [pf, caisses] = await Promise.all([nommer('fin_portefeuille'), nommer('fin_caisse')]);
+    for (const l of lignes) {
+      l.portefeuilleLibelle = pf.get(String(l.portefeuilleId)) ?? null;
+      l.caisseLibelle = caisses.get(String(l.caisseId)) ?? null;
+    }
+    return lignes;
   }
 
   /**
