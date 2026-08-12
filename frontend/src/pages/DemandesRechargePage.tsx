@@ -25,6 +25,12 @@ import { useTableSort } from '@/hooks/useTableSort';
 const DR_SORT_COLUMNS = ['numero', 'createdAt', 'montant', 'statut'] as const;
 type DrSortCol = (typeof DR_SORT_COLUMNS)[number];
 
+/** Date du jour au format YYYY-MM-DD (heure locale). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
@@ -351,38 +357,45 @@ function DemandesRechargePageInner() {
   }, [search]);
   const sort = useTableSort<DrSortCol>('/demandes-recharge', DR_SORT_COLUMNS);
   /**
-   * AUCUNE borne de date par défaut.
+   * La journée courante par défaut, pour borner le volume : avec plusieurs
+   * centaines de demandes, tout afficher d'emblée rendrait la page illisible.
    *
-   * La page s'ouvrait sur la seule journée courante, par symétrie avec
-   * Opérations et Audit. Mais ces deux-là sont des JOURNAUX, qu'on consulte par
-   * période ; celle-ci est une FILE D'ATTENTE, qu'on vient vider. Une demande
-   * en attente depuis la veille disparaissait donc de l'écran de celui qui doit
-   * la traiter — au 12/08/2026, les 4 demandes EN_ATTENTE dataient du 01/07 et
-   * n'étaient visibles par personne.
-   *
-   * Le volume ne justifiait pas ce défaut : la table compte 19 lignes.
-   * Les bornes restent proposées pour restreindre volontairement.
+   * Mais la date ne doit JAMAIS cacher du travail en attente. D'où la règle,
+   * appliquée plus bas : la date borne la VUE D'ENSEMBLE ; dès qu'un statut est
+   * choisi, elle est mise de côté et l'onglet montre toute sa file.
    */
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(todayLocal);
+  const [dateTo, setDateTo] = useState(todayLocal);
   const [statutFilter, setStatutFilter] = useState<'ALL' | DemandeRechargeStatut>('ALL');
+
+  /**
+   * Choisir un statut MET DE CÔTÉ les bornes de dates.
+   *
+   * « Toutes » est une vue d'ensemble, qu'on borne à la journée pour tenir à
+   * l'écran. Un onglet de statut, lui, est une FILE D'ATTENTE : la restreindre
+   * à aujourd'hui la viderait de son sens — on l'ouvre justement pour voir ce
+   * qui traîne depuis les jours précédents.
+   */
+  const datesActives = statutFilter === 'ALL';
 
   // Statut, recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: demandes, isLoading } = useDemandesRecharge({
     statut: statutFilter === 'ALL' ? undefined : statutFilter,
     search: debouncedSearch || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    dateFrom: datesActives ? dateFrom || undefined : undefined,
+    dateTo: datesActives ? dateTo || undefined : undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
 
-  // Compteurs des onglets : GROUP BY en base, SANS le filtre de statut — sinon
-  // sélectionner un onglet remettrait tous les autres compteurs à zéro.
+  /**
+   * Compteurs des onglets : GROUP BY en base, sans le filtre de statut (sinon
+   * l'onglet choisi mettrait les autres à zéro) ET SANS LES DATES — c'est ce
+   * qui permet de voir « En attente 4 » alors que la liste du jour est vide.
+   * Un compteur qui suivrait la date ne dirait plus ce qu'il reste à faire.
+   */
   const { data: stats } = useDemandesRechargeStats({
     search: debouncedSearch || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
   });
   const counts: Record<'ALL' | DemandeRechargeStatut, number> = {
     ALL: stats?.total ?? 0,
@@ -406,11 +419,16 @@ function DemandesRechargePageInner() {
   const [showRequest, setShowRequest] = useState(false);
 
   const filtered = demandes ?? [];
-  const isDefaultView = !search && !dateFrom && !dateTo && statutFilter === 'ALL';
+  const today = todayLocal();
+  const isDefaultView =
+    !search && dateFrom === today && dateTo === today && statutFilter === 'ALL';
+  /** Le total dépasse ce que la vue du jour montre : il y a autre chose à voir. */
+  const jourMasqueDuReste =
+    datesActives && !search && (stats?.total ?? 0) > filtered.length;
   const resetFilters = () => {
     setSearch('');
-    setDateFrom('');
-    setDateTo('');
+    setDateFrom(today);
+    setDateTo(today);
     setStatutFilter('ALL');
   };
 
@@ -463,15 +481,24 @@ function DemandesRechargePageInner() {
               className="h-9 w-full rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white pl-8 pr-3 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
             />
           </div>
-          <div className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-2.5 py-1.5 text-xs">
+          {/* Grisées quand un statut est choisi : elles ne s'appliquent plus,
+              et un champ qui affiche une date sans l'appliquer ment. */}
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] px-2.5 py-1.5 text-xs',
+              datesActives ? 'bg-white' : 'bg-[#F1F5F9] opacity-60',
+            )}
+            title={datesActives ? undefined : 'Les dates ne s’appliquent pas à un onglet de statut'}
+          >
             <CalendarRange className="h-3.5 w-3.5 text-[#64748B]" />
             <input
               type="date"
               aria-label="Du"
               title="Du"
               value={dateFrom}
+              disabled={!datesActives}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none disabled:cursor-not-allowed"
             />
             <span className="text-[#64748B]">au</span>
             <input
@@ -479,8 +506,9 @@ function DemandesRechargePageInner() {
               aria-label="Au"
               title="Au"
               value={dateTo}
+              disabled={!datesActives}
               onChange={(e) => setDateTo(e.target.value)}
-              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none"
+              className="border-0 bg-transparent text-xs text-[#0F172A] outline-none disabled:cursor-not-allowed"
             />
           </div>
           {!isDefaultView && (
@@ -491,6 +519,19 @@ function DemandesRechargePageInner() {
               className="rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]"
             >
               Aujourd'hui
+            </button>
+          )}
+          {/* Le jour ne montre pas tout : on le DIT, et on offre la sortie. */}
+          {jourMasqueDuReste && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="rounded-[9px] border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-1.5 text-xs font-medium text-[#1A6DB5] hover:bg-[#DBEAFE]"
+            >
+              Voir tout ({stats?.total ?? 0})
             </button>
           )}
           <span className="ml-auto text-[11px] text-[#64748B]">

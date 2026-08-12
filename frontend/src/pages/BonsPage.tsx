@@ -15,6 +15,12 @@ import { useTableSort } from '@/hooks/useTableSort';
 const BONS_SORT_COLUMNS = ['numero', 'statut', 'montantTotal', 'createdAt'] as const;
 type BonSortCol = (typeof BONS_SORT_COLUMNS)[number];
 
+/** Date du jour au format YYYY-MM-DD (heure locale). */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const FILTERS: { key: 'all' | BonStatut; label: string }[] = [
   { key: 'all', label: 'Tous' },
   { key: 'CREE', label: 'En attente' },
@@ -81,6 +87,9 @@ export function BonsPage() {
           : null,
       period: rawPeriod === 'today' || rawPeriod === 'week' || rawPeriod === 'month' ? rawPeriod : null,
       extension: sp.get('extension') === '1',
+      // Marqueur « tout afficher » : le défaut du jour étant implicite, il faut
+      // un signe explicite pour dire qu'on l'a délibérément retiré.
+      showAll: sp.get('range') === 'all',
       dateFrom: isIsoDate(rawFrom) ? rawFrom : '',
       dateTo: isIsoDate(rawTo) ? rawTo : '',
     };
@@ -90,21 +99,25 @@ export function BonsPage() {
   const [search, setSearch] = useState('');
 
   /**
-   * AUCUNE borne de date par défaut : la page s'ouvre sur TOUS les bons.
+   * La journée courante par défaut, pour borner le volume — mais JAMAIS au
+   * point de cacher du travail à faire. Deux garde-fous :
    *
-   * Elle appliquait « aujourd'hui » à l'arrivée. Le filtre était pourtant
-   * INVISIBLE — le bandeau « Filtre actif », et donc son bouton
-   * « Réinitialiser », ne s'affichent que si un filtre figure dans l'URL, ce
-   * qui n'est pas le cas d'un défaut implicite. L'utilisateur arrivait donc sur
-   * quatre compteurs à zéro, sans rien pour comprendre ni pour en sortir
-   * (signalé en test le 12/08/2026 : « je vois tout à 0 »).
+   *  1. Choisir un ONGLET DE STATUT met les dates de côté. « Validés » est une
+   *     file d'attente : un bon validé attend parfois plusieurs jours son
+   *     décaissement, le restreindre à aujourd'hui le rendrait invisible.
+   *  2. Les COMPTEURS ignorent les dates (voir plus bas) : on voit donc qu'il
+   *     reste 10 bons à décaisser même si la journée est vide.
    *
-   * Les bons validés attendent d'être décaissés parfois plusieurs jours : les
-   * masquer dès le lendemain cachait le travail à faire. Les bornes de dates
-   * restent disponibles pour restreindre volontairement.
+   * Le défaut reste implicite (absent de l'URL), d'où le marqueur `range=all`
+   * pour exprimer « je l'ai retiré volontairement ». Et le bandeau de filtre
+   * actif s'affiche MÊME pour ce défaut implicite : c'est ce qui manquait,
+   * l'utilisateur voyait quatre zéros sans rien pour comprendre ni en sortir.
    */
-  const effFrom = urlParams.dateFrom;
-  const effTo = urlParams.dateTo;
+  const datesActives = urlParams.statut == null;
+  const dateImplicite =
+    datesActives && !urlParams.dateFrom && !urlParams.dateTo && !urlParams.showAll;
+  const effFrom = urlParams.dateFrom || (dateImplicite ? todayLocal() : '');
+  const effTo = urlParams.dateTo || (dateImplicite ? todayLocal() : '');
 
   // Brouillon local des inputs date (vide tant que l'utilisateur n'a rien saisi).
   const [draftFrom, setDraftFrom] = useState(effFrom);
@@ -149,19 +162,25 @@ export function BonsPage() {
     period: (urlParams.period as 'today' | 'week' | 'month' | null) ?? undefined,
     extension: urlParams.extension || undefined,
     search: search.trim() || undefined,
-    dateFrom: effFrom || undefined,
-    dateTo: effTo || undefined,
+    // Un onglet de statut est une file d'attente : les dates n'y sont pas
+    // appliquées, sinon « Validés » ne montrerait que ceux du jour.
+    dateFrom: datesActives ? effFrom || undefined : undefined,
+    dateTo: datesActives ? effTo || undefined : undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
 
-  // Pour les KPIs « Total / En attente / Validés / Décaissés », on veut le total non filtré par statut/search,
-  // mais qui hérite quand même de period/extension/dates.
+  /**
+   * Compteurs « Total / En attente / Validés / Décaissés » : ni le statut, ni la
+   * recherche, NI LES DATES.
+   *
+   * Ce sont eux qui disent ce qu'il reste à faire. Les faire suivre la journée
+   * les mettait tous à zéro dès le lendemain, et l'écran annonçait qu'il n'y
+   * avait rien à décaisser alors que dix bons attendaient.
+   */
   const { data: bonsForCounters } = useBons({
     period: (urlParams.period as 'today' | 'week' | 'month' | null) ?? undefined,
     extension: urlParams.extension || undefined,
-    dateFrom: effFrom || undefined,
-    dateTo: effTo || undefined,
   });
 
   const filter: 'all' | BonStatut = urlParams.statut ?? 'all';
@@ -186,12 +205,15 @@ export function BonsPage() {
     setSearch('');
   }, [urlParams.statut, urlParams.period, urlParams.extension]);
 
+  // `dateImplicite` en fait partie : c'est tout l'intérêt du bandeau. Un filtre
+  // appliqué sans être annoncé n'offre aucun moyen d'en sortir.
   const hasActiveDrill =
     urlParams.statut != null ||
     urlParams.period === 'today' ||
     urlParams.extension ||
     !!urlParams.dateFrom ||
-    !!urlParams.dateTo;
+    !!urlParams.dateTo ||
+    dateImplicite;
 
   const formatDateFR = (iso: string) => {
     if (!iso) return '';
@@ -226,6 +248,17 @@ export function BonsPage() {
               avec demande d'extension
             </span>
           )}
+          {dateImplicite && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">
+              <CalendarRange className="h-3 w-3" />
+              aujourd'hui
+            </span>
+          )}
+          {!datesActives && (
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-[#64748B]">
+              dates non appliquées à un statut
+            </span>
+          )}
           {(urlParams.dateFrom || urlParams.dateTo) && (
             <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold">
               <CalendarRange className="h-3 w-3" />
@@ -240,9 +273,11 @@ export function BonsPage() {
             type="button"
             onClick={() => {
               // Réinitialiser : on retire tous les filtres de l'URL.
+              // `range=all` et non une URL vide : sans ce marqueur, le défaut
+              // implicite « aujourd'hui » reviendrait aussitôt.
               setDraftFrom('');
               setDraftTo('');
-              navigate({ to: '/bons', search: {} as any, replace: true });
+              navigate({ to: '/bons', search: { range: 'all' } as any, replace: true });
             }}
             className="ml-auto rounded-[7px] border border-[#BFDBFE] bg-white px-2.5 py-1 text-[10px] font-medium text-[#1A6DB5] hover:bg-[#DBEAFE]"
           >
@@ -302,6 +337,7 @@ export function BonsPage() {
                     const sp = new URLSearchParams(window.location.search);
                     sp.delete('dateFrom');
                     sp.delete('dateTo');
+                    sp.set('range', 'all');
                     const obj: Record<string, string> = {};
                     sp.forEach((v, k) => {
                       obj[k] = v;
