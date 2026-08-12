@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { CalendarRange, CircleCheck, Clock, Eye, FileCheck2, Files, Search, X } from 'lucide-react';
 import { useBons } from '@/api/bons';
-import { useUserRoles } from '@/api/users';
+import { useUserRoles, useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Bon, BonStatut } from '@/types/api';
 import { formatMontant } from '@/lib/utils';
@@ -34,7 +34,15 @@ const FILTERS: { key: 'all' | BonStatut; label: string }[] = [
 const actBtn =
   'inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white px-2.5 py-1 text-[10px] font-medium text-[#0F172A] transition-colors hover:border-[rgba(26,109,181,0.2)] hover:bg-[#EFF6FF] hover:text-[#1A6DB5]';
 
-function RowActions({ bon, canValidate }: { bon: Bon; canValidate: boolean }) {
+function RowActions({
+  bon,
+  canValidate,
+  canDecaisser,
+}: {
+  bon: Bon;
+  canValidate: boolean;
+  canDecaisser: boolean;
+}) {
   return (
     <div className="flex justify-end gap-1.5">
       {bon.statut === 'CREE' && canValidate && (
@@ -46,7 +54,10 @@ function RowActions({ bon, canValidate }: { bon: Bon; canValidate: boolean }) {
           Valider
         </Link>
       )}
-      {bon.statut === 'VALIDE' && (
+      {/* « Décaisser » n'avait AUCUNE garde : un demandeur le voyait sur tout
+          bon validé. Le serveur refusait bien l'action — ce n'était pas un trou
+          de sécurité — mais le bouton promettait ce qu'il ne pouvait pas tenir. */}
+      {bon.statut === 'VALIDE' && canDecaisser && (
         <Link to="/bons/$bonId" params={{ bonId: bon.id }} className={actBtn}>
           Décaisser
         </Link>
@@ -64,9 +75,28 @@ export function BonsPage() {
   const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.user);
   const { data: myRoles } = useUserRoles(currentUser?.id ?? null);
-  const isValidateur = (myRoles ?? []).some((r) =>
-    ['VALIDATEUR', 'ADMINISTRATEUR', 'SUPER_ADMIN'].includes(r.code),
+  const { data: myPermissions } = useMyPermissions(currentUser?.id ?? null);
+
+  /**
+   * Mêmes règles que le serveur : `assertPermission` = bypass administrateur OU
+   * permission détenue. S'aligner dessus évite les deux écarts constatés le
+   * 12/08/2026 :
+   *
+   *  - « Décaisser » n'avait aucune garde : tout le monde le voyait, y compris
+   *    un demandeur, alors que seul le CAISSIER détient BON_DECAISSER ;
+   *  - « Valider » se basait sur le RÔLE `VALIDATEUR`, alors que le serveur
+   *    exige la PERMISSION `BON_VALIDER`, que seul ADMINISTRATEUR détient. Un
+   *    validateur voyait donc un bouton qui le menait à un refus.
+   *
+   * `useUserRoles` renvoie les rôles DÉPLIÉS : un DAF y apparaît comme
+   * ADMINISTRATEUR, exactement comme le calcule `isAdmin` côté serveur.
+   */
+  const perms = new Set(myPermissions ?? []);
+  const isAdmin = (myRoles ?? []).some((r) =>
+    ['ADMINISTRATEUR', 'SUPER_ADMIN'].includes(r.code),
   );
+  const canValider = isAdmin || perms.has('BON_VALIDER');
+  const canDecaisser = isAdmin || perms.has('BON_DECAISSER');
   // On lit la querystring brute pour rester indépendant du schéma de validation TanStack.
   const _href = useRouterState({ select: (s) => s.location.href });
 
@@ -454,7 +484,7 @@ export function BonsPage() {
                   </td>
                   <td className="px-4 py-3 text-[#64748B]">{new Date(bon.createdAt).toLocaleDateString('fr-FR')}</td>
                   <td className="px-4 py-3">
-                    <RowActions bon={bon} canValidate={isValidateur} />
+                    <RowActions bon={bon} canValidate={canValider} canDecaisser={canDecaisser} />
                   </td>
                 </tr>
               ))}
