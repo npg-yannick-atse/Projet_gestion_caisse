@@ -6,11 +6,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { getExpoPushToken } from '@/lib/push';
 import { unregisterPushToken } from '@/api/push';
+import { useAssignedRoles } from '@/api/users';
 
 export default function CompteScreen() {
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const queryClient = useQueryClient();
+  // Rôles ATTRIBUÉS, et non effectifs : ces derniers sont dépliés côté serveur
+  // et feraient apparaître un DAF comme « Administrateur » et « Caissier ».
+  const { data: roles } = useAssignedRoles(user?.id);
 
   async function onSignOut() {
     // Détacher le jeton push AVANT de vider la session (l'appel exige le bearer).
@@ -40,6 +44,20 @@ export default function CompteScreen() {
         </View>
         <Text style={styles.name}>{user ? `${user.prenom} ${user.nom}` : ''}</Text>
         {user?.email ? <Text style={styles.meta}>{user.email}</Text> : null}
+        {roles && roles.length > 0 && (
+          <View style={styles.roles}>
+            {roles.map((r) => (
+              <View key={r.id} style={styles.roleBadge}>
+                <Text style={styles.roleText}>{r.libelle}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {roles && roles.length === 0 && (
+          // Un compte sans rôle ne peut rien faire : mieux vaut le dire que de
+          // laisser croire à un simple manque d'affichage.
+          <Text style={styles.sansRole}>Aucun rôle attribué — contactez un administrateur.</Text>
+        )}
       </View>
 
       <View style={styles.infoCard}>
@@ -100,6 +118,17 @@ const styles = StyleSheet.create({
   avatarText: { color: '#fff', fontSize: 22, fontWeight: '800' },
   name: { color: '#0F172A', fontSize: 20, fontWeight: '800' },
   meta: { color: '#64748B', fontSize: 13, marginTop: 4 },
+  // `flexWrap` : plusieurs rôles cumulés (DAF + Validateur…) doivent passer à la
+  // ligne plutôt que déborder de la carte sur un écran étroit.
+  roles: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 10 },
+  roleBadge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  roleText: { color: '#0C447C', fontSize: 12, fontWeight: '700' },
+  sansRole: { color: '#B45309', fontSize: 12, marginTop: 10, textAlign: 'center' },
   infoCard: {
     backgroundColor: '#fff',
     borderRadius: 16,

@@ -325,8 +325,20 @@ export class EmployesService {
 
   async findEmploye(id: string): Promise<Employe> {
     const e = await this.employeRepo.findOne({ where: { id } });
-    if (!e) throw new NotFoundException(`Employé ${id} introuvable`);
-    return e;
+    if (e) return e;
+
+    // « Introuvable » est trompeur pour un employé simplement DÉSACTIVÉ : il
+    // existe toujours. Le cas se produit dès qu'un écran garde une référence
+    // vers lui — un formulaire d'édition resté ouvert, par exemple (constaté en
+    // test le 11/08/2026 sur l'employé TYAL, désactivé la veille).
+    const desactive = await this.employeRepo.findOne({ where: { id }, withDeleted: true });
+    if (desactive) {
+      throw new ConflictException(
+        `L'employé ${desactive.matricule} est désactivé. Réactivez-le avant de le modifier ` +
+          '(case « Afficher les désactivés » dans la liste).',
+      );
+    }
+    throw new NotFoundException(`Employé ${id} introuvable`);
   }
 
   async createEmploye(dto: CreateEmployeDto, userId: string): Promise<Employe> {
