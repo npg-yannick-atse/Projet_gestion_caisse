@@ -124,9 +124,16 @@ function Ligne({ operation }: { operation: Operation }) {
     <View style={styles.ligne}>
       <View style={styles.ligneGauche}>
         <Text style={styles.type}>{libelle}</Text>
+        {/* Le numéro du BON, pas la référence technique : deux lignes « BC-26 »
+            et « BC-27 » laissent croire à deux décaissements alors qu'il s'agit
+            des deux sous-bons d'un seul bon. */}
         <Text style={styles.date}>
           {formatDate(operation.dateOperation)}
-          {operation.reference ? `  ·  ${operation.reference}` : ''}
+          {operation.bonNumero
+            ? `  ·  ${operation.bonNumero}${operation.numeroSousBon ? ` (sous-bon ${operation.numeroSousBon})` : ''}`
+            : operation.reference
+              ? `  ·  ${operation.reference}`
+              : ''}
         </Text>
       </View>
       <Text style={entree ? styles.montantEntree : styles.montantSortie}>

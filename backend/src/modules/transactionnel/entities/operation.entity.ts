@@ -72,6 +72,15 @@ export class Operation {
   @Column({ type: 'nvarchar', length: 100, nullable: true })
   reference?: string | null;
 
+  /**
+   * Bon et sous-bon payés par ce décaissement, résolus par le serveur.
+   * NON PERSISTÉS : la référence stockée est technique (« BC-26 »), elle désigne
+   * le bon de caisse et ne dit pas quel bon il règle.
+   */
+  bonNumero?: string | null;
+
+  numeroSousBon?: number | null;
+
   // Renseignés pour les encaissements (nullable pour les autres opérations).
   @Column({ name: 'client_nom', type: 'nvarchar', length: 200, nullable: true })
   clientNom?: string | null;

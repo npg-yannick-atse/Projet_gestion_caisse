@@ -167,6 +167,54 @@ export class PushService {
     }
   }
 
+  /**
+   * Informe le VALIDATEUR qu'un bon qu'il a signé vient d'être décaissé.
+   *
+   * Il avait engagé l'argent sans jamais savoir s'il était sorti : le bon
+   * quittait sa file au moment de la validation et plus rien ne lui revenait.
+   * Cette notification ferme la boucle.
+   *
+   * Destinataires : ceux qui ont RÉELLEMENT statué sur ce bon, lus dans le
+   * journal des décisions — pas « les validateurs » en bloc, qui recevraient
+   * des nouvelles de dossiers qu'ils n'ont jamais vus. Le caissier qui vient de
+   * décaisser en est exclu : il sait ce qu'il a fait.
+   *
+   * Ne lève jamais : l'argent est déjà sorti et l'écriture est passée, un échec
+   * d'envoi ne doit pas remonter en erreur.
+   */
+  async notifyValidateursDecaissement(
+    bonId: string,
+    caissierId: string,
+    infos: { numero: string; montant: string; beneficiaire?: string | null },
+  ): Promise<void> {
+    try {
+      const rows: Array<{ token: string }> = await this.dataSource
+        .createQueryBuilder()
+        .select('DISTINCT t.token', 'token')
+        .from('sec_push_token', 't')
+        .innerJoin('sec_user', 'u', 'u.id = t.user_id')
+        .innerJoin('trx_validation_bon', 'v', 'v.validateur_id = u.id')
+        .where('v.bon_id = :bonId', { bonId })
+        .andWhere("v.action IN ('VALIDE', 'SIGNE')")
+        .andWhere('u.id != :caissier', { caissier: caissierId })
+        .andWhere('u.est_actif = 1')
+        .getRawMany();
+
+      const tokens = rows.map((r) => r.token).filter(Boolean);
+      if (tokens.length === 0) return;
+
+      const montant = Number(infos.montant || 0).toLocaleString('fr-FR');
+      await this.sendExpoPush(
+        tokens,
+        'Bon décaissé',
+        `${infos.numero} · ${montant}${infos.beneficiaire ? ` · remis à ${infos.beneficiaire}` : ''}`,
+        { bonId: String(bonId) },
+      );
+    } catch (e) {
+      this.logger.warn(`notifyValidateursDecaissement échec : ${(e as Error).message}`);
+    }
+  }
+
   /** Envoie une notification via l'API Expo Push. */
   private async sendExpoPush(
     tokens: string[],

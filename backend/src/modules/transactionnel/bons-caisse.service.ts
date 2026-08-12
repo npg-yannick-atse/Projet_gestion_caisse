@@ -14,6 +14,7 @@ import { BonCaisse } from './entities/bon-caisse.entity';
 import { Decaissement } from './entities/decaissement.entity';
 import { Operation } from './entities/operation.entity';
 import { LedgerService } from './ledger.service';
+import { PushService } from '@modules/notifications/push.service';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UpdateBonCaisseDto } from './dto/bon-caisse.dto';
 import { AuditService } from '@modules/audit/audit.service';
@@ -43,6 +44,7 @@ export class BonsCaisseService {
     private readonly dataSource: DataSource,
     private readonly ledger: LedgerService,
     private readonly audit: AuditService,
+    private readonly push: PushService,
   ) {}
 
   /**
@@ -402,6 +404,24 @@ export class BonsCaisseService {
         bonId: result.bonId,
       }),
     });
+
+    /**
+     * Le validateur apprend que l'argent est sorti.
+     *
+     * APRÈS la transaction, jamais dedans : un envoi push qui traîne ou échoue
+     * ne doit pas tenir ouverte une transaction qui déplace de l'argent, ni
+     * la faire échouer une fois l'écriture passée.
+     */
+    if (result.bonId) {
+      const bon = await this.bonRepo.findOne({ where: { id: result.bonId as any } });
+      if (bon) {
+        await this.push.notifyValidateursDecaissement(String(result.bonId), userId, {
+          numero: bon.numero,
+          montant: result.montantEffectif,
+          beneficiaire: result.beneficiaire,
+        });
+      }
+    }
 
     return result.bonCaisse;
   }

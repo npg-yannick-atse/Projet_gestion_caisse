@@ -220,5 +220,8 @@ export interface Operation {
   deviseId: string;
   dateOperation: string;
   reference?: string | null;
+  /** Bon réglé par ce décaissement, résolu par le serveur (« BC-26 » ne le dit pas). */
+  bonNumero?: string | null;
+  numeroSousBon?: number | null;
   clientNom?: string | null;
 }

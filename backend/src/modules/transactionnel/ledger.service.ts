@@ -774,7 +774,51 @@ export class LedgerService {
       query.orderBy('operation.date_operation', 'DESC');
     }
     if (opts.limit && opts.limit > 0) query.take(Math.min(opts.limit, 500));
-    return query.getMany();
+    return this.nommerBons(await query.getMany());
+  }
+
+  /**
+   * Rattache chaque décaissement au BON qu'il paie.
+   *
+   * La référence stockée est technique — « BC-26 » désigne le bon de caisse,
+   * pas le bon. Un utilisateur qui voit passer « BC-26 » et « BC-27 » sur son
+   * portefeuille n'a aucun moyen de savoir qu'il s'agit des deux sous-bons d'un
+   * SEUL bon : il croit à un double décaissement. Constaté le 12/08/2026 sur
+   * BON-0030.
+   *
+   * On expose donc le numéro du bon et celui du sous-bon, résolus par lot.
+   */
+  private async nommerBons(operations: Operation[]): Promise<Operation[]> {
+    const parBc = new Map<string, Operation[]>();
+    for (const op of operations) {
+      const m = /^BC-(\d+)$/.exec(String(op.reference ?? ''));
+      if (!m) continue;
+      const liste = parBc.get(m[1]) ?? [];
+      liste.push(op);
+      parBc.set(m[1], liste);
+    }
+    if (parBc.size === 0) return operations;
+
+    try {
+      const ids = [...parBc.keys()].map(Number).join(',');
+      const rows: Array<{ id: number; numero: string; numeroSousBon: number | null }> =
+        await this.operationRepo.manager.query(
+          `SELECT bc.id, b.numero, sb.numero_sous_bon AS numeroSousBon
+             FROM dbo.trx_bon_caisse bc
+             LEFT JOIN dbo.trx_bon b ON b.id = bc.bon_source_id
+             LEFT JOIN dbo.trx_sous_bon sb ON sb.id = bc.sous_bon_source_id
+            WHERE bc.id IN (${ids})`,
+        );
+      for (const r of rows) {
+        for (const op of parBc.get(String(r.id)) ?? []) {
+          op.bonNumero = r.numero ?? null;
+          op.numeroSousBon = r.numeroSousBon ?? null;
+        }
+      }
+    } catch {
+      // Un libellé manquant ne doit pas priver l'écran de ses lignes.
+    }
+    return operations;
   }
 
   /**
