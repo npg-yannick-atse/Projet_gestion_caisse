@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
-import type { Carnet } from '@/types/api';
+import type { BonManuel, Carnet } from '@/types/api';
 
 const BM_SORT_COLUMNS = ['numero', 'numeroManuel', 'montant', 'beneficiaireNom', 'dateDecaissement'] as const;
 type BmSortCol = (typeof BM_SORT_COLUMNS)[number];
@@ -41,10 +41,113 @@ function CarnetBadge({ statut }: { statut: Carnet['statut'] }) {
   );
 }
 
+/**
+ * Fiche d'un bon manuel.
+ *
+ * Un bon manuel n'a PAS de sous-bons, et ne peut pas en avoir : contrairement
+ * au bon normal (une enveloppe + ses lignes), il porte tout directement —
+ * montant, bénéficiaire, partenaire, BL, code manutention. C'est la
+ * transcription d'un reçu papier, qui n'a qu'une ligne.
+ *
+ * Mais la liste n'en montrait que six colonnes, et la ligne n'était pas
+ * cliquable : le type de bon, le centre de coût, le partenaire, le n° BL, le
+ * code manutention, le n° client et le motif étaient saisis à la création puis
+ * définitivement hors de portée. Tout est ici — aucun appel serveur
+ * supplémentaire, la liste renvoyait déjà ces champs.
+ */
+function DetailBonManuel({ bon, onClose }: { bon: BonManuel; onClose: () => void }) {
+  const { data: caisses } = useCaisses();
+  const { data: portefeuilles } = usePortefeuilles();
+  const { data: typeBons } = useTypeBons();
+  const { data: partenaires } = usePartenaires();
+  const { data: costCenters } = useCostCenters();
+  const { data: users } = useUsers();
+
+  const nom = <T extends { id: string }>(liste: T[] | undefined, id: string | null | undefined, f: (x: T) => string) => {
+    if (!id) return null;
+    const x = (liste ?? []).find((e) => String(e.id) === String(id));
+    return x ? f(x) : `#${id}`;
+  };
+
+  const donneur = bon.donneurOrdreUserId
+    ? nom(users, bon.donneurOrdreUserId, (u) => `${u.prenom} ${u.nom}`)
+    : bon.donneurOrdreNom;
+
+  /** N'affiche une ligne que si elle porte une information. */
+  const lignes: Array<[string, string | null | undefined]> = [
+    ['Bénéficiaire', bon.beneficiaireNom],
+    ["Donneur d'ordre", donneur],
+    ['Type de bon', nom(typeBons, bon.typeBonId, (t) => t.libelle)],
+    ['Libellé', bon.libelle],
+    ['Motif', bon.motif],
+    ['Description', bon.description],
+    ['Caisse', nom(caisses, bon.caisseId, (c) => `${c.code} — ${c.libelle}`)],
+    ['Portefeuille', nom(portefeuilles, bon.portefeuilleId, (p) => `${p.code} — ${p.libelle}`)],
+    ['Centre de coût', nom(costCenters, bon.costCenterId, (c) => `${c.code} — ${c.libelle}`)],
+    ['Partenaire', nom(partenaires, bon.partenaireId, (p) => p.raisonSociale)],
+    ['N° client', bon.numeroClient],
+    ['N° BL', bon.numeroBl],
+    ['Code manutention', bon.codeManutention],
+  ].filter(([, v]) => v != null && String(v).trim() !== '') as Array<[string, string]>;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Bon manuel ${bon.numero}`}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[13px] border border-[rgba(15,76,129,0.1)] bg-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-5 py-3.5">
+          <div className="flex-1">
+            <div className="font-display text-sm font-semibold text-[#0F172A]">
+              Bon manuel {bon.numero}
+            </div>
+            <div className="text-[11px] text-[#64748B]">
+              N° carnet {bon.numeroManuel} · décaissé le{' '}
+              {new Date(bon.dateDecaissement).toLocaleDateString('fr-FR')}
+            </div>
+          </div>
+          <div className="font-display text-[20px] font-semibold tabular-nums text-[#0F172A]">
+            {formatMontant(bon.montant)}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fermer"
+            className="flex h-7 w-7 items-center justify-center rounded-[7px] text-[#94A3B8] hover:bg-white hover:text-[#0F172A]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <dl className="max-h-[65vh] overflow-y-auto px-5 py-4 text-xs">
+          {lignes.map(([libelle, valeur]) => (
+            <div key={libelle} className="flex gap-3 border-b border-[rgba(15,76,129,0.05)] py-2 last:border-0">
+              <dt className="w-44 shrink-0 text-[#64748B]">{libelle}</dt>
+              <dd className="flex-1 font-medium text-[#0F172A]">{valeur}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="border-t border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-5 py-2.5 text-[11px] text-[#64748B]">
+          Un bon manuel décrit une seule dépense : il n'a pas de sous-bons.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function BonsManuelsPage() {
   const user = useAuthStore((s) => s.user);
   const { data: roles } = useUserRoles(user?.id ?? null);
   const isAdmin = (roles ?? []).some((r) => r.code === 'ADMINISTRATEUR' || r.code === 'SUPER_ADMIN');
+
+  const [detail, setDetail] = useState<BonManuel | null>(null);
 
   const { data: carnets } = useCarnets();
   const { data: caisses } = useCaisses();
@@ -177,7 +280,12 @@ export function BonsManuelsPage() {
             </thead>
             <tbody>
               {filteredBons.map((b) => (
-                <tr key={b.id} className="border-b last:border-0">
+                <tr
+                  key={b.id}
+                  onClick={() => setDetail(b)}
+                  title="Voir le détail"
+                  className="cursor-pointer border-b last:border-0 hover:bg-[#F8FAFC]"
+                >
                   <td className="px-4 py-2 font-medium text-[#0F172A]">{b.numero}</td>
                   <td className="px-4 py-2">{b.numeroManuel}</td>
                   <td className="px-4 py-2 text-right tabular-nums">{formatMontant(b.montant)}</td>
@@ -206,6 +314,8 @@ export function BonsManuelsPage() {
       </Panel>
 
       {/* Modal : carnets configurés / disponibles + création */}
+      {detail && <DetailBonManuel bon={detail} onClose={() => setDetail(null)} />}
+
       {carnetsOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
