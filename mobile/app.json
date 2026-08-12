@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.npgandour.fdc",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

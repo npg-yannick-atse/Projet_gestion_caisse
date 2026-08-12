@@ -12,12 +12,19 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { login } from '@/api/auth';
 import { apiErrorMessage } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 
 export default function LoginScreen() {
   const router = useRouter();
+  /**
+   * Android dessine désormais SOUS les barres système (edge-to-edge imposé
+   * depuis Android 15) : sans ces marges, le contenu passe derrière la barre
+   * d'état en haut et derrière la barre de navigation en bas.
+   */
+  const insets = useSafeAreaInsets();
   const setSession = useAuthStore((s) => s.setSession);
 
   const [identifiant, setIdentifiant] = useState('');
@@ -48,7 +55,13 @@ export default function LoginScreen() {
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: 24 + insets.top, paddingBottom: 24 + insets.bottom },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Image
           source={require('../assets/icon.png')}
           style={styles.logo}
