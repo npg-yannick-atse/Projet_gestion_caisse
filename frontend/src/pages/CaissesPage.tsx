@@ -715,13 +715,24 @@ function WalletCard({
           <div className="mt-1 text-[11px] text-white/50">
             {deviseCode} · {pf.code} · {proprietaire}
           </div>
-          {gestionnaire && (
+          {/* Sans gestionnaire, la pastille disparaissait : on ne pouvait pas
+              distinguer « personne n'est désigné » de « l'information n'est pas
+              affichée ». L'absence est une information — elle se dit. */}
+          {gestionnaire ? (
             <div
               className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90"
               title={`Gestionnaire : ${gestionnaire.prenom} ${gestionnaire.nom}`}
             >
               <UserCog className="h-2.5 w-2.5" />
               Géré par {gestionnaire.prenom} {gestionnaire.nom}
+            </div>
+          ) : (
+            <div
+              className="mt-2 inline-flex items-center gap-1 rounded-full border border-dashed border-white/30 px-2 py-0.5 text-[10px] font-medium text-white/60"
+              title="Aucun gestionnaire n’est désigné pour ce portefeuille."
+            >
+              <UserCog className="h-2.5 w-2.5" />
+              Aucun gestionnaire
             </div>
           )}
         </div>
