@@ -92,6 +92,13 @@ export interface AuditEntry {
   entiteId?: string | null;
   ancienneValeur?: string | null;
   nouvelleValeur?: string | null;
+  /**
+   * Lecture en clair de l'action, composée par le serveur : « a attribué le
+   * rôle Caissier à l'utilisateur Lorène Touré ». Les identifiants y sont
+   * résolus en noms. Le JSON brut reste dans `ancienneValeur` /
+   * `nouvelleValeur` — le résumé est une lecture, pas un remplacement.
+   */
+  resume?: string;
   dateAction: string;
   adresseIp?: string | null;
   userAgent?: string | null;

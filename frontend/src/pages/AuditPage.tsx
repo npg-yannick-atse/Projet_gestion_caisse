@@ -210,20 +210,30 @@ function AuditPageInner() {
                         );
                       })()}
                     </td>
-                    <td className="max-w-[360px] px-4 py-2.5 font-mono text-[10px] text-[#64748B]">
-                      {e.ancienneValeur && (
-                        <div className="truncate text-[#B42318]" title={e.ancienneValeur}>
-                          <span className="text-[#94A3B8]">avant : </span>
-                          {e.ancienneValeur}
+                    {/* La PHRASE d'abord — c'est elle qu'on lit. Le JSON reste
+                        disponible en dessous : un journal d'audit ne doit rien
+                        perdre, le résumé est une lecture, pas un remplacement. */}
+                    <td className="max-w-[420px] px-4 py-2.5 text-[11px] text-[#0F172A]">
+                      {e.resume && <div className="mb-0.5">{e.resume}</div>}
+                      <details className="group">
+                        <summary className="cursor-pointer list-none text-[10px] text-[#94A3B8] hover:text-[#1A6DB5]">
+                          {e.ancienneValeur || e.nouvelleValeur ? 'voir le détail brut' : '—'}
+                        </summary>
+                        <div className="mt-1 font-mono text-[10px] text-[#64748B]">
+                          {e.ancienneValeur && (
+                            <div className="break-all text-[#B42318]">
+                              <span className="text-[#94A3B8]">avant : </span>
+                              {e.ancienneValeur}
+                            </div>
+                          )}
+                          {e.nouvelleValeur && (
+                            <div className="break-all text-[#047857]">
+                              {e.ancienneValeur && <span className="text-[#94A3B8]">après : </span>}
+                              {e.nouvelleValeur}
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {e.nouvelleValeur && (
-                        <div className="truncate text-[#047857]" title={e.nouvelleValeur}>
-                          {e.ancienneValeur && <span className="text-[#94A3B8]">après : </span>}
-                          {e.nouvelleValeur}
-                        </div>
-                      )}
-                      {!e.ancienneValeur && !e.nouvelleValeur && '—'}
+                      </details>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-[10px] text-[#94A3B8]">{e.adresseIp || '—'}</td>
                   </tr>

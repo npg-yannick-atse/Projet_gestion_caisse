@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JournalAudit } from './entities/journal.entity';
+import { AuditResumeService, LigneAuditVue } from './audit-resume.service';
 
 export interface AuditEntryInput {
   userId?: string | null;
@@ -19,6 +20,7 @@ export class AuditService {
   constructor(
     @InjectRepository(JournalAudit)
     private readonly journalRepo: Repository<JournalAudit>,
+    private readonly resume: AuditResumeService,
   ) {}
 
   /** Écrit une entrée d'audit. Tolérant aux pannes : ne casse jamais la requête appelante. */
@@ -60,7 +62,7 @@ export class AuditService {
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
     limit?: number;
-  } = {}): Promise<JournalAudit[]> {
+  } = {}): Promise<LigneAuditVue[]> {
     const qb = this.journalRepo.createQueryBuilder('j').where('1=1');
     if (opts.userId) qb.andWhere('j.user_id = :uid', { uid: opts.userId });
     if (opts.action) qb.andWhere('j.action LIKE :a', { a: `%${opts.action}%` });
@@ -75,8 +77,8 @@ export class AuditService {
     const direction: 'ASC' | 'DESC' = opts.sortDir === 'asc' ? 'ASC' : 'DESC';
     if (column) qb.orderBy(column, direction);
     else qb.orderBy('j.date_action', 'DESC');
-    return qb
-      .limit(Math.min(Math.max(opts.limit ?? 500, 1), 2000))
-      .getMany();
+    const lignes = await qb.limit(Math.min(Math.max(opts.limit ?? 500, 1), 2000)).getMany();
+    // Chaque ligne reçoit sa lecture en clair ; le JSON d'origine est conservé.
+    return this.resume.enrichir(lignes);
   }
 }

@@ -13,6 +13,7 @@ import { Notification } from './entities/notification.entity';
 import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
 import { AuditInterceptor } from './audit.interceptor';
+import { AuditResumeService } from './audit-resume.service';
 import { SecurityModule } from '@modules/security/security.module';
 
 @Module({
@@ -31,7 +32,7 @@ import { SecurityModule } from '@modules/security/security.module';
     SecurityModule,
   ],
   controllers: [AuditController],
-  providers: [AuditService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
+  providers: [AuditService, AuditResumeService, { provide: APP_INTERCEPTOR, useClass: AuditInterceptor }],
   exports: [TypeOrmModule, AuditService],
 })
 export class AuditModule {}
