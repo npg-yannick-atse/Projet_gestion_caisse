@@ -86,6 +86,8 @@ export function SousBonCard({
   natures,
   pays,
   supprimable,
+  ouvert,
+  onBasculer,
   onChange,
   onSupprimer,
 }: {
@@ -97,6 +99,8 @@ export function SousBonCard({
   natures: NatureOperation[];
   pays: Pays[];
   supprimable: boolean;
+  ouvert: boolean;
+  onBasculer: () => void;
   onChange: (patch: Partial<LigneSousBon>) => void;
   onSupprimer: () => void;
 }) {
@@ -143,23 +147,43 @@ export function SousBonCard({
   };
 
   const montantOk = montantRegex.test(valeur.montant) && Number(valeur.montant) > 0;
+  const complet = ligneValide(valeur, exigences);
 
   return (
     <View style={styles.carte}>
-      <View style={styles.entete}>
-        <Text style={styles.titre}>Sous-bon {index + 1}</Text>
+      {/* L'en-tête entier est la zone de pliage : sur un téléphone, viser un
+          chevron de 16 points est une épreuve. */}
+      <Pressable
+        onPress={onBasculer}
+        style={[styles.entete, ouvert && styles.enteteOuverte]}
+        accessibilityLabel={`${ouvert ? 'Replier' : 'Déplier'} le sous-bon ${index + 1}`}
+      >
+        <Ionicons name={ouvert ? 'chevron-down' : 'chevron-forward'} size={16} color="#0F4C81" />
+        <View style={styles.enteteTexte}>
+          <Text style={styles.titre}>Sous-bon {index + 1}</Text>
+          {/* Replié, la carte doit rester identifiable : son libellé, ou à
+              défaut ce qui manque pour qu'elle soit complète. */}
+          {!ouvert && (
+            <Text style={complet ? styles.resume : styles.resumeIncomplet} numberOfLines={1}>
+              {valeur.libelle.trim() || (complet ? '—' : 'à compléter')}
+            </Text>
+          )}
+        </View>
         <View style={styles.enteteDroite}>
           {montantOk && (
             <Text style={styles.montantApercu}>{Number(valeur.montant).toLocaleString('fr-FR')}</Text>
           )}
+          {!complet && <Ionicons name="alert-circle" size={16} color="#B45309" />}
           {supprimable && (
             <Pressable onPress={onSupprimer} hitSlop={8} accessibilityLabel={`Supprimer le sous-bon ${index + 1}`}>
               <Ionicons name="trash-outline" size={18} color="#B42318" />
             </Pressable>
           )}
         </View>
-      </View>
+      </Pressable>
 
+      {!ouvert ? null : (
+      <>
       <Select
         label="Portefeuille"
         required
@@ -303,6 +327,8 @@ export function SousBonCard({
           />
         </>
       )}
+      </>
+      )}
     </View>
   );
 }
@@ -331,11 +357,16 @@ const styles = StyleSheet.create({
   entete: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    gap: 8,
   },
+  // Trait de séparation seulement quand la carte est ouverte : replié, l'en-tête
+  // EST la carte, un trait sous lui ne séparerait rien.
+  enteteOuverte: { marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  enteteTexte: { flex: 1 },
   enteteDroite: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   titre: { fontSize: 14, fontWeight: '800', color: '#0F4C81' },
+  resume: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  resumeIncomplet: { fontSize: 12, color: '#B45309', marginTop: 2, fontStyle: 'italic' },
   montantApercu: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
   fieldWrap: { marginBottom: 14 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 6 },

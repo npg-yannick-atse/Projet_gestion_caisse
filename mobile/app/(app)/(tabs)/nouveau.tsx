@@ -62,6 +62,21 @@ export default function NouvelleDemandeScreen() {
   const nouvelUid = () => String(prochainUid.current++);
   const [lignes, setLignes] = useState<LigneSousBon[]>(() => [ligneVide('0')]);
 
+  /**
+   * Cartes dépliées. Ajouter une ligne replie les autres : sans cela, il fallait
+   * dérouler tout le formulaire précédent pour atteindre la nouvelle. On garde
+   * un ensemble plutôt qu'une seule carte ouverte — comparer deux lignes reste
+   * possible en les rouvrant à la main.
+   */
+  const [ouverts, setOuverts] = useState<Set<string>>(() => new Set(['0']));
+  const basculer = (uid: string) =>
+    setOuverts((s) => {
+      const suivant = new Set(s);
+      if (suivant.has(uid)) suivant.delete(uid);
+      else suivant.add(uid);
+      return suivant;
+    });
+
   const portefeuilles: Portefeuille[] = perimeter?.portefeuilles ?? [];
   const costCenters: CostCenter[] = perimeter?.costCenters ?? [];
   const typeBonsList: TypeBon[] = typeBons ?? [];
@@ -124,13 +139,21 @@ export default function NouvelleDemandeScreen() {
   const modifierLigne = (uid: string, patch: Partial<LigneSousBon>) =>
     setLignes((ls) => ls.map((l) => (l.uid === uid ? { ...l, ...patch } : l)));
 
-  const ajouterLigne = () =>
-    setLignes((ls) => {
-      const dernier = ls[ls.length - 1];
-      return [...ls, ligneVide(nouvelUid(), dernier)];
-    });
+  const ajouterLigne = () => {
+    const uid = nouvelUid();
+    setLignes((ls) => [...ls, ligneVide(uid, ls[ls.length - 1])]);
+    // Seule la nouvelle carte reste ouverte : c'est celle qu'on vient saisir.
+    setOuverts(new Set([uid]));
+  };
 
-  const supprimerLigne = (uid: string) => setLignes((ls) => ls.filter((l) => l.uid !== uid));
+  const supprimerLigne = (uid: string) => {
+    setLignes((ls) => ls.filter((l) => l.uid !== uid));
+    setOuverts((s) => {
+      const suivant = new Set(s);
+      suivant.delete(uid);
+      return suivant;
+    });
+  };
 
   const total = useMemo(
     () => lignes.reduce((s, l) => s + (Number(l.montant) || 0), 0),
@@ -143,7 +166,9 @@ export default function NouvelleDemandeScreen() {
   function resetForm() {
     setPorteur('');
     setEstRecurrent(false);
-    setLignes([ligneVide(nouvelUid(), { portefeuilleId: portefeuilleParDefaut?.id })]);
+    const uid = nouvelUid();
+    setLignes([ligneVide(uid, { portefeuilleId: portefeuilleParDefaut?.id })]);
+    setOuverts(new Set([uid]));
   }
 
   async function onSubmit() {
@@ -237,6 +262,8 @@ export default function NouvelleDemandeScreen() {
                 // Un bon sans aucune ligne n'a pas de sens : la dernière ne se
                 // supprime pas.
                 supprimable={lignes.length > 1}
+                ouvert={ouverts.has(ligne.uid)}
+                onBasculer={() => basculer(ligne.uid)}
                 onChange={(patch) => modifierLigne(ligne.uid, patch)}
                 onSupprimer={() => supprimerLigne(ligne.uid)}
               />
