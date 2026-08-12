@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,185 +11,173 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCreateBon } from '@/api/bons';
-import { useMyBonPerimeter, listPartenaires, useTypeBons, usePays, useDivisions } from '@/api/referentiel';
+import { useMyBonPerimeter, useTypeBons, usePays } from '@/api/referentiel';
 import { apiErrorMessage } from '@/lib/api';
 import { Select, type SelectOption } from '@/components/Select';
-import { RemoteSelect } from '@/components/RemoteSelect';
+import {
+  SousBonCard,
+  ligneValide,
+  ligneVide,
+  type ExigencesTypeBon,
+  type LigneSousBon,
+} from '@/components/SousBonCard';
 import { useToast } from '@/store/toast';
-import { notifySuccess, notifyError, tapLight } from '@/lib/haptics';
+import { notifySuccess, notifyError } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
-import type { CostCenter, Division, NatureOperation, Partenaire, Pays, Portefeuille, TypeBon } from '@/types';
+import type { CostCenter, NatureOperation, Pays, Portefeuille, TypeBon } from '@/types';
 
-const montantRegex = /^\d+(\.\d{1,4})?$/;
-
+/**
+ * Création d'un bon et de SES sous-bons.
+ *
+ * Le mobile n'en acceptait qu'un seul, figé, alors que le web en pose autant
+ * qu'on veut et que `POST /bons` a toujours attendu un tableau. Un bon qui
+ * regroupe trois dépenses devait donc être saisi en trois bons distincts, ce
+ * qui fausse le regroupement et multiplie les validations.
+ *
+ * Ce qui est commun au bon reste en haut (type, porteur, récurrence) ; ce qui
+ * appartient à la ligne — imputation comprise — vit dans sa carte, comme sur le
+ * web où chaque sous-bon porte son portefeuille et son centre de coût.
+ */
 export default function NouvelleDemandeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
   const { data: perimeter, isLoading: loadingPerim } = useMyBonPerimeter();
   const { data: typeBons } = useTypeBons();
+  const { data: paysData } = usePays();
   const create = useCreateBon();
 
   const [typeBonId, setTypeBonId] = useState('');
-  const [portefeuilleId, setPortefeuilleId] = useState('');
-  const [costCenterId, setCostCenterId] = useState('');
-  const [natureOperationId, setNatureOperationId] = useState('');
-  const [partenaireId, setPartenaireId] = useState('');
-  const [partenaireLabel, setPartenaireLabel] = useState('');
-  const [libelle, setLibelle] = useState('');
-  const [montant, setMontant] = useState('');
-  const [numeroBl, setNumeroBl] = useState('');
-  const [codeManutention, setCodeManutention] = useState('');
-  const [numeroClient, setNumeroClient] = useState('');
-  const [clientLabel, setClientLabel] = useState('');
-  const [nomClient, setNomClient] = useState('');
-  const [paysId, setPaysId] = useState('');
-  const [divisionId, setDivisionId] = useState('');
   const [porteur, setPorteur] = useState('');
   const [estRecurrent, setEstRecurrent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const showToast = useToast((s) => s.show);
+
+  // Compteur d'identités de lignes : un index ne convient pas, supprimer la
+  // première décalerait toutes les suivantes et React recyclerait les champs.
+  const prochainUid = useRef(1);
+  const nouvelUid = () => String(prochainUid.current++);
+  const [lignes, setLignes] = useState<LigneSousBon[]>(() => [ligneVide('0')]);
 
   const portefeuilles: Portefeuille[] = perimeter?.portefeuilles ?? [];
   const costCenters: CostCenter[] = perimeter?.costCenters ?? [];
   const typeBonsList: TypeBon[] = typeBons ?? [];
   // Natures d'opération = celles autorisées à l'utilisateur (déjà filtrées côté serveur).
   const naturesList: NatureOperation[] = perimeter?.naturesOperation ?? [];
+  const paysList: Pays[] = paysData ?? [];
 
-  useEffect(() => {
-    if (!portefeuilleId && portefeuilles.length > 0) {
-      const mine = portefeuilles.find(
+  /** Portefeuille par défaut : le sien, sinon le premier autorisé. */
+  const portefeuilleParDefaut = useMemo(() => {
+    if (portefeuilles.length === 0) return undefined;
+    return (
+      portefeuilles.find(
         (p) =>
           (p.proprietaireType === 'USER' && p.proprietaireId === user?.id) ||
           (p.proprietaireType === 'DIRECTION' && p.proprietaireId === user?.directionId),
-      );
-      setPortefeuilleId((mine ?? portefeuilles[0]).id);
-    }
-  }, [portefeuilles, portefeuilleId, user]);
+      ) ?? portefeuilles[0]
+    );
+  }, [portefeuilles, user]);
+
+  // Pré-remplissages : on ne touche qu'aux lignes encore vierges de ce champ,
+  // pour ne jamais écraser un choix déjà fait.
+  useEffect(() => {
+    if (!portefeuilleParDefaut) return;
+    setLignes((ls) =>
+      ls.some((l) => !l.portefeuilleId)
+        ? ls.map((l) => (l.portefeuilleId ? l : { ...l, portefeuilleId: portefeuilleParDefaut.id }))
+        : ls,
+    );
+  }, [portefeuilleParDefaut]);
 
   useEffect(() => {
-    if (!costCenterId && costCenters.length > 0) setCostCenterId(costCenters[0].id);
-  }, [costCenters, costCenterId]);
+    if (costCenters.length === 0) return;
+    setLignes((ls) =>
+      ls.some((l) => !l.costCenterId)
+        ? ls.map((l) => (l.costCenterId ? l : { ...l, costCenterId: costCenters[0].id }))
+        : ls,
+    );
+  }, [costCenters]);
 
   useEffect(() => {
     if (!typeBonId && typeBonsList.length > 0) setTypeBonId(typeBonsList[0].id);
   }, [typeBonsList, typeBonId]);
 
-  const selectedPf = portefeuilles.find((p) => p.id === portefeuilleId);
-  // Le centre de coût est verrouillé dès que la nature choisie en impose un.
-  const ccImpose = !!naturesList.find((n) => n.id === natureOperationId)?.costCenterId;
-
-  // Champs conditionnels selon le type de bon (comme le web).
+  // Champs conditionnels selon le type de bon (comme le web) — ils valent pour
+  // toutes les lignes, le type appartenant au bon.
   const selectedType = typeBonsList.find((t) => t.id === typeBonId);
-  const reqNumeroClient = selectedType?.requiertNumeroClient ?? false;
-  const reqNomClient = selectedType?.requiertNomClient ?? false;
-  const reqPartenaire = selectedType?.requiertPartenaire ?? false;
-  const reqBl = selectedType?.requiertBl ?? false;
-
-  const { data: paysData } = usePays();
-  const { data: divisionsData } = useDivisions(reqNomClient ? paysId : undefined);
-  const paysOptions: SelectOption[] = (paysData ?? []).map((p: Pays) => ({ value: p.id, label: `${p.code} — ${p.libelle}` }));
-  const divisionOptions: SelectOption[] = (divisionsData ?? []).map((d: Division) => ({
-    value: d.id,
-    label: `${d.code} — ${d.libelle}`,
-  }));
-
-  const typeBonOptions: SelectOption[] = typeBonsList.map((t) => ({ value: t.id, label: t.libelle, sublabel: t.code }));
-  const pfOptions: SelectOption[] = portefeuilles.map((p) => ({
-    value: p.id,
-    label: `${p.code} — ${p.libelle}`,
-    sublabel: p.proprietaireType === 'USER' ? 'Mon portefeuille' : 'Direction',
-  }));
-  const ccOptions: SelectOption[] = costCenters.map((c) => ({ value: c.id, label: `${c.code} — ${c.libelle}` }));
-  // Volontairement sans pré-sélection : c'est une classification comptable, elle doit être choisie.
-  const natureOptions: SelectOption[] = naturesList.map((n) => ({
-    value: n.id,
-    label: `${n.code} — ${n.libelle}`,
-  }));
-  // Recherche EN BASE des partenaires (débouncée côté RemoteSelect) — pas de préchargement.
-  const fetchPartenaires = async (q: string): Promise<SelectOption[]> => {
-    const list = await listPartenaires({ search: q || undefined, limit: 30 });
-    return list.map((p) => ({ value: p.id, label: p.raisonSociale, sublabel: p.code }));
+  const exigences: ExigencesTypeBon = {
+    numeroClient: selectedType?.requiertNumeroClient ?? false,
+    nomClient: selectedType?.requiertNomClient ?? false,
+    partenaire: selectedType?.requiertPartenaire ?? false,
+    bl: selectedType?.requiertBl ?? false,
   };
 
-  // Autocomplétion client sur le RÉFÉRENTIEL LOCAL (clients importés de SAP),
-  // comme le web : pas d'aller-retour SAP à la saisie, et le numéro ne peut pas
-  // être erroné puisqu'il est choisi et non tapé. La valeur retenue est le
-  // NUMÉRO client (KUNNR), c'est lui qui part sur le sous-bon.
-  const fetchClients = async (q: string): Promise<SelectOption[]> => {
-    const list = await listPartenaires({ type: 'CLIENT', search: q || undefined, limit: 30 });
-    return list
-      // Un client sans numéro SAP ne peut pas être imputé : on ne le propose pas.
-      .filter((c) => c.numeroClient)
-      .map((c) => ({
-        value: String(c.numeroClient),
-        label: c.raisonSociale,
-        sublabel: String(c.numeroClient),
-        data: c,
-      }));
-  };
+  const typeBonOptions: SelectOption[] = typeBonsList.map((t) => ({
+    value: t.id,
+    label: t.libelle,
+    sublabel: t.code,
+  }));
 
-  const montantValid = montantRegex.test(montant) && Number(montant) > 0;
-  const canSubmit =
-    !!typeBonId &&
-    !!selectedPf &&
-    !!costCenterId &&
-    !!natureOperationId &&
-    libelle.trim().length > 0 &&
-    montantValid &&
-    (!reqPartenaire || !!partenaireId) &&
-    (!reqBl || numeroBl.trim().length > 0) &&
-    (!reqNumeroClient || numeroClient.trim().length > 0) &&
-    (!reqNomClient || (nomClient.trim().length > 0 && !!paysId && !!divisionId)) &&
-    !create.isPending;
+  const modifierLigne = (uid: string, patch: Partial<LigneSousBon>) =>
+    setLignes((ls) => ls.map((l) => (l.uid === uid ? { ...l, ...patch } : l)));
 
-  const total = useMemo(() => (montantValid ? Number(montant) : 0), [montant, montantValid]);
+  const ajouterLigne = () =>
+    setLignes((ls) => {
+      const dernier = ls[ls.length - 1];
+      return [...ls, ligneVide(nouvelUid(), dernier)];
+    });
+
+  const supprimerLigne = (uid: string) => setLignes((ls) => ls.filter((l) => l.uid !== uid));
+
+  const total = useMemo(
+    () => lignes.reduce((s, l) => s + (Number(l.montant) || 0), 0),
+    [lignes],
+  );
+
+  const lignesValides = lignes.every((l) => ligneValide(l, exigences));
+  const canSubmit = !!typeBonId && lignes.length > 0 && lignesValides && !create.isPending;
 
   function resetForm() {
-    setLibelle('');
-    setMontant('');
-    setNumeroBl('');
-    setCodeManutention('');
-    setNumeroClient('');
-    setClientLabel('');
-    setNomClient('');
-    setPaysId('');
-    setDivisionId('');
     setPorteur('');
-    setPartenaireId('');
-    setPartenaireLabel('');
-    setNatureOperationId('');
     setEstRecurrent(false);
+    setLignes([ligneVide(nouvelUid(), { portefeuilleId: portefeuilleParDefaut?.id })]);
   }
 
   async function onSubmit() {
-    if (!canSubmit || !selectedPf) return;
+    if (!canSubmit) return;
     setError(null);
     try {
       const bon = await create.mutateAsync({
         typeBonId,
         estRecurrent,
         porteur: porteur.trim() || undefined,
-        soubons: [
-          {
-            libelle: libelle.trim(),
-            montant,
-            partenaireId: partenaireId || undefined,
-            numeroBl: numeroBl.trim(),
-            codeManutention: codeManutention.trim(),
-            costCenterId,
-            natureOperationId,
-            caisseId: selectedPf.caisseSourceId,
-            portefeuilleId: selectedPf.id,
-            deviseId: selectedPf.deviseId,
-            numeroClient: reqNumeroClient ? numeroClient.trim() || undefined : undefined,
-            nomClient: reqNomClient ? nomClient.trim() || undefined : undefined,
-            paysId: reqNomClient ? paysId || undefined : undefined,
-            divisionId: reqNomClient ? divisionId || undefined : undefined,
-          },
-        ],
+        soubons: lignes.map((l, i) => {
+          // La caisse et la devise découlent du portefeuille DE LA LIGNE : deux
+          // sous-bons peuvent tirer sur deux portefeuilles différents.
+          const pf = portefeuilles.find((p) => p.id === l.portefeuilleId);
+          // Plutôt qu'un plantage muet si le portefeuille a disparu du périmètre
+          // entre la saisie et l'envoi : on dit lequel et on n'envoie rien.
+          if (!pf) throw new Error(`Sous-bon ${i + 1} : portefeuille introuvable, resélectionnez-le.`);
+          return {
+            libelle: l.libelle.trim(),
+            montant: l.montant,
+            partenaireId: l.partenaireId || undefined,
+            numeroBl: l.numeroBl.trim(),
+            codeManutention: l.codeManutention.trim(),
+            costCenterId: l.costCenterId,
+            natureOperationId: l.natureOperationId,
+            caisseId: pf.caisseSourceId,
+            portefeuilleId: pf.id,
+            deviseId: pf.deviseId,
+            numeroClient: exigences.numeroClient ? l.numeroClient.trim() || undefined : undefined,
+            nomClient: exigences.nomClient ? l.nomClient.trim() || undefined : undefined,
+            paysId: exigences.nomClient ? l.paysId || undefined : undefined,
+            divisionId: exigences.nomClient ? l.divisionId || undefined : undefined,
+          };
+        }),
       });
       resetForm();
       notifySuccess();
@@ -217,157 +205,47 @@ export default function NouvelleDemandeScreen() {
           </View>
         ) : (
           <>
-            <Select label="Type de bon" required value={typeBonId} options={typeBonOptions} onChange={setTypeBonId} />
-            <Select label="Portefeuille" required value={portefeuilleId} options={pfOptions} onChange={setPortefeuilleId} />
+            <Select
+              label="Type de bon"
+              required
+              value={typeBonId}
+              options={typeBonOptions}
+              onChange={setTypeBonId}
+            />
+
             {perimeter && portefeuilles.length === 0 && (
-              <Text style={{ color: '#DC2626', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
+              <Text style={styles.alerte}>
                 Aucun portefeuille ne vous est rattaché. Contactez un administrateur.
               </Text>
             )}
-            {/* La nature vient AVANT le centre de coût : c'est elle qui le décide. */}
-            <Select
-              label="Nature comptable"
-              required
-              searchable
-              value={natureOperationId}
-              options={natureOptions}
-              onChange={(v) => {
-                setNatureOperationId(v);
-                // Chaque nature est rattachée à son centre de coût. Les choisir
-                // séparément produisait des couples incohérents.
-                const cc = naturesList.find((n) => n.id === v)?.costCenterId;
-                if (cc) setCostCenterId(String(cc));
-              }}
-              placeholder="— Choisir —"
-            />
-            <Select
-              label={ccImpose ? 'Centre de coût (déterminé par la nature)' : 'Centre de coût'}
-              required
-              value={costCenterId}
-              options={ccImpose ? ccOptions.filter((o) => o.value === costCenterId) : ccOptions}
-              onChange={setCostCenterId}
-            />
             {perimeter && naturesList.length === 0 && (
-              <Text style={{ color: '#DC2626', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
+              <Text style={styles.alerte}>
                 Aucune nature d'opération ne vous est autorisée. Contactez un administrateur.
               </Text>
             )}
 
-            <Field label="Libellé" required>
-              <TextInput
-                style={styles.input}
-                value={libelle}
-                onChangeText={setLibelle}
-                placeholder="Objet de la demande…"
-                placeholderTextColor="#94A3B8"
+            {lignes.map((ligne, index) => (
+              <SousBonCard
+                key={ligne.uid}
+                index={index}
+                valeur={ligne}
+                exigences={exigences}
+                portefeuilles={portefeuilles}
+                costCenters={costCenters}
+                natures={naturesList}
+                pays={paysList}
+                // Un bon sans aucune ligne n'a pas de sens : la dernière ne se
+                // supprime pas.
+                supprimable={lignes.length > 1}
+                onChange={(patch) => modifierLigne(ligne.uid, patch)}
+                onSupprimer={() => supprimerLigne(ligne.uid)}
               />
-            </Field>
+            ))}
 
-            <Field label="Montant" required>
-              <TextInput
-                style={styles.input}
-                value={montant}
-                onChangeText={setMontant}
-                placeholder="0"
-                placeholderTextColor="#94A3B8"
-                keyboardType="decimal-pad"
-              />
-            </Field>
-
-            <RemoteSelect
-              label="Partenaire"
-              value={partenaireId}
-              selectedLabel={partenaireLabel}
-              onChange={(v, opt) => {
-                setPartenaireId(v);
-                setPartenaireLabel(opt?.label ?? '');
-              }}
-              fetcher={fetchPartenaires}
-              queryKey="mobile-partenaires"
-              placeholder="— Aucun —"
-            />
-
-            <View style={styles.rowFields}>
-              <View style={styles.half}>
-                <Field label="N° BL">
-                  <TextInput style={styles.input} value={numeroBl} onChangeText={setNumeroBl} placeholder="BL…" placeholderTextColor="#94A3B8" />
-                </Field>
-              </View>
-              <View style={styles.half}>
-                <Field label="Code manutention">
-                  <TextInput
-                    style={styles.input}
-                    value={codeManutention}
-                    onChangeText={setCodeManutention}
-                    placeholder="Code…"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </Field>
-              </View>
-            </View>
-
-            {reqNumeroClient && (
-              <RemoteSelect
-                label="N° client"
-                required
-                value={numeroClient}
-                selectedLabel={clientLabel || numeroClient}
-                onChange={(numero, opt) => {
-                  setNumeroClient(numero);
-                  setClientLabel(opt?.label ?? '');
-                  // Le nom du client découle du client choisi (comme sur le web).
-                  if (opt?.label) setNomClient(opt.label);
-                  // Le pays aussi : `ref_partenaire.pays` porte le code ISO-2 SAP
-                  // (LAND1), qui suit la même convention que `ref_pays.code`.
-                  // Sans correspondance (pays absent du référentiel), on ne
-                  // touche à rien plutôt que de poser une valeur fausse.
-                  const client = opt?.data as Partenaire | undefined;
-                  const paysDuClient = client?.pays
-                    ? (paysData ?? []).find((p: Pays) => p.code === client.pays)
-                    : undefined;
-                  if (paysDuClient) {
-                    setPaysId(paysDuClient.id);
-                    setDivisionId(''); // la division dépend du pays
-                  }
-                }}
-                fetcher={fetchClients}
-                queryKey="mobile-clients"
-                placeholder="Rechercher un client (nom ou numéro)…"
-              />
-            )}
-
-            {reqNomClient && (
-              <>
-                <Field label="Nom du client" required>
-                  <TextInput
-                    style={styles.input}
-                    value={nomClient}
-                    onChangeText={setNomClient}
-                    placeholder="Nom du client…"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </Field>
-                <Select
-                  label="Pays"
-                  required
-                  value={paysId}
-                  options={paysOptions}
-                  onChange={(v) => {
-                    setPaysId(v);
-                    setDivisionId('');
-                  }}
-                  placeholder="— Choisir —"
-                />
-                <Select
-                  label="Division"
-                  required
-                  value={divisionId}
-                  options={divisionOptions}
-                  onChange={setDivisionId}
-                  placeholder={paysId ? '— Choisir —' : "Choisissez d'abord un pays"}
-                />
-              </>
-            )}
+            <Pressable onPress={ajouterLigne} style={styles.ajouter}>
+              <Ionicons name="add-circle-outline" size={18} color="#0F4C81" />
+              <Text style={styles.ajouterText}>Ajouter un sous-bon</Text>
+            </Pressable>
 
             <Field label="Porteur (optionnel)">
               <TextInput
@@ -387,12 +265,22 @@ export default function NouvelleDemandeScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>
+                Total {lignes.length > 1 ? `(${lignes.length} sous-bons)` : ''}
+              </Text>
               <Text style={styles.totalValue}>{total.toLocaleString('fr-FR')}</Text>
             </View>
 
-            <Pressable onPress={onSubmit} disabled={!canSubmit} style={[styles.button, !canSubmit && styles.buttonDisabled]}>
-              {create.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Créer le bon</Text>}
+            <Pressable
+              onPress={onSubmit}
+              disabled={!canSubmit}
+              style={[styles.button, !canSubmit && styles.buttonDisabled]}
+            >
+              {create.isPending ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Créer le bon</Text>
+              )}
             </Pressable>
           </>
         )}
@@ -417,6 +305,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#F1F5F9' },
   container: { padding: 16, paddingBottom: 40 },
   center: { paddingVertical: 40, alignItems: 'center' },
+  alerte: { color: '#DC2626', fontSize: 12, marginTop: -6, marginBottom: 10 },
   fieldWrap: { marginBottom: 14 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 6 },
   req: { color: '#EF4444' },
@@ -430,8 +319,19 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     backgroundColor: '#fff',
   },
-  rowFields: { flexDirection: 'row', gap: 12 },
-  half: { flex: 1 },
+  ajouter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#0F4C81',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  ajouterText: { color: '#0F4C81', fontWeight: '700', fontSize: 14 },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
