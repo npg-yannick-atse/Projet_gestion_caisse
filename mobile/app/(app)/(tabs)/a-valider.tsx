@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,21 +11,53 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useBonsAValider } from '@/api/bons';
-import { STATUT_META, formatDate, formatMontant } from '@/lib/format';
+import { useBonsAValider, useMesValidations } from '@/api/bons';
+import { useAuthStore } from '@/store/auth';
+import { DateField } from '@/components/DateField';
+import { STATUT_META, formatDate, formatMontant, todayISO } from '@/lib/format';
 import type { Bon } from '@/types';
 
+type Mode = 'FILE' | 'HISTORIQUE';
+
+/**
+ * Deux lectures du même métier de validateur :
+ *
+ *  - « À valider » : la file d'attente, ce qui reste à traiter ;
+ *  - « Mes validations » : ce qu'il a déjà traité, sur une plage de dates.
+ *
+ * Le second manquait — une fois le bon validé, il disparaissait de l'écran sans
+ * qu'aucune vue mobile ne permette d'y revenir. Un validateur à qui l'on demande
+ * « tu as bien validé le bon de mardi ? » n'avait aucun moyen de répondre.
+ *
+ * Les dates portent sur le jour de la DÉCISION, pas sur celui de la création :
+ * c'est la date dont le validateur se souvient.
+ */
 export default function AValiderScreen() {
   const router = useRouter();
-  const { data: bons, isLoading, isError, refetch, isRefetching } = useBonsAValider();
+  const user = useAuthStore((s) => s.user);
+  const [mode, setMode] = useState<Mode>('FILE');
+
+  const today = todayISO();
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const isToday = dateFrom === today && dateTo === today;
+
+  /**
+   * Recherche envoyée à la BASE, pas appliquée en mémoire : la liste ne contient
+   * que la page reçue, un filtre local ne verrait donc jamais un bon resté au
+   * serveur.
+   */
   const [search, setSearch] = useState('');
 
-  const filtered = useMemo(() => {
-    const list: Bon[] = bons ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((b) => b.numero.toLowerCase().includes(q) || String(b.montantTotal).includes(q));
-  }, [bons, search]);
+  const file = useBonsAValider(mode === 'FILE', search.trim() || undefined);
+  const historique = useMesValidations(
+    user?.id,
+    { dateFrom, dateTo, search: search.trim() || undefined },
+    mode === 'HISTORIQUE',
+  );
+
+  const source = mode === 'FILE' ? file : historique;
+  const { data: bons, isLoading, isError, refetch, isRefetching } = source;
 
   const renderItem = useCallback(
     ({ item }: { item: Bon }) => {
@@ -48,24 +80,50 @@ export default function AValiderScreen() {
     [router],
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#0F4C81" />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>Impossible de charger la file.</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.list}>
+      {/* Bascule file d'attente / historique */}
+      <View style={styles.modes}>
+        {(
+          [
+            ['FILE', 'À valider'],
+            ['HISTORIQUE', 'Mes validations'],
+          ] as [Mode, string][]
+        ).map(([m, label]) => {
+          const active = mode === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              style={[styles.modeBtn, active && styles.modeBtnActive]}
+            >
+              <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Plage de dates — uniquement pour l'historique : la file d'attente doit
+          rester complète, un bon en attente depuis trois jours ne doit pas
+          sortir de l'écran parce qu'on regarde aujourd'hui. */}
+      {mode === 'HISTORIQUE' && (
+        <View style={styles.filterBar}>
+          <DateField label="Du" value={dateFrom} onChange={setDateFrom} />
+          <DateField label="Au" value={dateTo} onChange={setDateTo} />
+          {!isToday && (
+            <Pressable
+              style={styles.todayBtn}
+              onPress={() => {
+                setDateFrom(today);
+                setDateTo(today);
+              }}
+            >
+              <Text style={styles.todayText}>Aujourd'hui</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={16} color="#94A3B8" />
         <TextInput
@@ -82,29 +140,90 @@ export default function AValiderScreen() {
           </Pressable>
         ) : null}
       </View>
-      <FlatList
-        data={filtered}
-        keyExtractor={(b) => b.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0F4C81" />}
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Ionicons name={search ? 'search-outline' : 'checkmark-done-circle-outline'} size={40} color="#CBD5E1" />
-            <Text style={styles.empty}>{search ? 'Aucun bon ne correspond.' : 'Aucun bon à valider. 🎉'}</Text>
-          </View>
-        }
-      />
+
+      {isLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color="#0F4C81" />
+        </View>
+      ) : isError ? (
+        <View style={styles.center}>
+          <Text style={styles.error}>
+            {mode === 'FILE' ? 'Impossible de charger la file.' : 'Impossible de charger vos validations.'}
+          </Text>
+          <Pressable onPress={() => refetch()} style={styles.retry}>
+            <Text style={styles.retryText}>Réessayer</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={bons ?? []}
+          keyExtractor={(b) => b.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.sep} />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0F4C81" />}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Ionicons
+                name={
+                  search
+                    ? 'search-outline'
+                    : mode === 'FILE'
+                      ? 'checkmark-done-circle-outline'
+                      : 'time-outline'
+                }
+                size={40}
+                color="#CBD5E1"
+              />
+              <Text style={styles.empty}>
+                {search
+                  ? 'Aucun bon ne correspond.'
+                  : mode === 'FILE'
+                    ? 'Aucun bon à valider. 🎉'
+                    : 'Aucune validation sur cette période.'}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: '#F1F5F9' },
-  searchWrap: {
+  modes: {
+    flexDirection: 'row',
+    gap: 8,
     marginHorizontal: 14,
     marginTop: 12,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 3,
+  },
+  modeBtn: { flex: 1, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  modeBtnActive: { backgroundColor: '#0F4C81' },
+  modeText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  modeTextActive: { color: '#fff' },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+  todayBtn: {
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    backgroundColor: '#0F4C81',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  searchWrap: {
+    marginHorizontal: 14,
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -138,4 +257,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700' },
   error: { color: '#B42318', fontSize: 14 },
   empty: { color: '#64748B', fontSize: 14 },
+  retry: { backgroundColor: '#0F4C81', borderRadius: 9, paddingHorizontal: 16, paddingVertical: 9 },
+  retryText: { color: '#fff', fontWeight: '700' },
 });

@@ -647,6 +647,14 @@ export class BonsService {
     period?: 'today' | 'week' | 'month';
     typeBonId?: string;
     demandeurId?: string;
+    /**
+     * Bons sur lesquels cet utilisateur a rendu une décision. Quand il est
+     * fourni, `dateFrom`/`dateTo` portent sur la DATE DE DÉCISION et non sur la
+     * date de création : un validateur qui cherche « ce que j'ai validé cette
+     * semaine » raisonne sur le jour où il a signé, pas sur le jour où le
+     * demandeur a saisi.
+     */
+    validateurId?: string;
     extension?: boolean;
     statutExtension?: string;
     search?: string;
@@ -711,7 +719,16 @@ export class BonsService {
       });
     }
     if (opts.search) {
-      query.andWhere('bon.numero LIKE :q', { q: `%${opts.search}%` });
+      /**
+       * Numéro OU montant : sur mobile, on cherche aussi bien « BON-0028 » que
+       * « 50000 ». Le montant est comparé en texte — c'est une recherche, pas un
+       * calcul, et `LIKE` sur un DECIMAL converti trouve « 5000 » dans
+       * « 5000.0000 ».
+       */
+      query.andWhere(
+        '(bon.numero LIKE :q OR CAST(bon.montant_total AS nvarchar(40)) LIKE :q)',
+        { q: `%${opts.search}%` },
+      );
     }
 
     // Période prédéfinie
@@ -730,14 +747,37 @@ export class BonsService {
       query.andWhere('bon.created_at <= :now', { now });
     }
 
-    // Plage personnalisée (prend le dessus sur period si les deux sont fournis)
-    if (opts.dateFrom) {
-      query.andWhere('bon.created_at >= :df', { df: new Date(opts.dateFrom) });
-    }
-    if (opts.dateTo) {
-      const dt = new Date(opts.dateTo);
-      dt.setHours(23, 59, 59, 999);
-      query.andWhere('bon.created_at <= :dt', { dt });
+    // Bornes de la plage : minuit et fin de journée, calculées une seule fois.
+    const debut = opts.dateFrom ? new Date(opts.dateFrom) : null;
+    const fin = opts.dateTo ? new Date(opts.dateTo) : null;
+    if (fin) fin.setHours(23, 59, 59, 999);
+
+    /**
+     * « Les bons que j'ai traités » — un EXISTS sur le journal des décisions.
+     *
+     * EXISTS et non jointure : un bon peut porter PLUSIEURS décisions du même
+     * validateur (validation puis signature), et une jointure le ferait
+     * apparaître autant de fois dans la liste.
+     *
+     * Toutes les décisions comptent, y compris les REFUS : un validateur qui
+     * cherche ce qu'il a traité doit retrouver ce qu'il a refusé, sinon le bon
+     * semble avoir disparu. Le statut affiché en dit l'issue.
+     */
+    if (opts.validateurId) {
+      let exists =
+        'EXISTS (SELECT 1 FROM dbo.trx_validation_bon v ' +
+        'WHERE v.bon_id = bon.id AND v.validateur_id = :validateurId';
+      if (debut) exists += ' AND v.date_validation >= :vdf';
+      if (fin) exists += ' AND v.date_validation <= :vdt';
+      query.andWhere(`${exists})`, {
+        validateurId: opts.validateurId,
+        ...(debut ? { vdf: debut } : {}),
+        ...(fin ? { vdt: fin } : {}),
+      });
+    } else {
+      // Plage personnalisée (prend le dessus sur period si les deux sont fournis)
+      if (debut) query.andWhere('bon.created_at >= :df', { df: debut });
+      if (fin) query.andWhere('bon.created_at <= :dt', { dt: fin });
     }
 
     // Montant RÉELLEMENT décaissé (somme des décaissements effectifs, ajustements

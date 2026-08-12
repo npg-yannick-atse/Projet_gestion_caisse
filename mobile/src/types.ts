@@ -34,6 +34,8 @@ export interface Bon {
   numero: string;
   statut: BonStatut;
   montantTotal: string;
+  /** Total réellement décaissé (ajustements caissier inclus). null si rien décaissé. */
+  montantDecaisse?: string | null;
   demandeurId: string;
   estRecurrent?: boolean;
   porteur?: string | null;

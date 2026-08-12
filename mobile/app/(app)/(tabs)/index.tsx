@@ -27,33 +27,43 @@ export default function MesBonsScreen() {
   const [dateTo, setDateTo] = useState(today);
   const isToday = dateFrom === today && dateTo === today;
 
-  const { data: bons, isLoading, isError, refetch, isRefetching } = useMyBons(user?.id, { dateFrom, dateTo });
-
+  /**
+   * Recherche et statut sont envoyés à la BASE, comme les dates.
+   *
+   * Filtrer en mémoire ne trie que ce que l'écran a déjà reçu : un bon resté au
+   * serveur ne serait jamais trouvé, et une puce de statut oubliée pouvait
+   * masquer le bon qu'on venait de créer.
+   */
   const [search, setSearch] = useState('');
   const [statutFilter, setStatutFilter] = useState<BonStatut | 'TOUTES'>('TOUTES');
 
-  // Total des bons déjà décaissés sur la période filtrée.
-  const totalDecaisse = useMemo(() => {
-    const list: Bon[] = bons ?? [];
-    return list
-      .filter((b) => b.statut === 'DECAISSE')
-      .reduce((s, b) => s + Number(b.montantTotal || 0), 0);
-  }, [bons]);
+  const { data: bons, isLoading, isError, refetch, isRefetching } = useMyBons(user?.id, {
+    dateFrom,
+    dateTo,
+    search: search.trim() || undefined,
+    statut: statutFilter === 'TOUTES' ? undefined : statutFilter,
+  });
 
-  // Statuts présents (pour les puces de filtre) + recherche (n° / montant).
-  const statutsPresents = useMemo(() => {
-    const list: Bon[] = bons ?? [];
-    return [...new Set(list.map((b) => b.statut))];
-  }, [bons]);
-  const filteredBons = useMemo(() => {
-    const list: Bon[] = bons ?? [];
-    const q = search.trim().toLowerCase();
-    return list.filter(
-      (b) =>
-        (statutFilter === 'TOUTES' || b.statut === statutFilter) &&
-        (!q || b.numero.toLowerCase().includes(q) || String(b.montantTotal).includes(q)),
-    );
-  }, [bons, search, statutFilter]);
+  /**
+   * Somme des montants RÉELLEMENT décaissés, telle que le serveur les calcule
+   * (ajustements du caissier inclus) — et non la somme des montants demandés des
+   * bons au statut « décaissé », qui ignorait ces ajustements.
+   */
+  const totalDecaisse = useMemo(
+    () => (bons ?? []).reduce((s, b) => s + Number(b.montantDecaisse || 0), 0),
+    [bons],
+  );
+
+  /** Liste fixe : les puces ne dépendent plus de ce que la page a reçu. */
+  const STATUTS: (BonStatut | 'TOUTES')[] = [
+    'TOUTES',
+    'CREE',
+    'VALIDE',
+    'DECAISSE',
+    'COMPTABILISE',
+    'ANNULE',
+    'REFUSE',
+  ];
 
   const renderItem = useCallback(
     ({ item }: { item: Bon }) => {
@@ -123,9 +133,8 @@ export default function MesBonsScreen() {
       </View>
 
       {/* Puces de statut */}
-      {statutsPresents.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {(['TOUTES', ...statutsPresents] as (BonStatut | 'TOUTES')[]).map((s) => {
+          {STATUTS.map((s) => {
             const active = statutFilter === s;
             const label = s === 'TOUTES' ? 'Tous' : STATUT_META[s]?.label ?? s;
             return (
@@ -139,7 +148,6 @@ export default function MesBonsScreen() {
             );
           })}
         </ScrollView>
-      )}
 
       {isLoading ? (
         <View style={styles.center}>
@@ -154,7 +162,7 @@ export default function MesBonsScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredBons}
+          data={bons ?? []}
           keyExtractor={(b) => b.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}

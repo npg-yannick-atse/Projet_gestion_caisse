@@ -168,7 +168,7 @@ export default function NouvelleDemandeScreen() {
     if (!canSubmit || !selectedPf) return;
     setError(null);
     try {
-      await create.mutateAsync({
+      const bon = await create.mutateAsync({
         typeBonId,
         estRecurrent,
         porteur: porteur.trim() || undefined,
@@ -194,7 +194,14 @@ export default function NouvelleDemandeScreen() {
       resetForm();
       notifySuccess();
       showToast('Bon créé ✓', 'success');
-      router.replace('/'); // retour à « Mes bons »
+      /**
+       * On ouvre le bon qu'on vient de créer, au lieu de renvoyer vers la liste.
+       * Le demandeur voit immédiatement son numéro, son montant et son statut :
+       * il sait que le bon existe vraiment, et sur quoi il porte. Le retour
+       * arrière ramène à « Mes bons », déjà rafraîchie par l'invalidation.
+       */
+      if (bon?.id) router.push(`/bons/${bon.id}`);
+      else router.replace('/'); // pas d'identifiant renvoyé : la liste fait foi
     } catch (e) {
       notifyError();
       setError(apiErrorMessage(e, 'Création impossible'));

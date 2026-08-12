@@ -63,6 +63,23 @@ export class BonsController {
   }
 
   /**
+   * Même principe pour « les bons que j'ai traités » : chacun peut interroger
+   * SES propres décisions, mais lire celles d'un autre validateur suppose un
+   * rôle privilégié. Sans ce garde-fou, `?validateurId=12` exposerait l'activité
+   * de n'importe quel collègue à qui sait forger l'URL.
+   */
+  private async resolveValidateurFilter(
+    user: JwtPayload,
+    clientValidateurId?: string,
+  ): Promise<string | undefined> {
+    if (!clientValidateurId) return undefined;
+    if (String(clientValidateurId) === String(user.sub)) return user.sub;
+    const codes = await this.authz.getUserRoleCodes(user.sub);
+    const privileged = Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c));
+    return privileged ? clientValidateurId : user.sub;
+  }
+
+  /**
    * Charge un bon en vérifiant le droit de LECTURE (anti-IDOR) : mêmes règles que la
    * liste — les rôles privilégiés voient tout, sinon on ne voit que ses propres bons.
    * Lève NotFound si le bon n'existe pas, Forbidden s'il est hors périmètre.
@@ -100,6 +117,7 @@ export class BonsController {
     @Query('period') period?: string,
     @Query('typeBonId') typeBonId?: string,
     @Query('demandeurId') demandeurId?: string,
+    @Query('validateurId') validateurId?: string,
     @Query('extension') extension?: string,
     @Query('statutExtension') statutExtension?: string,
     @Query('search') search?: string,
@@ -109,11 +127,13 @@ export class BonsController {
     @Query('sortDir') sortDir?: string,
   ) {
     const effectiveDemandeurId = await this.resolveDemandeurFilter(user, demandeurId);
+    const effectiveValidateurId = await this.resolveValidateurFilter(user, validateurId);
     return this.bonsService.findAll({
       statut: statut as any,
       period: period as any,
       typeBonId,
       demandeurId: effectiveDemandeurId,
+      validateurId: effectiveValidateurId,
       extension: extension === '1' || extension === 'true',
       statutExtension,
       search,

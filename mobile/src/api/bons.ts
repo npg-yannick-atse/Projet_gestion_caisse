@@ -5,6 +5,10 @@ import type { Bon, CreateBonPayload, SousBon, ValidateBonPayload } from '../type
 export interface MyBonsFilter {
   dateFrom?: string;
   dateTo?: string;
+  /** Recherche sur le numéro ou le montant — exécutée par la base. */
+  search?: string;
+  /** Un ou plusieurs statuts séparés par des virgules. */
+  statut?: string;
 }
 
 /** Bons dont l'utilisateur est le demandeur (filtré côté serveur : demandeur + plage de dates). */
@@ -12,15 +16,62 @@ export async function getMyBons(demandeurId: string, filter: MyBonsFilter = {}):
   const params: Record<string, string> = { demandeurId };
   if (filter.dateFrom) params.dateFrom = filter.dateFrom;
   if (filter.dateTo) params.dateTo = filter.dateTo;
+  if (filter.search) params.search = filter.search;
+  if (filter.statut) params.statut = filter.statut;
   const { data } = await api.get<Bon[]>('/bons', { params });
   return data;
 }
 
 export function useMyBons(demandeurId: string | null | undefined, filter: MyBonsFilter = {}) {
   return useQuery<Bon[]>({
-    queryKey: ['my-bons', demandeurId, filter.dateFrom ?? '', filter.dateTo ?? ''],
+    queryKey: [
+      'my-bons',
+      demandeurId,
+      filter.dateFrom ?? '',
+      filter.dateTo ?? '',
+      filter.search ?? '',
+      filter.statut ?? '',
+    ],
     queryFn: () => getMyBons(demandeurId as string, filter),
     enabled: !!demandeurId,
+  });
+}
+
+/**
+ * Bons sur lesquels l'utilisateur a rendu une décision, dans une plage de dates.
+ *
+ * La plage porte sur la DATE DE DÉCISION, pas sur la date de création : un
+ * validateur cherche « ce que j'ai signé cette semaine », or un bon saisi le 2
+ * peut avoir été validé le 20. Le filtrage est fait par la base (EXISTS sur le
+ * journal des décisions).
+ */
+export async function getMesValidations(
+  validateurId: string,
+  filter: MyBonsFilter = {},
+): Promise<Bon[]> {
+  const params: Record<string, string> = { validateurId };
+  if (filter.dateFrom) params.dateFrom = filter.dateFrom;
+  if (filter.dateTo) params.dateTo = filter.dateTo;
+  if (filter.search) params.search = filter.search;
+  const { data } = await api.get<Bon[]>('/bons', { params });
+  return data;
+}
+
+export function useMesValidations(
+  validateurId: string | null | undefined,
+  filter: MyBonsFilter = {},
+  enabled = true,
+) {
+  return useQuery<Bon[]>({
+    queryKey: [
+      'mes-validations',
+      validateurId,
+      filter.dateFrom ?? '',
+      filter.dateTo ?? '',
+      filter.search ?? '',
+    ],
+    queryFn: () => getMesValidations(validateurId as string, filter),
+    enabled: enabled && !!validateurId,
   });
 }
 
@@ -40,15 +91,17 @@ export function useCreateBon() {
 // ---- Détail + validation ----
 
 /** Bons en attente de validation visibles par l'utilisateur (restriction serveur par rôle). */
-export async function getBonsAValider(): Promise<Bon[]> {
-  const { data } = await api.get<Bon[]>('/bons', { params: { statut: 'CREE' } });
+export async function getBonsAValider(search?: string): Promise<Bon[]> {
+  const params: Record<string, string> = { statut: 'CREE' };
+  if (search) params.search = search;
+  const { data } = await api.get<Bon[]>('/bons', { params });
   return data;
 }
 
-export function useBonsAValider(enabled = true) {
+export function useBonsAValider(enabled = true, search?: string) {
   return useQuery<Bon[]>({
-    queryKey: ['bons-a-valider'],
-    queryFn: getBonsAValider,
+    queryKey: ['bons-a-valider', search ?? ''],
+    queryFn: () => getBonsAValider(search),
     enabled,
     // Polling « cloche » : rafraîchit la file toutes les 30 s.
     refetchInterval: 30000,
