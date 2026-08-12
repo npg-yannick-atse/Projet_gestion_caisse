@@ -36,8 +36,11 @@ export default function CompteScreen() {
 
   const appVersion = Constants.expoConfig?.version ?? '—';
 
+  // Aucun bord réservé en bas : l'écran vit dans le navigateur d'onglets, et
+  // c'est la barre d'onglets qui borde le bas. Garder `bottom` ajoutait la zone
+  // d'accueil de l'iPhone une seconde fois, au-dessus de la barre.
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <View style={styles.card}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
