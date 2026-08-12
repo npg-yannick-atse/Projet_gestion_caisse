@@ -6,6 +6,7 @@ import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
 import { useRecharge } from '@/api/recharge';
 import { useEncaissement } from '@/api/encaissement';
+import { useDeviseReference, useTauxCourants } from '@/api/tauxChange';
 import { ClientSelect } from '@/components/ClientSelect';
 import { apiErrorMessage, cn, formatMontant } from '@/lib/utils';
 import type { RechargeSens } from '@/types/api';
@@ -92,6 +93,11 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   const [sapCheck, setSapCheck] = useState<{ checking: boolean; error: string | null }>({ checking: false, error: null });
   const [clientSapStatus, setClientSapStatus] = useState<'idle' | 'checking' | 'found' | 'notfound' | 'error'>('idle');
   const [encMotif, setEncMotif] = useState('');
+  // Taux réellement obtenu. `tauxTouche` distingue « le caissier a saisi ce
+  // taux » de « c'est le cours du jour pré-rempli » : sans ce drapeau, changer
+  // de devise écraserait un taux que le caissier venait de taper.
+  const [taux, setTaux] = useState('');
+  const [tauxTouche, setTauxTouche] = useState(false);
 
   // Champs recharge.
   const [sens, setSens] = useState<RechargeSens>('CAISSE_VERS_PORTEFEUILLE');
@@ -131,6 +137,52 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     if (evidente) setEncCaisseId(evidente);
   };
 
+  /* ---- Taux de change ---------------------------------------------------- */
+  const { data: reference } = useDeviseReference();
+  const { data: tauxCourants } = useTauxCourants();
+
+  /** Une devise étrangère demande un taux ; la devise de référence, non. */
+  const besoinTaux =
+    mode === 'ENCAISSEMENT' &&
+    !!encDeviseId &&
+    !!reference &&
+    String(encDeviseId) !== String(reference.id);
+
+  /**
+   * Cours du jour pour cette devise, dans le sens qui nous intéresse. Le
+   * référentiel ne tient qu'UN sens par couple : si c'est l'autre qui est
+   * stocké, on prend le taux inverse, déjà calculé par le serveur.
+   */
+  const coursDuJour = useMemo(() => {
+    if (!besoinTaux || !reference) return undefined;
+    const direct = (tauxCourants ?? []).find(
+      (t) => t.deviseSourceId === String(encDeviseId) && t.deviseCibleId === String(reference.id),
+    );
+    if (direct) return { valeur: direct.taux, perime: direct.perime };
+    const inverse = (tauxCourants ?? []).find(
+      (t) => t.deviseSourceId === String(reference.id) && t.deviseCibleId === String(encDeviseId),
+    );
+    if (inverse) return { valeur: inverse.tauxInverse, perime: inverse.perime };
+    return undefined;
+  }, [besoinTaux, tauxCourants, encDeviseId, reference]);
+
+  // Pré-remplissage : uniquement tant que le caissier n'a rien tapé lui-même.
+  useEffect(() => {
+    if (!besoinTaux) {
+      setTaux('');
+      setTauxTouche(false);
+      return;
+    }
+    if (!tauxTouche) setTaux(coursDuJour?.valeur ?? '');
+  }, [besoinTaux, coursDuJour, tauxTouche]);
+
+  const contreValeur = useMemo(() => {
+    const m = Number(montant);
+    const t = Number(taux);
+    if (!besoinTaux || !(m > 0) || !(t > 0)) return null;
+    return (m * t).toFixed(reference?.nbDecimales ?? 0);
+  }, [besoinTaux, montant, taux, reference]);
+
   const busy = mode === 'ENCAISSEMENT' ? encaissement.isPending : recharge.isPending;
   const error = mode === 'ENCAISSEMENT' ? encaissement.error : recharge.error;
   const isError = mode === 'ENCAISSEMENT' ? encaissement.isError : recharge.isError;
@@ -139,7 +191,9 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     mode === 'ENCAISSEMENT'
       // La devise est EXIGÉE : sans elle, le serveur retomberait sur celle de la
       // caisse et l'écriture porterait une monnaie que l'écran n'affichait pas.
-      ? !!encCaisseId && !!encDeviseId && Number(montant) > 0
+      // Le taux l'est aussi dès que la devise est étrangère : c'est précisément
+      // ce qu'on ne savait pas enregistrer jusqu'ici.
+      ? !!encCaisseId && !!encDeviseId && Number(montant) > 0 && (!besoinTaux || Number(taux) > 0)
       : !!rechCaisseId && !!portefeuilleId && Number(montant) > 0;
 
   const stats = useMemo(() => {
@@ -164,6 +218,10 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     setRechMotif('');
     setEncCaisseId('');
     setEncDeviseId('');
+    // Le taux redevient une proposition : l'encaissement suivant peut très bien
+    // avoir été négocié à un autre cours.
+    setTaux('');
+    setTauxTouche(false);
     setRechCaisseId('');
     setPortefeuilleId('');
     setSens('CAISSE_VERS_PORTEFEUILLE');
@@ -218,6 +276,9 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
           clientNom: clientNom.trim() || undefined,
           clientNumero: clientNumero.trim() || undefined,
           motif: encMotif.trim() || undefined,
+          // Le serveur refuse un taux sur un encaissement déjà libellé dans la
+          // devise de référence : on ne l'envoie que s'il a un sens.
+          tauxApplique: besoinTaux ? taux : undefined,
         },
         {
           onSuccess: () => {
@@ -226,6 +287,8 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
             setClientNom('');
             setClientNumero('');
             setEncMotif('');
+            setTaux('');
+            setTauxTouche(false);
             setFormOpen(false);
           },
         },
@@ -426,6 +489,51 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   </p>
                 )}
               </div>
+
+              {/* Taux réellement obtenu. Le cours du jour n'est qu'une
+                  proposition : deux encaissements du même jour peuvent avoir été
+                  négociés différemment, et c'est ce qui s'est passé qu'on
+                  enregistre. */}
+              {besoinTaux && (
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="enc-taux" className={labelClass}>
+                    Taux obtenu — 1 {codeOf(encDeviseId)} en {reference?.code}
+                  </label>
+                  <input
+                    id="enc-taux"
+                    inputMode="decimal"
+                    placeholder="Ex : 590"
+                    className={inputClass}
+                    value={taux}
+                    onChange={(e) => {
+                      setTaux(e.target.value);
+                      setTauxTouche(true);
+                    }}
+                  />
+                  {contreValeur ? (
+                    <p className="text-[11px] text-[#0F172A]">
+                      Soit{' '}
+                      <strong>
+                        {formatMontant(contreValeur)} {reference?.code}
+                      </strong>
+                      {coursDuJour && taux !== coursDuJour.valeur && (
+                        <span className="text-[#B45309]"> · cours du jour : {coursDuJour.valeur}</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#B42318]">
+                      {coursDuJour
+                        ? 'Corrigez le taux si vous avez obtenu autre chose.'
+                        : `Aucun cours connu pour ${codeOf(encDeviseId)} — saisissez le taux obtenu.`}
+                    </p>
+                  )}
+                  {coursDuJour?.perime && (
+                    <p className="text-[11px] text-[#B45309]">
+                      Le cours proposé n’a pas été rafraîchi depuis longtemps — vérifiez-le.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="enc-client" className={labelClass}>
