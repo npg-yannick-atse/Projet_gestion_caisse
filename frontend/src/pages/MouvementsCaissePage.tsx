@@ -119,6 +119,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   }, [mode]);
 
   const codeOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId)?.code ?? '';
+  const deviseOf = (deviseId?: string | null) => (devises ?? []).find((d) => d.id === deviseId);
   const { deviseDeLaCaisse, caissesPourDevise, caisseEvidentePourDevise } =
     useCaisseDevise(openCaisses);
   const deviseCaisseEnc = deviseDeLaCaisse(encCaisseId);
@@ -141,12 +142,18 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
   const { data: reference } = useDeviseReference();
   const { data: tauxCourants } = useTauxCourants();
 
-  /** Une devise étrangère demande un taux ; la devise de référence, non. */
+  /**
+   * Le taux est exigé dès que l'argent reçu n'est pas dans la devise DE LA
+   * CAISSE — c'est elle qui sera créditée, les devises étrangères étant
+   * converties au guichet (décision du 12/08/2026). La comparaison portait sur
+   * la devise de RÉFÉRENCE : pour une caisse en USD recevant des francs, l'écran
+   * n'aurait rien demandé alors que le serveur refuse désormais l'opération.
+   */
   const besoinTaux =
     mode === 'ENCAISSEMENT' &&
     !!encDeviseId &&
-    !!reference &&
-    String(encDeviseId) !== String(reference.id);
+    !!deviseCaisseEnc &&
+    String(encDeviseId) !== String(deviseCaisseEnc);
 
   /**
    * Cours du jour pour cette devise, dans le sens qui nous intéresse. Le
@@ -155,6 +162,11 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
    */
   const coursDuJour = useMemo(() => {
     if (!besoinTaux || !reference) return undefined;
+    // Le référentiel ne cote que contre la devise de RÉFÉRENCE. Si la caisse est
+    // tenue dans une autre monnaie, aucun cours ne donne le bon sens : mieux
+    // vaut ne rien pré-remplir que de proposer un taux faux — le caissier saisit
+    // alors celui qu'il a réellement obtenu.
+    if (String(deviseCaisseEnc) !== String(reference.id)) return undefined;
     const direct = (tauxCourants ?? []).find(
       (t) => t.deviseSourceId === String(encDeviseId) && t.deviseCibleId === String(reference.id),
     );
@@ -164,7 +176,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     );
     if (inverse) return { valeur: inverse.tauxInverse, perime: inverse.perime };
     return undefined;
-  }, [besoinTaux, tauxCourants, encDeviseId, reference]);
+  }, [besoinTaux, tauxCourants, encDeviseId, reference, deviseCaisseEnc]);
 
   // Pré-remplissage : uniquement tant que le caissier n'a rien tapé lui-même.
   useEffect(() => {
@@ -180,8 +192,10 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     const m = Number(montant);
     const t = Number(taux);
     if (!besoinTaux || !(m > 0) || !(t > 0)) return null;
-    return (m * t).toFixed(reference?.nbDecimales ?? 0);
-  }, [besoinTaux, montant, taux, reference]);
+    // Arrondi aux décimales de la devise CRÉDITÉE — le serveur fait le même
+    // calcul, et l'écran ne doit pas annoncer un montant qu'il démentira.
+    return (m * t).toFixed(deviseOf(deviseCaisseEnc)?.nbDecimales ?? 0);
+  }, [besoinTaux, montant, taux, deviseCaisseEnc, devises]);
 
   const busy = mode === 'ENCAISSEMENT' ? encaissement.isPending : recharge.isPending;
   const error = mode === 'ENCAISSEMENT' ? encaissement.error : recharge.error;
@@ -484,8 +498,9 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                 )}
                 {encCaisseId && encDeviseId && encDeviseId !== deviseCaisseEnc && (
                   <p className="text-[11px] text-[#B45309]">
-                    Devise différente de celle de la caisse ({codeOf(deviseCaisseEnc)}) — le montant sera
-                    suivi séparément dans le solde.
+                    Devise différente de celle de la caisse — les {codeOf(encDeviseId)} seront changés
+                    au guichet et c’est leur contre-valeur en {codeOf(deviseCaisseEnc)} qui entrera en
+                    caisse.
                   </p>
                 )}
               </div>
@@ -497,7 +512,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
               {besoinTaux && (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="enc-taux" className={labelClass}>
-                    Taux obtenu — 1 {codeOf(encDeviseId)} en {reference?.code}
+                    Taux obtenu — 1 {codeOf(encDeviseId)} en {codeOf(deviseCaisseEnc)}
                   </label>
                   <input
                     id="enc-taux"
@@ -512,9 +527,9 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   />
                   {contreValeur ? (
                     <p className="text-[11px] text-[#0F172A]">
-                      Soit{' '}
+                      Entrera en caisse :{' '}
                       <strong>
-                        {formatMontant(contreValeur)} {reference?.code}
+                        {formatMontant(contreValeur)} {codeOf(deviseCaisseEnc)}
                       </strong>
                       {coursDuJour && taux !== coursDuJour.valeur && (
                         <span className="text-[#B45309]"> · cours du jour : {coursDuJour.valeur}</span>
@@ -524,7 +539,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                     <p className="text-[11px] text-[#B42318]">
                       {coursDuJour
                         ? 'Corrigez le taux si vous avez obtenu autre chose.'
-                        : `Aucun cours connu pour ${codeOf(encDeviseId)} — saisissez le taux obtenu.`}
+                        : `Taux obligatoire : sans lui, on ne sait pas combien de ${codeOf(deviseCaisseEnc)} entrent en caisse.`}
                     </p>
                   )}
                   {coursDuJour?.perime && (

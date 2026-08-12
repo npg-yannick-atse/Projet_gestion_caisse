@@ -75,19 +75,42 @@ export class EncaissementService {
    */
   private async figerConversion(
     tauxSaisi: string | undefined,
-    deviseId: string,
+    deviseRecue: string,
     montant: string,
+    caisse: Caisse,
+    manager: EntityManager,
   ): Promise<{
+    /** Devise et montant réellement CRÉDITÉS en caisse. */
+    deviseCreditee: string;
+    montantCredite: string;
     tauxApplique?: string;
     contreValeur?: string;
     deviseContreValeurId?: string;
   }> {
-    if (tauxSaisi === undefined || tauxSaisi === '') return {};
+    const memeDevise = String(deviseRecue) === String(caisse.deviseId);
 
-    const reference = await this.tauxChange.deviseReference();
-    if (String(deviseId) === String(reference.id)) {
+    if (memeDevise) {
+      if (tauxSaisi) {
+        const d = await manager.getRepository(Devise).findOne({ where: { id: deviseRecue as any } });
+        throw new BadRequestException(
+          `Un taux n'a pas de sens ici : l'argent est déjà en ${d?.code ?? 'cette devise'}.`,
+        );
+      }
+      return { deviseCreditee: String(caisse.deviseId), montantCredite: montant };
+    }
+
+    // DÉCISION MÉTIER (12/08/2026) : les devises étrangères sont converties AU
+    // GUICHET. Le coffre ne conserve donc pas d'euros — il reçoit leur
+    // contre-valeur dans SA devise. Sans taux, on ne saurait pas quoi créditer :
+    // il devient obligatoire dès que les devises diffèrent.
+    const [recue, cible] = await Promise.all([
+      manager.getRepository(Devise).findOne({ where: { id: deviseRecue as any } }),
+      manager.getRepository(Devise).findOne({ where: { id: caisse.deviseId as any } }),
+    ]);
+    if (!tauxSaisi) {
       throw new BadRequestException(
-        `Un taux de change n'a pas de sens ici : l'encaissement est déjà en ${reference.code}.`,
+        `Indiquez le taux appliqué pour convertir les ${recue?.code ?? 'devises reçues'} ` +
+          `en ${cible?.code ?? 'devise de la caisse'}.`,
       );
     }
 
@@ -96,10 +119,23 @@ export class EncaissementService {
       throw new BadRequestException('Le taux appliqué doit être un nombre supérieur à zéro.');
     }
 
+    // L'arrondi est FIGÉ aux décimales de la devise créditée : recalculé plus
+    // tard, il donnerait un écart et plus personne ne saurait lequel fait foi.
+    const credite = (parseFloat(montant) * taux).toFixed(cible?.nbDecimales ?? 4);
+    if (!(parseFloat(credite) > 0)) {
+      throw new BadRequestException(
+        `La conversion donne ${credite} ${cible?.code ?? ''} : vérifiez le montant et le taux.`,
+      );
+    }
+
     return {
+      deviseCreditee: String(caisse.deviseId),
+      montantCredite: credite,
       tauxApplique: tauxSaisi,
-      contreValeur: (parseFloat(montant) * taux).toFixed(reference.nbDecimales),
-      deviseContreValeurId: String(reference.id),
+      // La contre-valeur EST ce qui est entré en caisse. Elle n'est plus une
+      // information parallèle : c'est le montant de l'écriture.
+      contreValeur: credite,
+      deviseContreValeurId: String(caisse.deviseId),
     };
   }
 
@@ -134,15 +170,24 @@ export class EncaissementService {
       // elle peut en détenir d'autres : un client qui paie en dollars ne doit
       // pas être enregistré en francs sous prétexte que la caisse est en XOF.
       // La devise de la caisse ne sert donc que de valeur par défaut.
-      const deviseId = await this.resolveDevise(input.deviseId, caisse, manager);
-      const conversion = await this.figerConversion(input.tauxApplique, deviseId, input.montant);
+      const deviseRecue = await this.resolveDevise(input.deviseId, caisse, manager);
+      const { deviseCreditee, montantCredite, ...conversion } = await this.figerConversion(
+        input.tauxApplique,
+        deviseRecue,
+        input.montant,
+        caisse,
+        manager,
+      );
 
+      // L'opération garde ce que le CLIENT A REMIS (montant + devise reçue) ;
+      // la conversion dit ce qui est entré en caisse. Les deux sont des faits,
+      // et aucun ne se déduit de l'autre une fois le taux du jour périmé.
       const operation = await this.ledgerService.createOperation(
         {
           typeOperation: 'ENCAISSEMENT',
           caisseId: caisse.id,
           montant: input.montant,
-          deviseId,
+          deviseId: deviseRecue,
           userId: input.userId,
           reference: input.reference,
           clientNom: input.clientNom,
@@ -154,14 +199,16 @@ export class EncaissementService {
       );
 
       // Partie double : DÉBIT recette / CRÉDIT caisse (la caisse monte).
-      // La contrepartie RECETTE est rattachée à la caisse (compteId = caisse) pour
+      // Les écritures portent le montant CRÉDITÉ, dans la devise de la caisse :
+      // les devises étrangères sont converties au guichet, le coffre n'en
+      // conserve pas. La contrepartie RECETTE est rattachée à la caisse pour
       // rester traçable et regroupable par caisse.
-      const recetteAcc = { compteId: caisse.id, typeCompte: 'RECETTE' as const, deviseId };
-      const caisseAcc = { compteId: caisse.id, typeCompte: 'CAISSE' as const, deviseId };
+      const recetteAcc = { compteId: caisse.id, typeCompte: 'RECETTE' as const, deviseId: deviseCreditee };
+      const caisseAcc = { compteId: caisse.id, typeCompte: 'CAISSE' as const, deviseId: deviseCreditee };
       const ecritures = await this.ledgerService.createPairedEcritures(
         recetteAcc,
         caisseAcc,
-        input.montant,
+        montantCredite,
         operation.transactionUuid,
         manager,
       );
