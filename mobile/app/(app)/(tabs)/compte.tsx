@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { getExpoPushToken } from '@/lib/push';
@@ -11,6 +12,7 @@ import { useAssignedRoles } from '@/api/users';
 export default function CompteScreen() {
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+  const router = useRouter();
   const queryClient = useQueryClient();
   // Rôles ATTRIBUÉS, et non effectifs : ces derniers sont dépliés côté serveur
   // et feraient apparaître un DAF comme « Administrateur » et « Caissier ».
@@ -62,6 +64,17 @@ export default function CompteScreen() {
           <Text style={styles.sansRole}>Aucun rôle attribué — contactez un administrateur.</Text>
         )}
       </View>
+
+      {/* Accès aux portefeuilles : le mobile ne montrait nulle part où en était
+          l'argent, on créait des bons sans voir ce qui restait pour les payer. */}
+      <Pressable style={styles.action} onPress={() => router.push('/portefeuilles')}>
+        <Ionicons name="wallet-outline" size={18} color="#0F4C81" />
+        <View style={styles.actionTexte}>
+          <Text style={styles.actionTitre}>Mes portefeuilles</Text>
+          <Text style={styles.actionSous}>Soldes et mouvements</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+      </Pressable>
 
       <View style={styles.infoCard}>
         <InfoRow icon="id-card-outline" label="Matricule" value={user?.matricule ?? '—'} />
@@ -132,6 +145,21 @@ const styles = StyleSheet.create({
   },
   roleText: { color: '#0C447C', fontSize: 12, fontWeight: '700' },
   sansRole: { color: '#B45309', fontSize: 12, marginTop: 10, textAlign: 'center' },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(15,76,129,0.1)',
+  },
+  actionTexte: { flex: 1 },
+  actionTitre: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  actionSous: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
   infoCard: {
     backgroundColor: '#fff',
     borderRadius: 16,

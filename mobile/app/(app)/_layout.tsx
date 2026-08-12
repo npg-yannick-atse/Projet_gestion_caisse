@@ -23,6 +23,9 @@ export default function AppLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         {/* Détail d'un bon : poussé au-dessus des onglets (titre dynamique dans l'écran) */}
         <Stack.Screen name="bons/[id]" options={{ title: 'Bon' }} />
+        {/* Portefeuilles : ouverts depuis l'onglet Compte */}
+        <Stack.Screen name="portefeuilles/index" options={{ title: 'Mes portefeuilles' }} />
+        <Stack.Screen name="portefeuilles/[id]" options={{ title: 'Portefeuille' }} />
       </Stack>
       <Toaster />
     </View>

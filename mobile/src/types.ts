@@ -181,3 +181,36 @@ export interface CreateBonPayload {
   dateProchaineEcheance?: string;
   porteur?: string;
 }
+
+/** Solde d'un portefeuille, recalculé par le serveur depuis les écritures. */
+export interface SoldePortefeuille {
+  portefeuilleId: string;
+  typeCompte: string;
+  solde: string;
+  /** Budget alloué au départ — dénominateur du taux d'utilisation. */
+  soldeInitial?: string;
+  /** Plafond mensuel, s'il en existe un. */
+  budgetMensuel?: string | null;
+}
+
+export type TypeOperation =
+  | 'ENCAISSEMENT'
+  | 'DECAISSEMENT'
+  | 'RECHARGE'
+  | 'TRANSFERT'
+  | 'REMBOURSEMENT'
+  | 'CREDIT';
+
+/** Une ligne du grand livre, telle que l'expose /ledger/operations. */
+export interface Operation {
+  id: string;
+  transactionUuid: string;
+  typeOperation: TypeOperation | string;
+  caisseId?: string | null;
+  portefeuilleId?: string | null;
+  montant: string;
+  deviseId: string;
+  dateOperation: string;
+  reference?: string | null;
+  clientNom?: string | null;
+}
