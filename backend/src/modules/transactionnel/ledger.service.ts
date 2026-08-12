@@ -607,6 +607,20 @@ export class LedgerService {
   }
 
   /**
+   * Date à partir de laquelle le hash est REPRODUCTIBLE depuis les champs
+   * stockés (commit `7bf01c1`, 27/07/2026).
+   *
+   * Avant, `hashEcriture` hachait `new Date().toISOString()` — un horodatage
+   * DIFFÉRENT de celui enregistré. Ces écritures ne peuvent donc pas être
+   * recalculées : elles ne sont pas falsifiées, elles sont INVÉRIFIABLES.
+   *
+   * Les compter comme des falsifications donnait « 65 sur 137 » et un écran
+   * d'intégrité rouge en permanence — qu'on finit par ne plus regarder, ce qui
+   * ruine l'intérêt même du contrôle.
+   */
+  private static readonly HASH_REPRODUCTIBLE_DEPUIS = new Date('2026-07-27T00:00:00.000Z');
+
+  /**
    * Vérifie la CHAÎNE D'INTÉGRITÉ des écritures : pour chaque écriture (triée par
    * transaction puis id), (a) recalcule le hash depuis les champs stockés et le
    * compare à hash_integrite, et (b) contrôle que hash_precedent chaîne bien
@@ -618,7 +632,11 @@ export class LedgerService {
   ): Promise<{
     ok: boolean;
     total: number;
+    /** Écritures dont le hash PEUT être recalculé (postérieures au correctif). */
+    verifiees: number;
     invalides: Array<{ id: string; transactionUuid: string; raison: string }>;
+    /** Antérieures au correctif : non reproductibles, donc ni valides ni fausses. */
+    nonVerifiables: Array<{ id: string; transactionUuid: string }>;
   }> {
     const qb = this.ecritureRepo
       .createQueryBuilder('e')
@@ -628,6 +646,7 @@ export class LedgerService {
     const rows = await qb.getMany();
 
     const invalides: Array<{ id: string; transactionUuid: string; raison: string }> = [];
+    const nonVerifiables: Array<{ id: string; transactionUuid: string }> = [];
     const lastHashByTx = new Map<string, string | null>();
 
     for (const e of rows) {
@@ -649,12 +668,24 @@ export class LedgerService {
         e.hashPrecedent ?? null,
       );
       if (attendu !== e.hashIntegrite) {
-        invalides.push({ id: String(e.id), transactionUuid: e.transactionUuid, raison: 'hash falsifié' });
+        // Antérieure au correctif : le hash n'est pas reproductible, et ce n'est
+        // pas une falsification. On ne l'accuse pas de ce qu'elle n'a pas fait.
+        if (new Date(e.dateEcriture).getTime() < LedgerService.HASH_REPRODUCTIBLE_DEPUIS.getTime()) {
+          nonVerifiables.push({ id: String(e.id), transactionUuid: e.transactionUuid });
+        } else {
+          invalides.push({ id: String(e.id), transactionUuid: e.transactionUuid, raison: 'hash falsifié' });
+        }
       }
       lastHashByTx.set(e.transactionUuid, e.hashIntegrite);
     }
 
-    return { ok: invalides.length === 0, total: rows.length, invalides };
+    return {
+      ok: invalides.length === 0,
+      total: rows.length,
+      verifiees: rows.length - nonVerifiables.length,
+      invalides,
+      nonVerifiables,
+    };
   }
 
   /**

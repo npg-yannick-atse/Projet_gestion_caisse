@@ -18,11 +18,20 @@ async function main(): Promise<void> {
 
   const res = await ledger.verifyEcrituresChain();
 
-  console.log(`\nÉcritures contrôlées : ${res.total}`);
+  console.log(`\nÉcritures au total   : ${res.total}`);
+  console.log(`Réellement vérifiées : ${res.verifiees}`);
   console.log(`Chaîne d'intégrité   : ${res.ok ? 'INTACTE' : 'ROMPUE'}`);
 
+  if (res.nonVerifiables.length > 0) {
+    console.log(
+      `\n${res.nonVerifiables.length} écriture(s) NON VÉRIFIABLES — antérieures au 27/07/2026,\n` +
+        `  quand le hash était calculé sur un horodatage qui n'était pas enregistré.\n` +
+        `  Elles ne sont pas falsifiées : elles ne peuvent simplement pas être recalculées.`,
+    );
+  }
+
   if (!res.ok) {
-    console.log(`\n${res.invalides.length} écriture(s) en défaut :`);
+    console.log(`\n${res.invalides.length} écriture(s) EN DÉFAUT :`);
     console.table(res.invalides.slice(0, 20));
   }
 
