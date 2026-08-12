@@ -5,6 +5,21 @@ import { DataSource } from 'typeorm';
 import { AuditService } from './audit.service';
 
 const AUDITED_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
+
+/**
+ * Ressources JAMAIS journalisées, si mutantes soient-elles.
+ *
+ * Critère : l'appel ne relate aucune décision de l'utilisateur sur des données
+ * métier. Il est technique, répétitif, et il a déjà sa destination propre.
+ *
+ * `telemetry` en est l'exemple : le frontend envoie ses clics et ses
+ * navigations toutes les quelques secondes, et le contrôleur les écrit déjà
+ * dans les fichiers `ui-AAAA-MM-JJ.jsonl`. Journalisées EN PLUS dans l'audit,
+ * elles y représentaient 2 989 lignes sur 3 789 — 79 % — et noyaient les vraies
+ * actions : 22 bons créés, 15 encaissements. Un journal qu'on ne peut plus lire
+ * ne protège plus rien.
+ */
+const RESSOURCES_NON_AUDITEES = new Set(['telemetry']);
 const VERB_BY_METHOD: Record<string, string> = {
   POST: 'CREER',
   PATCH: 'MODIFIER',
@@ -53,6 +68,11 @@ export class AuditInterceptor implements NestInterceptor {
     const clean = path.replace(/^\/api\/v\d+/i, '').replace(/^\/+/, '');
     const segments = clean.split('/').filter(Boolean);
     const resource = segments[0] ?? '—';
+
+    if (RESSOURCES_NON_AUDITEES.has(resource)) {
+      return next.handle();
+    }
+
     const numericIds = segments.filter((s) => /^\d+$/.test(s));
     const subSegments = segments.slice(1).filter((s) => !/^\d+$/.test(s));
     const action = subSegments.length > 0 ? subSegments.join('/') : VERB_BY_METHOD[method] ?? method;
