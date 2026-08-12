@@ -85,12 +85,45 @@ export function useDemandesRecharge(
   });
 }
 
+export interface DemandesRechargeStats {
+  total: number;
+  parStatut: Record<string, number>;
+}
+
+export async function getDemandesRechargeStats(
+  filters: Pick<DemandesRechargeFilters, 'search' | 'dateFrom' | 'dateTo'> = {},
+): Promise<DemandesRechargeStats> {
+  const params: Record<string, string> = {};
+  if (filters.search) params.search = filters.search;
+  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+  if (filters.dateTo) params.dateTo = filters.dateTo;
+  const { data } = await api.get<DemandesRechargeStats>('/demandes-recharge/stats', { params });
+  return data;
+}
+
+/**
+ * Compteurs des onglets : calculés en base sur la recherche et les dates
+ * courantes, mais SANS le filtre de statut — sinon l'onglet sélectionné
+ * écraserait les compteurs des autres à zéro.
+ */
+export function useDemandesRechargeStats(
+  filters: Pick<DemandesRechargeFilters, 'search' | 'dateFrom' | 'dateTo'> = {},
+) {
+  return useQuery({
+    queryKey: ['demandes-recharge-stats', filters],
+    queryFn: () => getDemandesRechargeStats(filters),
+  });
+}
+
 function useDemandeRechargeMutation<TVars>(fn: (vars: TVars) => Promise<unknown>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
+      // Liste ET compteurs sont deux requêtes distinctes : les invalider toutes
+      // les deux, sinon les onglets restent sur d'anciens totaux.
       qc.invalidateQueries({ queryKey: ['demandes-recharge'] });
+      qc.invalidateQueries({ queryKey: ['demandes-recharge-stats'] });
       // La recharge modifie aussi opérations et soldes.
       qc.invalidateQueries({ queryKey: ['operations'] });
       qc.invalidateQueries({ queryKey: ['portefeuille'] });

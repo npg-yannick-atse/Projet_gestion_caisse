@@ -165,6 +165,58 @@ export class DemandesRechargeService {
     return qb.getMany();
   }
 
+  /**
+   * Compteurs par statut, calculés par GROUP BY en base.
+   *
+   * Reprend TOUS les filtres de `findAll` SAUF le statut : sans cette
+   * exception, sélectionner un onglet remettrait tous les autres à zéro — le
+   * défaut corrigé sur les demandes de transfert le 31/07/2026.
+   *
+   * `demandeurId` en revanche est bien repris : un demandeur ne doit pas voir
+   * dans les compteurs des demandes qui ne lui appartiennent pas.
+   */
+  async statsParStatut(
+    opts: {
+      demandeurId?: string;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    } = {},
+  ): Promise<{ total: number; parStatut: Record<string, number> }> {
+    const qb = this.repo
+      .createQueryBuilder('dr')
+      .select('dr.statut', 'statut')
+      .addSelect('COUNT(*)', 'n')
+      .where('dr.deleted_at IS NULL');
+
+    if (opts.demandeurId) qb.andWhere('dr.demandeur_id = :did', { did: opts.demandeurId });
+    if (opts.dateFrom) qb.andWhere('dr.created_at >= :df', { df: `${opts.dateFrom}T00:00:00.000` });
+    if (opts.dateTo) qb.andWhere('dr.created_at <= :dt', { dt: `${opts.dateTo}T23:59:59.997` });
+    if (opts.search) {
+      qb.leftJoin('sec_user', 'u', 'u.id = dr.demandeur_id')
+        .leftJoin('fin_portefeuille', 'p', 'p.id = dr.portefeuille_id')
+        .andWhere(
+          "(dr.numero LIKE :q OR dr.motif LIKE :q OR CAST(dr.montant AS nvarchar(50)) LIKE :q " +
+            "OR (u.prenom + ' ' + u.nom) LIKE :q OR (u.nom + ' ' + u.prenom) LIKE :q " +
+            "OR p.code LIKE :q OR p.libelle LIKE :q)",
+          { q: `%${opts.search}%` },
+        );
+    }
+
+    const rows: Array<{ statut: string; n: string | number }> = await qb
+      .groupBy('dr.statut')
+      .getRawMany();
+
+    const parStatut: Record<string, number> = {};
+    let total = 0;
+    for (const r of rows) {
+      const n = Number(r.n);
+      parStatut[r.statut] = n;
+      total += n;
+    }
+    return { total, parStatut };
+  }
+
   /** Le caissier traite la demande = effectue la recharge réelle (caisse source → portefeuille). */
   async traiter(id: string, caissierId: string, montantAjuste?: string): Promise<DemandeRecharge> {
     await this.authz.assertPermission(

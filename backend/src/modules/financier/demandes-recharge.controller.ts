@@ -59,6 +59,29 @@ export class DemandesRechargeController {
     });
   }
 
+  @Get('stats')
+  @ApiOperation({
+    summary: 'Compteurs par statut (GROUP BY en base), SANS le filtre de statut',
+    description:
+      "Le filtre de statut est délibérément absent : l'appliquer mettrait à zéro " +
+      "les compteurs de tous les onglets sauf celui qui est sélectionné.",
+  })
+  async stats(
+    @CurrentUser() user: JwtPayload,
+    @Query('search') search?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const codes = await this.authz.getUserRoleCodes(user.sub);
+    const peutToutVoir = this.authz.isAdminCodes(codes) || codes.has('CAISSIER');
+    return this.service.statsParStatut({
+      demandeurId: peutToutVoir ? undefined : user.sub,
+      search,
+      dateFrom,
+      dateTo,
+    });
+  }
+
   @Get('mes-portefeuilles')
   @ApiOperation({ summary: 'Lister les portefeuilles que je peux recharger (pour le choix de cible)' })
   mesPortefeuilles(@CurrentUser() user: JwtPayload) {

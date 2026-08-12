@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Banknote, CalendarRange, Check, Clock, Plus, Search, Wallet, X } from 'lucide-react';
+import { Banknote, CalendarRange, Check, Clock, Filter, Plus, Search, Wallet, X } from 'lucide-react';
 import {
   useDemandesRecharge,
+  useDemandesRechargeStats,
   useCreateDemandeRecharge,
   useMesPortefeuillesRechargeables,
   useTraiterDemandeRecharge,
@@ -27,6 +28,15 @@ type DrSortCol = (typeof DR_SORT_COLUMNS)[number];
 const inputClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
+
+/** Onglets de statut. `ALL` d'abord : c'est la vue d'ensemble par défaut. */
+const FILTRES: { key: 'ALL' | DemandeRechargeStatut; label: string }[] = [
+  { key: 'ALL', label: 'Toutes' },
+  { key: 'EN_ATTENTE', label: 'En attente' },
+  { key: 'TRAITEE', label: 'Traitées' },
+  { key: 'REJETEE', label: 'Rejetées' },
+  { key: 'ANNULEE', label: 'Annulées' },
+];
 
 const STATUT_BADGE: Record<DemandeRechargeStatut, { label: string; cls: string }> = {
   EN_ATTENTE: { label: 'En attente', cls: 'bg-[#FFFBEB] text-[#92400E]' },
@@ -355,14 +365,32 @@ function DemandesRechargePageInner() {
    */
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  // Recherche, bornes de dates et tri sont tous exécutés EN BASE.
+  const [statutFilter, setStatutFilter] = useState<'ALL' | DemandeRechargeStatut>('ALL');
+
+  // Statut, recherche, bornes de dates et tri sont tous exécutés EN BASE.
   const { data: demandes, isLoading } = useDemandesRecharge({
+    statut: statutFilter === 'ALL' ? undefined : statutFilter,
     search: debouncedSearch || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
   });
+
+  // Compteurs des onglets : GROUP BY en base, SANS le filtre de statut — sinon
+  // sélectionner un onglet remettrait tous les autres compteurs à zéro.
+  const { data: stats } = useDemandesRechargeStats({
+    search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  });
+  const counts: Record<'ALL' | DemandeRechargeStatut, number> = {
+    ALL: stats?.total ?? 0,
+    EN_ATTENTE: stats?.parStatut.EN_ATTENTE ?? 0,
+    TRAITEE: stats?.parStatut.TRAITEE ?? 0,
+    REJETEE: stats?.parStatut.REJETEE ?? 0,
+    ANNULEE: stats?.parStatut.ANNULEE ?? 0,
+  };
   const { data: portefeuilles } = usePortefeuilles();
   const ptfById = useMemo(() => new Map((portefeuilles ?? []).map((p) => [p.id, p])), [portefeuilles]);
   const { data: users } = useUsers();
@@ -378,11 +406,12 @@ function DemandesRechargePageInner() {
   const [showRequest, setShowRequest] = useState(false);
 
   const filtered = demandes ?? [];
-  const isDefaultView = !search && !dateFrom && !dateTo;
+  const isDefaultView = !search && !dateFrom && !dateTo && statutFilter === 'ALL';
   const resetFilters = () => {
     setSearch('');
     setDateFrom('');
     setDateTo('');
+    setStatutFilter('ALL');
   };
 
   const actionError =
@@ -402,6 +431,26 @@ function DemandesRechargePageInner() {
             </button>
           )}
         </PanelHeader>
+
+        {/* Onglets de statut. Les compteurs viennent de la base et ignorent le
+            statut sélectionné, pour que les autres onglets restent lisibles. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
+          <Filter className="h-3.5 w-3.5 text-[#64748B]" />
+          {FILTRES.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setStatutFilter(f.key)}
+              className={
+                statutFilter === f.key
+                  ? 'rounded-[7px] border border-[#0F4C81] bg-[#0F4C81] px-2.5 py-1 text-[10px] font-medium text-white'
+                  : 'rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white px-2.5 py-1 text-[10px] font-medium text-[#475569] hover:bg-[#F8FAFC]'
+              }
+            >
+              {f.label} <span className="opacity-60">({counts[f.key]})</span>
+            </button>
+          ))}
+        </div>
 
         {/* Recherche + filtre par dates */}
         <div className="flex flex-wrap items-center gap-2 border-b border-[rgba(15,76,129,0.07)] px-[18px] py-3">
