@@ -96,6 +96,21 @@ function CartePortefeuille({
         <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
       </View>
 
+      {/* À QUI il appartient. Sans cette ligne, découvrir deux portefeuilles
+          dans sa liste sans savoir pourquoi laisse penser à une erreur de
+          périmètre — alors qu'ils viennent simplement de sa direction. */}
+      <View style={styles.appartenance}>
+        <Ionicons
+          name={portefeuille.proprietaireType === 'DIRECTION' ? 'business-outline' : 'person-outline'}
+          size={12}
+          color="#0C447C"
+        />
+        <Text style={styles.appartenanceTexte} numberOfLines={1}>
+          {portefeuille.proprietaireLibelle ??
+            (portefeuille.proprietaireType === 'DIRECTION' ? 'Direction' : 'Personnel')}
+        </Text>
+      </View>
+
       {isLoading ? (
         <ActivityIndicator color="#0F4C81" style={styles.chargement} />
       ) : (
@@ -139,6 +154,18 @@ const styles = StyleSheet.create({
   carteTitre: { flex: 1 },
   libelle: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
   code: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  appartenance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 8,
+  },
+  appartenanceTexte: { fontSize: 11, fontWeight: '700', color: '#0C447C' },
   chargement: { marginTop: 12, alignSelf: 'flex-start' },
   ligneSolde: {
     flexDirection: 'row',

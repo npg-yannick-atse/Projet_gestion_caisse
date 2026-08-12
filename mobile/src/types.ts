@@ -81,6 +81,9 @@ export interface Portefeuille {
   deviseId: string;
   proprietaireType: ProprietaireType;
   proprietaireId: string;
+  /** Nom du propriétaire résolu par le serveur : « Direction Usine », « Ange Madou »… */
+  proprietaireLibelle?: string | null;
+  gestionnaireId?: string | null;
 }
 
 export interface Caisse {

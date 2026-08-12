@@ -35,6 +35,14 @@ export class Portefeuille extends AuditableEntity {
   @Column({ name: 'proprietaire_id', type: 'bigint' })
   proprietaireId!: string;
 
+  /**
+   * Nom du propriétaire, résolu par le serveur : « Direction Usine » ou
+   * « Ange Madou » selon le type. NON PERSISTÉ — le lien est polymorphe,
+   * aucune jointure ne couvre les deux tables à la fois.
+   */
+  @ApiProperty({ required: false, description: 'Nom du propriétaire (utilisateur ou direction)' })
+  proprietaireLibelle?: string | null;
+
   @ApiProperty({ required: false, description: 'Utilisateur qui pilote ce portefeuille (gestionnaire)' })
   @Column({ name: 'gestionnaire_id', type: 'bigint', nullable: true })
   gestionnaireId?: string | null;

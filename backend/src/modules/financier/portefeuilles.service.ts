@@ -152,31 +152,78 @@ export class PortefeuillesService {
     return this.portefeuilleRepo.save(pf);
   }
 
-  findAll(caisseId?: string, includeInactive = true): Promise<Portefeuille[]> {
+  async findAll(caisseId?: string, includeInactive = true): Promise<Portefeuille[]> {
     // Par défaut on retourne aussi les portefeuilles désactivés pour permettre
     // la réactivation depuis l'UI. La sélection "uniquement actifs" est filtrée côté front.
-    return this.portefeuilleRepo.find({
+    const liste = await this.portefeuilleRepo.find({
       where: {
         ...(includeInactive ? {} : { estActif: true }),
         ...(caisseId ? { caisseSourceId: caisseId } : {}),
       },
       order: { libelle: 'ASC' },
     });
+    return this.nommerProprietaires(liste);
+  }
+
+  /**
+   * Nomme le propriétaire de chaque portefeuille.
+   *
+   * `proprietaire_type` + `proprietaire_id` forment un lien POLYMORPHE : selon
+   * le type, l'identifiant désigne un utilisateur ou une direction. Aucune
+   * jointure ne couvre les deux, et l'écran ne peut pas deviner qu'un « 2 »
+   * signifie « Direction Usine ».
+   *
+   * C'est ce qui manquait pour comprendre POURQUOI l'on voit un portefeuille :
+   * un validateur qui en découvre deux dans sa liste doit pouvoir lire qu'ils
+   * appartiennent à sa direction, et non chercher l'explication ailleurs.
+   *
+   * Résolution PAR LOT : une requête par table pour toute la liste, quel qu'en
+   * soit le nombre.
+   */
+  private async nommerProprietaires(liste: Portefeuille[]): Promise<Portefeuille[]> {
+    if (liste.length === 0) return liste;
+
+    const idsUser = [...new Set(liste.filter((p) => p.proprietaireType === 'USER').map((p) => String(p.proprietaireId)))];
+    const idsDir = [...new Set(liste.filter((p) => p.proprietaireType === 'DIRECTION').map((p) => String(p.proprietaireId)))];
+
+    const noms = new Map<string, string>();
+    const charger = async (table: string, ids: string[], expression: string, prefixe: string) => {
+      if (ids.length === 0) return;
+      try {
+        const rows: Array<{ id: string | number; label: string | null }> = await this.portefeuilleRepo.manager.query(
+          `SELECT id, ${expression} AS label FROM dbo.${table} WHERE id IN (${ids.map((i) => Number(i)).join(',')})`,
+        );
+        for (const r of rows) if (r.label) noms.set(`${prefixe}#${r.id}`, String(r.label).trim());
+      } catch {
+        // Un libellé manquant ne doit pas priver l'écran de sa liste.
+      }
+    };
+
+    // Un compte supprimé garde son nom : le portefeuille, lui, existe toujours.
+    await charger('sec_user', idsUser, "prenom + ' ' + nom", 'USER');
+    await charger('sec_direction', idsDir, 'libelle', 'DIRECTION');
+
+    for (const p of liste) {
+      const cle = `${p.proprietaireType}#${String(p.proprietaireId)}`;
+      p.proprietaireLibelle = noms.get(cle) ?? null;
+    }
+    return liste;
   }
 
   /**
    * Liste restreinte à un ensemble d'ids (périmètre de l'utilisateur).
    * Ensemble vide → liste vide (l'utilisateur ne voit aucun portefeuille).
    */
-  findByIds(ids: string[], caisseId?: string): Promise<Portefeuille[]> {
-    if (ids.length === 0) return Promise.resolve([]);
-    return this.portefeuilleRepo.find({
+  async findByIds(ids: string[], caisseId?: string): Promise<Portefeuille[]> {
+    if (ids.length === 0) return [];
+    const liste = await this.portefeuilleRepo.find({
       where: {
         id: In(ids) as any,
         ...(caisseId ? { caisseSourceId: caisseId } : {}),
       },
       order: { libelle: 'ASC' },
     });
+    return this.nommerProprietaires(liste);
   }
 
   async findOne(id: string): Promise<Portefeuille> {
