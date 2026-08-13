@@ -13,15 +13,11 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
+import { DateTimePicker } from '@/components/DateTimePicker';
 
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const inputClass = selectClass;
-// Date + heure sur une même ligne. On REMPLACE `w-full` au lieu d'empiler une
-// seconde largeur : deux classes concurrentes se départagent par l'ordre de la
-// feuille Tailwind, et `w-full` l'emporte — l'heure débordait du cadre.
-const jourClass = inputClass.replace('w-full', 'min-w-0 flex-1');
-const heureClass = selectClass.replace('w-full', 'w-[6.5rem] shrink-0');
 
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
@@ -64,57 +60,22 @@ function CreateInterimForm({
    */
   const [copieTout, setCopieTout] = useState(false);
   /**
-   * Date d'un côté, heure de l'autre — et l'heure est une LISTE, pas un champ.
-   *
-   * Le calendrier de `datetime-local` ne propose que la date : Chrome n'y met
-   * aucun sélecteur d'heure, il faut cliquer les chiffres et taper. Une liste
-   * déroulante rend l'heure réellement choisissable, ce qu'aucun réglage du
-   * champ natif ne permet.
-   *
-   * Pas de secondes : un intérim ne se règle pas à la seconde près.
+   * Bornes de l'intérim, choisies dans un sélecteur maison : calendrier pour la
+   * date, deux colonnes pour l'heure et la minute. Le champ natif n'ouvre qu'un
+   * calendrier — l'heure y était inaccessible autrement qu'au clavier.
    */
-  const isoJour = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const isoHeure = (d: Date) =>
-    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const pourChamp = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` +
+    `T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
-  /** Toutes les demi-heures de la journée : 48 choix, assez fin sans être illisible. */
-  const HEURES = useMemo(() => {
-    const liste: string[] = [];
-    for (let h = 0; h < 24; h++) {
-      for (const m of [0, 30]) {
-        liste.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-      }
-    }
-    return liste;
-  }, []);
-
-  /** Arrondi à la demi-heure suivante, pour tomber sur une valeur de la liste. */
-  const arrondi = (d: Date) => {
-    const copie = new Date(d);
-    copie.setSeconds(0, 0);
-    copie.setMinutes(copie.getMinutes() <= 30 ? 30 : 60);
-    return copie;
-  };
-
-  const debutParDefaut = arrondi(new Date());
-  const finParDefaut = new Date(debutParDefaut.getTime() + 86_400_000);
-
-  const [jourDebut, setJourDebut] = useState(() => isoJour(debutParDefaut));
-  const [heureDebut, setHeureDebut] = useState(() => isoHeure(debutParDefaut));
-  const [jourFin, setJourFin] = useState(() => isoJour(finParDefaut));
-  const [heureFin, setHeureFin] = useState(() => isoHeure(finParDefaut));
+  const [dateDebut, setDateDebut] = useState(() => pourChamp(new Date()));
+  const [dateFin, setDateFin] = useState(() => pourChamp(new Date(Date.now() + 86_400_000)));
   const [commentaire, setCommentaire] = useState('');
-
-  const dateDebut = jourDebut && heureDebut ? `${jourDebut}T${heureDebut}` : '';
-  const dateFin = jourFin && heureFin ? `${jourFin}T${heureFin}` : '';
 
   /** Raccourci de durée : la fin se recale sur le début + N jours. */
   const dureeDepuisDebut = (jours: number) => {
     const base = dateDebut ? new Date(dateDebut) : new Date();
-    const fin = new Date(base.getTime() + jours * 86_400_000);
-    setJourFin(isoJour(fin));
-    setHeureFin(isoHeure(fin));
+    setDateFin(pourChamp(new Date(base.getTime() + jours * 86_400_000)));
   };
 
   // Initiateur effectif : celui choisi si on en a le droit, sinon soi-même.
@@ -281,54 +242,22 @@ function CreateInterimForm({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className={labelClass} htmlFor="int-jour-debut">Début</label>
-          <div className="flex gap-2">
-            <input
-              id="int-jour-debut"
-              type="date"
-              aria-label="Jour de début"
-              className={jourClass}
-              value={jourDebut}
-              onChange={(e) => setJourDebut(e.target.value)}
-            />
-            <select
-              aria-label="Heure de début"
-              className={heureClass}
-              value={heureDebut}
-              onChange={(e) => setHeureDebut(e.target.value)}
-            >
-              {/* Une heure hors demi-heures (reprise d'un intérim existant) doit
-                  rester sélectionnée, sinon la liste la remplacerait en silence. */}
-              {!HEURES.includes(heureDebut) && <option value={heureDebut}>{heureDebut}</option>}
-              {HEURES.map((h) => (
-                <option key={h} value={h}>{h}</option>
-              ))}
-            </select>
-          </div>
+          <label className={labelClass} htmlFor="int-debut">Début</label>
+          <DateTimePicker
+            id="int-debut"
+            ariaLabel="Date et heure de début"
+            value={dateDebut}
+            onChange={setDateDebut}
+          />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className={labelClass} htmlFor="int-jour-fin">Fin</label>
-          <div className="flex gap-2">
-            <input
-              id="int-jour-fin"
-              type="date"
-              aria-label="Jour de fin"
-              className={jourClass}
-              value={jourFin}
-              onChange={(e) => setJourFin(e.target.value)}
-            />
-            <select
-              aria-label="Heure de fin"
-              className={heureClass}
-              value={heureFin}
-              onChange={(e) => setHeureFin(e.target.value)}
-            >
-              {!HEURES.includes(heureFin) && <option value={heureFin}>{heureFin}</option>}
-              {HEURES.map((h) => (
-                <option key={h} value={h}>{h}</option>
-              ))}
-            </select>
-          </div>
+          <label className={labelClass} htmlFor="int-fin">Fin</label>
+          <DateTimePicker
+            id="int-fin"
+            ariaLabel="Date et heure de fin"
+            value={dateFin}
+            onChange={setDateFin}
+          />
         </div>
 
         {/* Raccourcis : une durée usuelle se pose d'un clic, au lieu de calculer
