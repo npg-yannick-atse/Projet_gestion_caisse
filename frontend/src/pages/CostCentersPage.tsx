@@ -8,9 +8,9 @@ import {
   useCreateCostCenter,
   useUpdateCostCenter,
   useDeleteCostCenter,
-  useNaturesComptable,
-  useNaturesDeCostCenter,
-  useSetNaturesDeCostCenter,
+  useNaturesOperation,
+  useNaturesOperationDeCostCenter,
+  useSetNaturesOperationDeCostCenter,
 } from '@/api/referentiel';
 import { useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
@@ -151,18 +151,18 @@ function CostCenterForm({ costCenter, onDone }: { costCenter?: CostCenter; onDon
 
 /** Le sens inverse de la même liaison : quelles natures pour ce centre de coût. */
 function NaturesDuCentre({ centre, onFermer }: { centre: CostCenter; onFermer: () => void }) {
-  // Les 599 natures d'un coup : la modale a sa propre recherche, et un
-  // aller-retour serveur à chaque frappe serait plus coûteux que le chargement.
-  const { data: toutes } = useNaturesComptable({ limit: 1000 });
-  const { data: liees } = useNaturesDeCostCenter(centre.id);
-  const enregistrer = useSetNaturesDeCostCenter(centre.id);
+  // Toutes les natures d'un coup : la modale a sa propre recherche, et un
+  // aller-retour serveur à chaque frappe coûterait plus que le chargement.
+  const { data: toutes } = useNaturesOperation({ limit: 1000 });
+  const { data: liees } = useNaturesOperationDeCostCenter(centre.id);
+  const enregistrer = useSetNaturesOperationDeCostCenter(centre.id);
 
   return (
     <LiaisonModal
       titre={`Natures comptables — ${centre.code}`}
-      sousTitre="Un centre de coût emploie plusieurs natures. La même liaison se retrouve depuis l’écran Plan comptable."
-      elements={toutes?.map((n) => ({ id: n.id, code: n.codeComptableSap, libelle: n.libelle }))}
-      dejaLies={liees?.map((n) => ({ id: n.id, code: n.codeComptableSap, libelle: n.libelle }))}
+      sousTitre="Un centre de coût emploie plusieurs natures. On retrouve la même liaison depuis l’écran Natures comptables."
+      elements={toutes?.map((n) => ({ id: n.id, code: n.code, libelle: n.libelle }))}
+      dejaLies={liees?.map((n) => ({ id: n.id, code: n.code, libelle: n.libelle }))}
       enCours={enregistrer.isPending}
       erreur={enregistrer.isError ? enregistrer.error : undefined}
       onEnregistrer={(ids) => enregistrer.mutate(ids, { onSuccess: onFermer })}

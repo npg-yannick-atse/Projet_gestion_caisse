@@ -521,6 +521,27 @@ export class ReferentielService {
      formulaire portent tous ce libellé. C'est aussi elle qui contraint le
      centre de coût d'un sous-bon. */
 
+  /**
+   * Tous les couples nature ↔ centre de coût, en UNE requête.
+   *
+   * La liste des natures affiche leurs centres rattachés : les demander ligne
+   * par ligne ferait 182 appels pour un écran. On les rapatrie d'un coup et
+   * l'écran les regroupe.
+   */
+  async liaisonsNatureOperationCostCenter(): Promise<
+    Array<{ natureOperationId: string; costCenterId: string }>
+  > {
+    const rows: Array<{ natureOperationId: string; costCenterId: string }> =
+      await this.natureOperationRepo.manager.query(
+        `SELECT l.nature_operation_id AS natureOperationId, l.cost_center_id AS costCenterId
+         FROM dbo.ref_nature_operation_cost_center l`,
+      );
+    return rows.map((r) => ({
+      natureOperationId: String(r.natureOperationId),
+      costCenterId: String(r.costCenterId),
+    }));
+  }
+
   async costCentersDeNatureOperation(natureId: string): Promise<CostCenter[]> {
     await this.findNatureOperation(natureId);
     return this.costCenterRepo

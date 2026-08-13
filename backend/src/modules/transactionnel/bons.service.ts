@@ -179,17 +179,39 @@ export class BonsService {
       const natures = await this.dataSource
         .getRepository(NatureOperation)
         .find({ where: { id: In(natureIds) as any } });
-      const ccParNature = new Map(
-        natures.filter((n) => n.costCenterId).map((n) => [String(n.id), String(n.costCenterId)]),
+      // Une nature peut désormais être rattachée à PLUSIEURS centres de coût
+      // (migration 0066) : « imposer » devient « restreindre ». Le centre du
+      // sous-bon doit figurer parmi ceux de la nature. Une nature n'en ayant
+      // qu'un seul se comporte exactement comme avant — il reste le seul choix.
+      const ph = natureIds.map((_, i) => `@${i}`).join(', ');
+      const liens: Array<{ natureId: string; costCenterId: string }> = await this.dataSource.query(
+        `SELECT nature_operation_id AS natureId, cost_center_id AS costCenterId
+         FROM dbo.ref_nature_operation_cost_center
+         WHERE nature_operation_id IN (${ph})`,
+        natureIds,
       );
+      const ccParNature = new Map<string, Set<string>>();
+      for (const l of liens) {
+        const cle = String(l.natureId);
+        if (!ccParNature.has(cle)) ccParNature.set(cle, new Set());
+        ccParNature.get(cle)!.add(String(l.costCenterId));
+      }
+
       for (let i = 0; i < input.soubons.length; i++) {
         const sb = input.soubons[i];
-        const attendu = ccParNature.get(String(sb.natureOperationId));
-        if (attendu && String(sb.costCenterId) !== attendu) {
+        const autorises = ccParNature.get(String(sb.natureOperationId));
+        // Aucune liaison = nature non rattachée : on n'impose rien, comme avant
+        // pour une nature sans centre de coût.
+        if (!autorises || autorises.size === 0) continue;
+        if (!autorises.has(String(sb.costCenterId))) {
           const nature = natures.find((n) => String(n.id) === String(sb.natureOperationId));
+          const nom = nature?.code ?? sb.natureOperationId;
           throw new BadRequestException(
-            `Sous-bon ${i + 1} : la nature « ${nature?.code ?? sb.natureOperationId} » impose son centre de coût. ` +
-              `Le centre de coût transmis ne correspond pas.`,
+            autorises.size === 1
+              ? `Sous-bon ${i + 1} : la nature « ${nom} » impose son centre de coût. ` +
+                `Le centre de coût transmis ne correspond pas.`
+              : `Sous-bon ${i + 1} : la nature « ${nom} » n'autorise que ${autorises.size} centres de coût, ` +
+                `et celui transmis n'en fait pas partie.`,
           );
         }
       }

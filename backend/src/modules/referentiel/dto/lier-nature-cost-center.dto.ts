@@ -25,3 +25,13 @@ export class LierNaturesDto {
   @IsNumberString({}, { each: true })
   natureComptableIds?: string[];
 }
+
+/** Même contrat, côté natures d'opération — celles que l'écran nomme « natures comptables ». */
+export class LierNaturesOperationDto {
+  @ApiProperty({ type: [String], description: 'Ensemble complet des natures voulues' })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsNumberString({}, { each: true })
+  natureOperationIds?: string[];
+}

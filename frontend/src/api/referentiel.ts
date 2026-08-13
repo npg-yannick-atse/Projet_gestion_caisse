@@ -226,6 +226,93 @@ export function useSetCostCentersDeNature(natureId: string) {
   });
 }
 
+/* La même liaison sur les natures d'OPÉRATION — celles que le menu et les
+   écrans nomment « natures comptables ». */
+
+export async function getCostCentersDeNatureOperation(natureId: string): Promise<CostCenter[]> {
+  const { data } = await api.get<CostCenter[]>(`/natures-operation/${natureId}/cost-centers`);
+  return data;
+}
+
+export async function setCostCentersDeNatureOperation(
+  natureId: string,
+  costCenterIds: string[],
+): Promise<CostCenter[]> {
+  const { data } = await api.put<CostCenter[]>(`/natures-operation/${natureId}/cost-centers`, { costCenterIds });
+  return data;
+}
+
+export async function getNaturesOperationDeCostCenter(costCenterId: string): Promise<NatureOperation[]> {
+  const { data } = await api.get<NatureOperation[]>(`/cost-centers/${costCenterId}/natures-operation`);
+  return data;
+}
+
+export async function setNaturesOperationDeCostCenter(
+  costCenterId: string,
+  natureOperationIds: string[],
+): Promise<NatureOperation[]> {
+  const { data } = await api.put<NatureOperation[]>(`/cost-centers/${costCenterId}/natures-operation`, {
+    natureOperationIds,
+  });
+  return data;
+}
+
+/** Tous les couples d'un coup : la liste des natures affiche leurs centres. */
+export async function listLiaisonsNatureCostCenter(): Promise<
+  Array<{ natureOperationId: string; costCenterId: string }>
+> {
+  const { data } = await api.get<Array<{ natureOperationId: string; costCenterId: string }>>(
+    '/natures-operation/liaisons-cost-centers',
+  );
+  return data;
+}
+
+export function useLiaisonsNatureCostCenter() {
+  return useQuery({
+    queryKey: ['nature-operation', 'liaisons-cost-centers'],
+    queryFn: listLiaisonsNatureCostCenter,
+  });
+}
+
+export function useCostCentersDeNatureOperation(natureId: string | null) {
+  return useQuery({
+    queryKey: ['nature-operation', natureId, 'cost-centers'],
+    queryFn: () => getCostCentersDeNatureOperation(natureId!),
+    enabled: !!natureId,
+  });
+}
+
+export function useNaturesOperationDeCostCenter(costCenterId: string | null) {
+  return useQuery({
+    queryKey: ['cost-center', costCenterId, 'natures-operation'],
+    queryFn: () => getNaturesOperationDeCostCenter(costCenterId!),
+    enabled: !!costCenterId,
+  });
+}
+
+export function useSetCostCentersDeNatureOperation(natureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setCostCentersDeNatureOperation(natureId, ids),
+    // Les deux sens lisent la même table : modifier l'un périme l'autre.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['nature-operation', natureId, 'cost-centers'] });
+      qc.invalidateQueries({ queryKey: ['cost-center'] });
+    },
+  });
+}
+
+export function useSetNaturesOperationDeCostCenter(costCenterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setNaturesOperationDeCostCenter(costCenterId, ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cost-center', costCenterId, 'natures-operation'] });
+      qc.invalidateQueries({ queryKey: ['nature-operation'] });
+    },
+  });
+}
+
 export function useSetNaturesDeCostCenter(costCenterId: string) {
   const qc = useQueryClient();
   return useMutation({

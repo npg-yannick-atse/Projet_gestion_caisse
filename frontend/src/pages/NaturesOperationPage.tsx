@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Link2, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useSyncComptesSap } from '@/api/sap';
 import {
   useNaturesOperation,
@@ -12,7 +12,13 @@ import {
   useCostCenters,
   usePlanComptable,
   useNaturesComptable,
+  useLiaisonsNatureCostCenter,
+  useCostCentersDeNatureOperation,
+  useSetCostCentersDeNatureOperation,
 } from '@/api/referentiel';
+import { useMyPermissions } from '@/api/users';
+import { useAuthStore } from '@/stores/auth.store';
+import { LiaisonModal } from '@/components/LiaisonModal';
 import { apiErrorMessage } from '@/lib/utils';
 import type { NatureOperation } from '@/types/api';
 import { Button } from '@/components/ui/button';
@@ -145,6 +151,27 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
   );
 }
 
+/** « Quels centres de coût pour cette nature ». Le sens inverse vit sur l'écran
+ *  Centres de coût, et lit la même table. */
+function CentresDeNature({ nature, onFermer }: { nature: NatureOperation; onFermer: () => void }) {
+  const { data: tous } = useCostCenters();
+  const { data: lies } = useCostCentersDeNatureOperation(nature.id);
+  const enregistrer = useSetCostCentersDeNatureOperation(nature.id);
+
+  return (
+    <LiaisonModal
+      titre={`Centres de coût — ${nature.code}`}
+      sousTitre="Une nature peut être imputée à plusieurs centres de coût. On retrouve la même liaison depuis l’écran Centres de coût."
+      elements={tous?.map((c) => ({ id: c.id, code: c.code, libelle: c.libelle }))}
+      dejaLies={lies?.map((c) => ({ id: c.id, code: c.code, libelle: c.libelle }))}
+      enCours={enregistrer.isPending}
+      erreur={enregistrer.isError ? enregistrer.error : undefined}
+      onEnregistrer={(ids) => enregistrer.mutate(ids, { onSuccess: onFermer })}
+      onFermer={onFermer}
+    />
+  );
+}
+
 function NaturesOperationPageInner() {
   const sort = useTableSort<NoSortCol>('/natures-operation', NO_SORT_COLUMNS, { by: 'libelle', dir: 'asc' });
   const [search, setSearch] = useState('');
@@ -175,6 +202,23 @@ function NaturesOperationPageInner() {
   // null = formulaire fermé ; { } = création ; un objet = édition de cette nature.
   const [form, setForm] = useState<{ editing: NatureOperation | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NatureOperation | null>(null);
+  const [liaison, setLiaison] = useState<NatureOperation | null>(null);
+
+  const user = useAuthStore((s) => s.user);
+  const { data: perms } = useMyPermissions(user?.id ?? null);
+  const peutLier = new Set(perms ?? []).has('NATURE_CC_LIER');
+
+  // Tous les couples en une requête : les demander ligne par ligne ferait
+  // autant d'appels que de natures affichées.
+  const { data: liaisons } = useLiaisonsNatureCostCenter();
+  const ccParNature = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const l of liaisons ?? []) {
+      const cle = String(l.natureOperationId);
+      m.set(cle, [...(m.get(cle) ?? []), String(l.costCenterId)]);
+    }
+    return m;
+  }, [liaisons]);
 
   // Pagination client.
   const [page, setPage] = useState(1);
@@ -189,6 +233,7 @@ function NaturesOperationPageInner() {
 
   return (
     <div className="flex flex-col gap-4">
+      {liaison && <CentresDeNature nature={liaison} onFermer={() => setLiaison(null)} />}
       {form && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center" onClick={() => setForm(null)}>
           <div className="w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
@@ -287,12 +332,22 @@ function NaturesOperationPageInner() {
                 <tr key={n.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-medium">{n.code}</td>
                   <td className="px-4 py-3">{n.libelle}</td>
+                  {/* Une nature peut être rattachée à PLUSIEURS centres de coût
+                      (migration 0066). On les nomme tant qu'ils tiennent, puis
+                      on compte : une liste de dix codes serait illisible. */}
                   <td className="px-4 py-3 text-[#64748B]">
-                    {n.costCenterId ? (
-                      <span className="text-[11px]">{ccById.get(String(n.costCenterId)) ?? '—'}</span>
-                    ) : (
-                      <span className="text-[11px] text-[#B45309]">non rattaché</span>
-                    )}
+                    {(() => {
+                      const ccs = ccParNature.get(String(n.id)) ?? [];
+                      if (ccs.length === 0)
+                        return <span className="text-[11px] text-[#B45309]">non rattaché</span>;
+                      if (ccs.length <= 2)
+                        return (
+                          <span className="text-[11px]">
+                            {ccs.map((id) => ccById.get(id) ?? id).join(' · ')}
+                          </span>
+                        );
+                      return <span className="text-[11px]">{ccs.length} centres de coût</span>;
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-[#64748B]">
                     {n.natureComptableId ? (
@@ -303,6 +358,16 @@ function NaturesOperationPageInner() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      {peutLier && (
+                        <button
+                          type="button"
+                          onClick={() => setLiaison(n)}
+                          title="Rattacher cette nature à des centres de coût"
+                          className="inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 text-[10px] font-medium text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+                        >
+                          <Link2 className="h-3 w-3" /> Centres de coût
+                        </button>
+                      )}
                       <button
                         type="button"
                         aria-label="Modifier"

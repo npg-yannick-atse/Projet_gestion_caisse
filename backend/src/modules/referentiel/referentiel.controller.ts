@@ -10,7 +10,7 @@ import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
 import { UpdateNatureOperationDto } from './dto/update-nature-operation.dto';
 import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
 import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
-import { LierCostCentersDto, LierNaturesDto } from './dto/lier-nature-cost-center.dto';
+import { LierCostCentersDto, LierNaturesDto, LierNaturesOperationDto } from './dto/lier-nature-cost-center.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '@modules/security/authorization.service';
@@ -237,6 +237,65 @@ export class ReferentielController {
       'lier un centre de coût à des natures comptables',
     );
     return this.referentiel.lierCostCenterAuxNatures(id, dto.natureComptableIds ?? [], user.sub);
+  }
+
+  /* ---- La même liaison, sur les natures d'OPÉRATION -----------------------
+     C'est ce que l'application nomme « nature comptable » : menu, écran et
+     formulaire portent ce libellé, et c'est cette table qui contraint le centre
+     de coût d'un sous-bon. */
+
+  // Déclarée AVANT la route paramétrée : « liaisons-cost-centers » serait sinon
+  // capturé comme un identifiant de nature.
+  @Get('natures-operation/liaisons-cost-centers')
+  @ApiOperation({ summary: 'Tous les couples nature ↔ centre de coût (une requête)' })
+  liaisonsNatureOperationCostCenter() {
+    return this.referentiel.liaisonsNatureOperationCostCenter();
+  }
+
+  @Get('natures-operation/:id/cost-centers')
+  @ApiOperation({ summary: 'Centres de coût liés à une nature d’opération' })
+  costCentersDeNatureOperation(@Param('id') id: string) {
+    return this.referentiel.costCentersDeNatureOperation(id);
+  }
+
+  @Put('natures-operation/:id/cost-centers')
+  @ApiOperation({ summary: 'Choisir les centres de coût d’une nature d’opération' })
+  async lierNatureOperationAuxCostCenters(
+    @Param('id') id: string,
+    @Body() dto: LierCostCentersDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'NATURE_CC_LIER',
+      'lier une nature à des centres de coût',
+    );
+    return this.referentiel.lierNatureOperationAuxCostCenters(id, dto.costCenterIds ?? [], user.sub);
+  }
+
+  @Get('cost-centers/:id/natures-operation')
+  @ApiOperation({ summary: 'Natures d’opération liées à un centre de coût' })
+  naturesOperationDeCostCenter(@Param('id') id: string) {
+    return this.referentiel.naturesOperationDeCostCenter(id);
+  }
+
+  @Put('cost-centers/:id/natures-operation')
+  @ApiOperation({ summary: 'Choisir les natures d’opération d’un centre de coût' })
+  async lierCostCenterAuxNaturesOperation(
+    @Param('id') id: string,
+    @Body() dto: LierNaturesOperationDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'NATURE_CC_LIER',
+      'lier un centre de coût à des natures',
+    );
+    return this.referentiel.lierCostCenterAuxNaturesOperation(
+      id,
+      dto.natureOperationIds ?? [],
+      user.sub,
+    );
   }
 
   @Get('plan-comptable/stats')
