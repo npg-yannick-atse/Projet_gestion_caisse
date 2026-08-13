@@ -97,7 +97,7 @@ export function RechargePage() {
           </option>
         ))}
       </select>
-      <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
+      <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} estAdmin={perimeter?.isAdmin} />
     </div>
   );
 

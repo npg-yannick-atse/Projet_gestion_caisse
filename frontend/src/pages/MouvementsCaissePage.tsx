@@ -449,7 +449,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                     </option>
                   ))}
                 </select>
-                <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
+                <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} estAdmin={perimeter?.isAdmin} />
                 {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
                     à la place du caissier, l'argent est dans un coffre précis. */}
                 {!encCaisseId && encDeviseId && caissesPourDevise(encDeviseId).length > 1 && (
@@ -664,7 +664,7 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                       </option>
                     ))}
                   </select>
-                  <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} />
+                  <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} estAdmin={perimeter?.isAdmin} />
                 </div>
               )}
 
