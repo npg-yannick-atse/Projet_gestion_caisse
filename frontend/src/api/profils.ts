@@ -55,6 +55,19 @@ export function useCreateProfil() {
   });
 }
 
+/**
+ * Crée un profil portant les permissions d'un rôle. C'est un POINT DE DÉPART,
+ * pas un lien : le profil ne suivra pas les évolutions du rôle.
+ */
+export function useGenererProfilDepuisRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, code, libelle }: { roleId: string; code: string; libelle: string }) =>
+      api.post(`/profils/generer-depuis-role/${roleId}`, { code, libelle }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profils'] }),
+  });
+}
+
 export function useUpdateProfil() {
   const qc = useQueryClient();
   return useMutation({

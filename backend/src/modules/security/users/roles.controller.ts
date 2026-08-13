@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { GenerationDto } from './dto/generation.dto';
 import { RolesService } from './roles.service';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto, AssignPermissionToRoleDto, RemovePermissionFromRoleDto } from './dto/permission.dto';
@@ -75,6 +76,17 @@ export class RolesController {
   }
 
   // Permissions
+  @Post('generer-depuis-profil/:profilId')
+  @ApiOperation({ summary: "Créer un rôle portant les permissions d'un profil" })
+  async genererDepuisProfil(
+    @Param('profilId') profilId: string,
+    @Body() dto: GenerationDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_ROLE', 'générer un rôle depuis un profil');
+    return this.rolesService.genererDepuisProfil(profilId, dto.code, dto.libelle, user.sub);
+  }
+
   @Post('permissions')
   @ApiOperation({ summary: 'Créer une permission' })
   async createPermission(@Body() dto: CreatePermissionDto, @CurrentUser() user: JwtPayload) {

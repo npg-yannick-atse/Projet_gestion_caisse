@@ -148,3 +148,6 @@ export class ProfilsService {
     if (result.affected === 0) {
       throw new NotFoundException('Association profil-permission introuvable');
     }
+    if (actorId) await this.auditPerm.logProfilPermissionChange(profilId, permissionId, 'PERTE', actorId, ip);
+  }
+}

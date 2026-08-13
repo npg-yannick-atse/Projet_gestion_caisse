@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Role } from '../entities/role.entity';
 import { Permission } from '../entities/permission.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { Profil } from '../entities/profil.entity';
+import { ProfilPermission } from '../entities/profil-permission.entity';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { CreatePermissionDto, UpdatePermissionDto } from './dto/permission.dto';
 import { AuditPermissionService } from '../audit-permission.service';
@@ -157,6 +159,47 @@ export class RolesService {
       throw new NotFoundException('Association rôle-permission introuvable');
     }
     if (actorId) await this.auditPerm.logRolePermissionChange(roleId, permissionId, 'PERTE', actorId, ip);
+  }
+
+  /**
+   * Crée un rôle portant les mêmes permissions qu'un profil.
+   *
+   * ATTENTION à ce que cela ne fait PAS. Les pouvoirs les plus lourds de
+   * l'application ne tiennent pas aux permissions mais au CODE du rôle, lu en
+   * dur : voir les bons de tout le monde, contourner les contrôles en tant
+   * qu'administrateur, modifier un bon. Un rôle créé ici porte un code inédit ;
+   * il ne déclenche donc aucune de ces règles. C'est un paquet de permissions
+   * qui a la forme d'un rôle, rien de plus.
+   *
+   * Il naît `est_systeme = false` : les sept rôles d'origine ne se fabriquent
+   * pas, et celui-ci doit rester supprimable.
+   */
+  async genererDepuisProfil(
+    profilId: string,
+    code: string,
+    libelle: string,
+    actorId: string,
+  ): Promise<Role> {
+    const profil = await this.roleRepo.manager
+      .getRepository(Profil)
+      .findOne({ where: { id: profilId as any } });
+    if (!profil) throw new NotFoundException(`Profil ${profilId} introuvable`);
+
+    const role = await this.createRole({
+      code,
+      libelle,
+      description: `Généré depuis le profil ${profil.code}`,
+      estSysteme: false,
+    } as CreateRoleDto);
+
+    const liens = await this.roleRepo.manager
+      .getRepository(ProfilPermission)
+      .find({ where: { profilId: profilId as any } });
+
+    for (const lien of liens) {
+      await this.assignPermissionToRole(String(role.id), String(lien.permissionId), actorId);
+    }
+    return role;
   }
 
   async getRolePermissions(roleId: string): Promise<Permission[]> {

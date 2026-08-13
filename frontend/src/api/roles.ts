@@ -49,3 +49,20 @@ export function useTogglePermission(roleId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['role', roleId, 'permissions'] }),
   });
 }
+
+/**
+ * Crée un rôle portant les permissions d'un profil.
+ *
+ * Le rôle obtenu porte un code INÉDIT : il ne déclenche donc aucune des règles
+ * qui lisent le code d'un rôle en dur (voir tous les bons, contourner les
+ * contrôles en administrateur, modifier un bon). C'est un paquet de permissions
+ * qui a la forme d'un rôle.
+ */
+export function useGenererRoleDepuisProfil() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ profilId, code, libelle }: { profilId: string; code: string; libelle: string }) =>
+      api.post(`/roles/generer-depuis-profil/${profilId}`, { code, libelle }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roles'] }),
+  });
+}

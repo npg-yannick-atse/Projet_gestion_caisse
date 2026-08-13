@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Banknote, Briefcase, Check, Eye, Pencil, ShieldCheck, User, X, type LucideIcon } from 'lucide-react';
+import { Copy, Banknote, Briefcase, Check, Eye, Pencil, ShieldCheck, User, X, type LucideIcon } from 'lucide-react';
 import { useRoles, usePermissions, useRolePermissions, useTogglePermission } from '@/api/roles';
 import type { Permission, Role, RoleCode } from '@/types/api';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,8 @@ import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
 import { RoleGuard } from '@/components/RoleGuard';
+import { GenererDepuisModal } from '@/components/GenererDepuisModal';
+import { useGenererProfilDepuisRole } from '@/api/profils';
 
 const ROLE_BADGE: Record<RoleCode, { cls: string; icon: LucideIcon }> = {
   SUPER_ADMIN: { cls: 'bg-[#EFF6FF] text-[#0C447C]', icon: ShieldCheck },
@@ -105,14 +107,41 @@ function PermissionEditor({ role, onClose }: { role: Role; onClose: () => void }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [permissions]);
 
+  const [genererProfil, setGenererProfil] = useState(false);
+  const generer = useGenererProfilDepuisRole();
+
   return (
+    <>
+    {genererProfil && (
+      <GenererDepuisModal
+        titre="Générer un profil depuis ce rôle"
+        sourceLibelle={role.libelle}
+        nbPermissions={assignedIds.size}
+        avertissement="Seules les permissions sont copiées. Ce qu'un rôle décide par son code — voir les bons de tous, contourner les contrôles en administrateur, modifier un bon — ne se transmet jamais à un profil."
+        pending={generer.isPending}
+        error={generer.error}
+        onValider={(code, libelle) =>
+          generer.mutate({ roleId: role.id, code, libelle }, { onSuccess: () => setGenererProfil(false) })
+        }
+        onClose={() => setGenererProfil(false)}
+      />
+    )}
     <Panel>
       <PanelHeader title={`Permissions — ${role.libelle}`} badge={`${assignedIds.size}`}>
+        {/* Repartir de ce rôle pour fabriquer un profil : même socle de
+            permissions, sans les pouvoirs que le CODE du rôle déclenche. */}
+        <button
+          type="button"
+          onClick={() => setGenererProfil(true)}
+          className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+        >
+          <Copy className="h-3.5 w-3.5" /> Générer un profil
+        </button>
         <button
           type="button"
           onClick={onClose}
           aria-label="Fermer"
-          className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-[rgba(15,76,129,0.1)] bg-white text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -131,6 +160,7 @@ function PermissionEditor({ role, onClose }: { role: Role; onClose: () => void }
         {byModule.length === 0 && <p className="text-sm text-[#64748B]">Aucune permission définie.</p>}
       </div>
     </Panel>
+    </>
   );
 }
 
