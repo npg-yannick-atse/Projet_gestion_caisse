@@ -180,7 +180,14 @@ export class AuthorizationService {
    *  - extra    : sec_user_permission_extra (globales, actives, dans la fenêtre de validité)
    * Un droit obtenu par au moins un canal suffit.
    */
-  async getEffectivePermissions(userId: string): Promise<Set<string>> {
+  async getEffectivePermissions(
+    userId: string,
+    // `false` pour PHOTOGRAPHIER les droits propres d'un utilisateur : ce qu'il
+    // exerce au nom d'un absent est temporaire et ne lui appartient pas. Le
+    // recopier dans un profil le rendrait définitif, et transmissible à d'autres.
+    opts: { inclureInterim?: boolean } = {},
+  ): Promise<Set<string>> {
+    const inclureInterim = opts.inclureInterim !== false;
     const codes = new Set<string>();
 
     // Chaque canal est résolu indépendamment : une erreur sur un canal (table absente,
@@ -240,7 +247,7 @@ export class AuthorizationService {
     // Intérim : permissions déléguées (directe, via rôle, via profil) par les intérims actifs
     // où l'utilisateur est remplaçant. Cumul avec ses propres droits.
     try {
-      const interims = await this.getActiveInterims(userId);
+      const interims = inclureInterim ? await this.getActiveInterims(userId) : [];
       if (interims.length > 0) {
         const permIds = interims.map((i) => i.permissionId).filter((x): x is string => !!x);
         const roleIds = interims.map((i) => i.roleTransfereId).filter((x): x is string => !!x);

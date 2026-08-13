@@ -84,6 +84,29 @@ export class ProfilsController {
     return this.profilsService.genererDepuisRole(roleId, dto.code, dto.libelle, user.sub);
   }
 
+  @Post('generer-depuis-utilisateur/:userId')
+  @ApiOperation({
+    summary: "Créer un profil rassemblant toutes les permissions effectives d'un utilisateur",
+  })
+  async genererDepuisUtilisateur(
+    @Param('userId') userId: string,
+    @Body() dto: GenerationDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(
+      user.sub,
+      'PROFIL_GERER',
+      "générer un profil depuis les droits d'un utilisateur",
+    );
+    return this.profilsService.genererDepuisUtilisateur(
+      userId,
+      dto.code,
+      dto.libelle,
+      user.sub,
+      this.authz,
+    );
+  }
+
   @Get(':profilId/permissions')
   @ApiOperation({ summary: "Lister les permissions d'un profil" })
   getProfilPermissions(@Param('profilId') profilId: string) {

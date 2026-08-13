@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Profil } from '../entities/profil.entity';
 import { Permission } from '../entities/permission.entity';
 import { ProfilPermission } from '../entities/profil-permission.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
+import { User } from '../entities/user.entity';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { AuditPermissionService } from '../audit-permission.service';
 
@@ -103,6 +104,68 @@ export class ProfilsService {
 
     for (const lien of liens) {
       await this.assignPermissionToProfil(String(profil.id), String(lien.permissionId), actorId);
+    }
+    return profil;
+  }
+
+  /**
+   * Crée un profil rassemblant TOUTES les permissions effectives d'un
+   * utilisateur, pour les donner ensuite à quelqu'un d'autre.
+   *
+   * « Effectives » veut dire : ce qui lui vient de ses rôles, de ses profils,
+   * de ses permissions individuelles et de ses intérims en cours — l'ensemble
+   * aplati en un seul objet attribuable. C'est la réponse à « donne-lui les
+   * mêmes droits qu'elle », sans avoir à retrouver d'où chaque droit provient.
+   *
+   * DEUX LIMITES à connaître, et elles sont dans la nature d'un profil :
+   *
+   *  - un profil ne transporte QUE des permissions. Ce qu'un rôle décide par
+   *    son code — voir les bons de tous, contourner les contrôles en tant
+   *    qu'administrateur, modifier un bon — ne s'y met pas. Copier un
+   *    administrateur ne fabrique donc pas un administrateur ;
+   *  - les périmètres ne suivent pas non plus : direction, caisses,
+   *    portefeuilles, centres de coût et natures restent attachés à la
+   *    personne, pas à ses droits.
+   *
+   * La copie est ponctuelle : le profil ne suivra pas l'utilisateur d'origine.
+   */
+  async genererDepuisUtilisateur(
+    userId: string,
+    code: string,
+    libelle: string,
+    actorId: string,
+    authz: {
+      getEffectivePermissions(id: string, opts?: { inclureInterim?: boolean }): Promise<Set<string>>;
+    },
+  ): Promise<Profil> {
+    const utilisateur = await this.profilRepo.manager
+      .getRepository(User)
+      .findOne({ where: { id: userId as any } });
+    if (!utilisateur) throw new NotFoundException(`Utilisateur ${userId} introuvable`);
+
+    // SANS les droits d'intérim : ce que cette personne exerce au nom d'un
+    // absent est temporaire et ne lui appartient pas. Les recopier dans un
+    // profil les rendrait définitifs, et transmissibles à n'importe qui.
+    const codes = [...(await authz.getEffectivePermissions(userId, { inclureInterim: false }))];
+    if (codes.length === 0) {
+      throw new ConflictException(
+        `${utilisateur.prenom} ${utilisateur.nom} n'a aucune permission propre : il n'y a rien à recopier. ` +
+          `Les droits exercés au titre d'un intérim ne sont pas repris, car ils sont temporaires.`,
+      );
+    }
+
+    // On repart des CODES pour retrouver les identifiants : `getEffectivePermissions`
+    // aplatit quatre origines et ne rend que des codes.
+    const permissions = await this.permissionRepo.find({ where: { code: In(codes) } });
+
+    const profil = await this.createProfil({
+      code,
+      libelle,
+      description: `Généré depuis les droits de ${utilisateur.prenom} ${utilisateur.nom}`,
+    } as CreateProfilDto);
+
+    for (const permission of permissions) {
+      await this.assignPermissionToProfil(String(profil.id), String(permission.id), actorId);
     }
     return profil;
   }

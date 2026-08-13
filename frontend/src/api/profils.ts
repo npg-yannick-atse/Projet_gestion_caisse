@@ -68,6 +68,20 @@ export function useGenererProfilDepuisRole() {
   });
 }
 
+/**
+ * Rassemble en un profil TOUTES les permissions effectives d'un utilisateur
+ * — rôles, profils, permissions individuelles, intérims en cours — pour les
+ * attribuer ensuite à quelqu'un d'autre.
+ */
+export function useGenererProfilDepuisUtilisateur() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, code, libelle }: { userId: string; code: string; libelle: string }) =>
+      api.post(`/profils/generer-depuis-utilisateur/${userId}`, { code, libelle }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profils'] }),
+  });
+}
+
 export function useUpdateProfil() {
   const qc = useQueryClient();
   return useMutation({

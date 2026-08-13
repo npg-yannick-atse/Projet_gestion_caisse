@@ -446,6 +446,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
               <p className="mb-2 text-[11px] text-[#94A3B8]">
                 Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
               </p>
+
               {profils?.map((profil) => {
                 const attribue = (userProfils ?? []).find((p) => p.id === profil.id);
                 const has = !!attribue;
