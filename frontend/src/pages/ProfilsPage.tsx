@@ -473,11 +473,15 @@ function ProfilsPageInner() {
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
           onClick={() => setSelectedId(null)}
         >
+          {/* La carte ne défile plus dans son ensemble : en-tête et onglets
+              restent fixes, seul le corps défile. Auparavant les onglets
+              partaient vers le haut avec le contenu, et il fallait remonter à
+              chaque changement de volet. */}
           <div
-            className="flex max-h-[88vh] w-full max-w-3xl flex-col gap-3 overflow-y-auto"
+            className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 rounded-[12px] border border-[rgba(15,76,129,0.1)] bg-white px-4 py-3">
+            <div className="flex shrink-0 items-center gap-3 border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-4 py-3">
               <ProfilBadge profil={selected} />
               <span className="font-mono text-[11px] text-[#94A3B8]">{selected.code}</span>
               <button
@@ -493,7 +497,10 @@ function ProfilsPageInner() {
           {/* Un profil ne porte plus seulement des permissions : il transmet
               aussi des périmètres (migration 0067). Quatre volets pour quatre
               natures de contenu, plutôt qu'un panneau qui mélangerait tout. */}
-          <div className="flex flex-wrap gap-1.5">
+          {/* Fond opaque : sans lui, les onglets inactifs n'avaient qu'une
+              bordure, et le voile sombre de la modale transparaissait au
+              travers jusqu'à rendre leur texte illisible. */}
+          <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-[rgba(15,76,129,0.08)] bg-white px-4 py-2.5">
             {(
               [
                 ['permissions', 'Permissions'],
@@ -509,7 +516,7 @@ function ProfilsPageInner() {
                 className={
                   volet === cle
                     ? 'inline-flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white'
-                    : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]'
+                    : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] bg-white px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]'
                 }
               >
                 {libelle}
@@ -517,6 +524,9 @@ function ProfilsPageInner() {
             ))}
           </div>
 
+          {/* Seule zone qui défile : la liste des permissions dépasse
+              largement la hauteur de l'écran. */}
+          <div className="flex-1 overflow-y-auto p-4">
           {volet === 'permissions' && <PermissionEditor profil={selected} />}
           {volet === 'cost-centers' && (
             <PerimetreEditor
@@ -545,6 +555,7 @@ function ProfilsPageInner() {
               elements={(natures ?? []).map((n) => ({ id: n.id, code: n.code, libelle: n.libelle }))}
             />
           )}
+          </div>
           </div>
         </div>
       )}
