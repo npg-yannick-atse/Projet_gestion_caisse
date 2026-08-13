@@ -390,11 +390,24 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
               {user.email} · #{user.matricule}
             </div>
           </div>
+
+          {/* En-tête plutôt que dans l'onglet Profils : le geste porte sur la
+              PERSONNE entière, pas sur ses profils. Le cacher derrière un onglet
+              le rendait introuvable. */}
+          <button
+            type="button"
+            onClick={() => setGenererProfil(true)}
+            title="Créer un profil réutilisable à partir des droits de cette personne"
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+          >
+            <Copy className="h-3.5 w-3.5" /> Générer un profil
+          </button>
+
           <button
             type="button"
             aria-label="Fermer"
             onClick={onClose}
-            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#94A3B8] transition-colors hover:bg-white hover:text-[#0F172A]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#94A3B8] transition-colors hover:bg-white hover:text-[#0F172A]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -526,21 +539,9 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           {/* -------- Profils -------- */}
           {tab === 'profils' && (
             <div className="space-y-1">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <p className="flex-1 text-[11px] text-[#94A3B8]">
-                  Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
-                </p>
-                {/* Troisième sens de génération : rôle → profil et profil → rôle
-                    existaient, pas utilisateur → profil. C'est pourtant le geste
-                    courant : « donne-lui les mêmes accès que X ». */}
-                <button
-                  type="button"
-                  onClick={() => setGenererProfil(true)}
-                  className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
-                >
-                  <Copy className="h-3.5 w-3.5" /> Générer un profil depuis ses droits
-                </button>
-              </div>
+              <p className="mb-2 text-[11px] text-[#94A3B8]">
+                Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
+              </p>
 
               {profils?.map((profil) => {
                 const attribue = (userProfils ?? []).find((p) => p.id === profil.id);
