@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
@@ -45,13 +46,20 @@ export function DateTimePicker({
   className?: string;
 }) {
   const [ouvert, setOuvert] = useState(false);
-  // Le panneau se recale sur l'espace disponible : vers le haut s'il manque de
-  // place en dessous, aligné à droite s'il en manque à droite. Sans ça, sur la
-  // borne de FIN — en colonne de droite — la colonne des minutes sortait de
-  // l'écran, et sur les deux bornes il recouvrait les champs du dessous.
-  const [versLeHaut, setVersLeHaut] = useState(false);
-  const [versLaGauche, setVersLaGauche] = useState(false);
+  /**
+   * Position ABSOLUE du panneau, calculée depuis le champ.
+   *
+   * Le panneau est rendu dans `document.body`, pas à côté du champ : `Panel`
+   * porte `overflow-hidden` pour ses coins arrondis et découpait tout ce qui
+   * dépassait de la carte — le calendrier se retrouvait tronqué en bas. Aucun
+   * réglage de position n'y échappe tant qu'on reste à l'intérieur.
+   *
+   * On se recale aussi sur l'espace disponible : au-dessus du champ s'il manque
+   * de place en dessous, aligné à droite s'il en manque à droite.
+   */
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const conteneur = useRef<HTMLDivElement>(null);
+  const panneau = useRef<HTMLDivElement>(null);
   const colonneHeures = useRef<HTMLDivElement>(null);
   const colonneMinutes = useRef<HTMLDivElement>(null);
 
@@ -64,8 +72,13 @@ export function DateTimePicker({
   // ouvert derrière le reste du formulaire est plus gênant qu'utile.
   useEffect(() => {
     if (!ouvert) return;
+    // Le panneau vit dans `document.body` : il faut le tester séparément du
+    // champ, sinon chaque clic dedans refermerait le sélecteur.
     const dehors = (e: MouseEvent) => {
-      if (conteneur.current && !conteneur.current.contains(e.target as Node)) setOuvert(false);
+      const cible = e.target as Node;
+      const dansChamp = conteneur.current?.contains(cible);
+      const dansPanneau = panneau.current?.contains(cible);
+      if (!dansChamp && !dansPanneau) setOuvert(false);
     };
     const echap = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOuvert(false);
@@ -98,6 +111,39 @@ export function DateTimePicker({
     return () => cancelAnimationFrame(id);
     // Volontairement sur la seule ouverture : recentrer à chaque clic
     // ramènerait la colonne sous le doigt et empêcherait de faire défiler.
+  }, [ouvert]);
+
+  /**
+   * Placement, mesuré APRÈS peinture pour connaître la taille réelle du
+   * panneau — l'estimer en dur laissait les cas limites déborder.
+   */
+  useLayoutEffect(() => {
+    if (!ouvert) return;
+    const placer = () => {
+      const champ = conteneur.current?.getBoundingClientRect();
+      const boite = panneau.current?.getBoundingClientRect();
+      if (!champ || !boite) return;
+      const marge = 8;
+      const enDessous = champ.bottom + marge;
+      const top =
+        enDessous + boite.height <= window.innerHeight - marge
+          ? enDessous
+          : Math.max(marge, champ.top - marge - boite.height);
+      const left = Math.max(
+        marge,
+        Math.min(champ.left, window.innerWidth - boite.width - marge),
+      );
+      setPos({ top, left });
+    };
+    placer();
+    // Le panneau étant en position fixe, il ne suit pas un défilement : on le
+    // replace plutôt que de le laisser flotter loin de son champ.
+    window.addEventListener('scroll', placer, true);
+    window.addEventListener('resize', placer);
+    return () => {
+      window.removeEventListener('scroll', placer, true);
+      window.removeEventListener('resize', placer);
+    };
   }, [ouvert]);
 
   /** Cases du mois affiché, complétées à gauche pour démarrer un lundi. */
@@ -141,13 +187,7 @@ export function DateTimePicker({
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={ouvert}
-        onClick={() => {
-          const rect = conteneur.current?.getBoundingClientRect();
-          // Encombrement du panneau : ~300 px de haut, ~400 px de large.
-          setVersLeHaut(!!rect && window.innerHeight - rect.bottom < 300 && rect.top > 300);
-          setVersLaGauche(!!rect && window.innerWidth - rect.left < 400);
-          setOuvert((o) => !o);
-        }}
+        onClick={() => setOuvert((o) => !o)}
         className={
           className ??
           'flex h-10 w-full items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition hover:border-[#1A6DB5] focus:border-[#1A6DB5]'
@@ -157,13 +197,20 @@ export function DateTimePicker({
         <span className={value ? '' : 'text-[#94A3B8]'}>{libelle}</span>
       </button>
 
-      {ouvert && (
-        <div
-          role="dialog"
-          className={`absolute z-50 flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)] ${
-            versLeHaut ? 'bottom-full mb-1' : 'top-full mt-1'
-          } ${versLaGauche ? 'right-0' : 'left-0'}`}
-        >
+      {ouvert &&
+        createPortal(
+          <div
+            ref={panneau}
+            role="dialog"
+            style={{
+              top: pos?.top ?? 0,
+              left: pos?.left ?? 0,
+              // Tant que la position n'est pas mesurée, on rend invisible plutôt
+              // que d'afficher un panneau qui saute du coin vers sa place.
+              visibility: pos ? 'visible' : 'hidden',
+            }}
+            className="fixed z-[100] flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)]"
+          >
           {/* ---- Calendrier ---- */}
           <div className="w-[15rem]">
             <div className="mb-2 flex items-center justify-between">
@@ -264,8 +311,9 @@ export function DateTimePicker({
               </div>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
