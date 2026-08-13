@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   User as UserIcon,
+  X,
   Search,
 } from 'lucide-react';
 import {
@@ -464,8 +465,31 @@ function ProfilsPageInner() {
         )}
       </Panel>
 
-      {selected ? (
-        <>
+      {/* En MODALE, plus en bas de page : le panneau poussait le tableau hors
+          de l'écran, si bien qu'on ne voyait plus quel profil on éditait — et
+          il fallait remonter pour en changer. */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+          onClick={() => setSelectedId(null)}
+        >
+          <div
+            className="flex max-h-[88vh] w-full max-w-3xl flex-col gap-3 overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 rounded-[12px] border border-[rgba(15,76,129,0.1)] bg-white px-4 py-3">
+              <ProfilBadge profil={selected} />
+              <span className="font-mono text-[11px] text-[#94A3B8]">{selected.code}</span>
+              <button
+                type="button"
+                aria-label="Fermer"
+                onClick={() => setSelectedId(null)}
+                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-[#94A3B8] transition-colors hover:bg-[#F1F5F9] hover:text-[#0F172A]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
           {/* Un profil ne porte plus seulement des permissions : il transmet
               aussi des périmètres (migration 0067). Quatre volets pour quatre
               natures de contenu, plutôt qu'un panneau qui mélangerait tout. */}
@@ -521,13 +545,14 @@ function ProfilsPageInner() {
               elements={(natures ?? []).map((n) => ({ id: n.id, code: n.code, libelle: n.libelle }))}
             />
           )}
-        </>
-      ) : (
-        <p className="px-1 text-xs text-[#64748B]">
-          Icône <KeyRound className="inline h-3 w-3" /> = permissions · <Pencil className="inline h-3 w-3" /> = modifier ·{' '}
-          <Trash2 className="inline h-3 w-3" /> = désactiver.
-        </p>
+          </div>
+        </div>
       )}
+
+      <p className="px-1 text-xs text-[#64748B]">
+        Icône <KeyRound className="inline h-3 w-3" /> = permissions · <Pencil className="inline h-3 w-3" /> = modifier ·{' '}
+        <Trash2 className="inline h-3 w-3" /> = désactiver.
+      </p>
 
       <ConfirmDialog
         open={!!pendingDelete}
