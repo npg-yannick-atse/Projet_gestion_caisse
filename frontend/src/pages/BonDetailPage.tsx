@@ -232,7 +232,13 @@ export function BonDetailPage() {
   const impression = impressionQuery.data ?? null;
   const porteurValue = porteurDraft ?? bon?.porteur ?? '';
   // Modification autorisée uniquement au statut CREE, pour un validateur ou BON_MODIFIER_SPEC.
-  const canEditBon = bon?.statut === 'CREE' && (isValidateur || hasModifSpec);
+  /**
+   * Mêmes règles que le serveur depuis la migration 0066 : la modification
+   * s'appuie sur une PERMISSION, plus sur le rôle VALIDATEUR lu en dur. Un rôle
+   * ou un profil créé sur mesure peut donc l'ouvrir — et le bouton apparaît.
+   */
+  const hasModifier = (myPermissions ?? []).includes('BON_MODIFIER');
+  const canEditBon = bon?.statut === 'CREE' && (isAdminRole || hasModifier || hasModifSpec);
 
   const userById = useMemo(() => new Map((usersList ?? []).map((u) => [u.id, u])), [usersList]);
   const userName = (id?: string | null) => {
