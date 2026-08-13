@@ -77,8 +77,34 @@ export class ReferentielService {
   ): Promise<Division[]> {
     const qb = this.divisionRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true });
     if (paysId) qb.andWhere('x.paysId = :p', { p: paysId });
+
+    /**
+     * La recherche porte AUSSI sur le pays.
+     *
+     * Les divisions importées de SAP s'appellent « SS11 », « SS12 » — leur
+     * libellé est leur code. Chercher « Côte d'Ivoire » dans le seul nom de la
+     * division ne trouvait donc jamais rien, alors que c'est exactement ce
+     * qu'on tape : on cherche un PAYS, la division n'est que son étiquette.
+     */
+    if (opts.search && opts.search.trim()) {
+      const s = `%${opts.search.trim().replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
+      qb.andWhere(
+        '(x.code LIKE :s ESCAPE :e OR x.libelle LIKE :s ESCAPE :e OR EXISTS ' +
+          '(SELECT 1 FROM dbo.ref_pays p WHERE p.id = x.pays_id ' +
+          'AND (p.libelle LIKE :s ESCAPE :e OR p.code LIKE :s ESCAPE :e)))',
+        { s, e: '\\' },
+      );
+    }
+
+    // `search` est déjà appliquée ci-dessus : on ne la repasse pas au helper,
+    // qui la limiterait aux colonnes de la division.
     return this.applyRefList(
-      qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+      qb,
+      'x',
+      { ...opts, search: undefined },
+      [],
+      { code: 'code', libelle: 'libelle' },
+      'libelle',
     );
   }
 
@@ -453,17 +479,18 @@ export class ReferentielService {
    * sont pas réécrits, pour que `created_at` garde son sens.
    */
   private async remplacerLiens(
-    colonneFixe: 'nature_comptable_id' | 'cost_center_id',
+    colonneFixe: string,
     idFixe: string,
     idsVoulus: string[],
     userId: string,
+    table = 'ref_nature_comptable_cost_center',
+    colonneNature = 'nature_comptable_id',
   ): Promise<void> {
-    const colonneVariable =
-      colonneFixe === 'nature_comptable_id' ? 'cost_center_id' : 'nature_comptable_id';
+    const colonneVariable = colonneFixe === colonneNature ? 'cost_center_id' : colonneNature;
     const manager = this.natureComptableRepo.manager;
 
     const existants: Array<{ id: string }> = await manager.query(
-      `SELECT ${colonneVariable} AS id FROM dbo.ref_nature_comptable_cost_center WHERE ${colonneFixe} = @0`,
+      `SELECT ${colonneVariable} AS id FROM dbo.${table} WHERE ${colonneFixe} = @0`,
       [idFixe],
     );
     const avant = new Set(existants.map((r) => String(r.id)));
@@ -474,7 +501,7 @@ export class ReferentielService {
 
     for (const id of aAjouter) {
       await manager.query(
-        `INSERT INTO dbo.ref_nature_comptable_cost_center (${colonneFixe}, ${colonneVariable}, created_by_id)
+        `INSERT INTO dbo.${table} (${colonneFixe}, ${colonneVariable}, created_by_id)
          VALUES (@0, @1, @2)`,
         [idFixe, id, userId],
       );
@@ -482,12 +509,82 @@ export class ReferentielService {
     if (aRetirer.length > 0) {
       const ph = aRetirer.map((_, i) => `@${i + 1}`).join(', ');
       await manager.query(
-        `DELETE FROM dbo.ref_nature_comptable_cost_center
+        `DELETE FROM dbo.${table}
          WHERE ${colonneFixe} = @0 AND ${colonneVariable} IN (${ph})`,
         [idFixe, ...aRetirer],
       );
     }
   }
+
+  /* ---- Le même mécanisme, sur les natures d'OPÉRATION ----------------------
+     C'est celle que l'application nomme « nature comptable » : menu, écran et
+     formulaire portent tous ce libellé. C'est aussi elle qui contraint le
+     centre de coût d'un sous-bon. */
+
+  async costCentersDeNatureOperation(natureId: string): Promise<CostCenter[]> {
+    await this.findNatureOperation(natureId);
+    return this.costCenterRepo
+      .createQueryBuilder('cc')
+      .innerJoin(
+        'ref_nature_operation_cost_center',
+        'l',
+        'l.cost_center_id = cc.id AND l.nature_operation_id = :natureId',
+        { natureId },
+      )
+      .where('cc.deletedAt IS NULL')
+      .orderBy('cc.code', 'ASC')
+      .getMany();
+  }
+
+  async naturesOperationDeCostCenter(costCenterId: string): Promise<NatureOperation[]> {
+    await this.findCostCenter(costCenterId);
+    return this.natureOperationRepo
+      .createQueryBuilder('n')
+      .innerJoin(
+        'ref_nature_operation_cost_center',
+        'l',
+        'l.nature_operation_id = n.id AND l.cost_center_id = :costCenterId',
+        { costCenterId },
+      )
+      .where('n.deletedAt IS NULL')
+      .orderBy('n.libelle', 'ASC')
+      .getMany();
+  }
+
+  async lierNatureOperationAuxCostCenters(
+    natureId: string,
+    costCenterIds: string[],
+    userId: string,
+  ): Promise<CostCenter[]> {
+    await this.findNatureOperation(natureId);
+    await this.remplacerLiens(
+      'nature_operation_id',
+      natureId,
+      costCenterIds,
+      userId,
+      'ref_nature_operation_cost_center',
+      'nature_operation_id',
+    );
+    return this.costCentersDeNatureOperation(natureId);
+  }
+
+  async lierCostCenterAuxNaturesOperation(
+    costCenterId: string,
+    natureIds: string[],
+    userId: string,
+  ): Promise<NatureOperation[]> {
+    await this.findCostCenter(costCenterId);
+    await this.remplacerLiens(
+      'cost_center_id',
+      costCenterId,
+      natureIds,
+      userId,
+      'ref_nature_operation_cost_center',
+      'nature_operation_id',
+    );
+    return this.naturesOperationDeCostCenter(costCenterId);
+  }
+
 
   /** Depuis la nature : choisir ses centres de coût. */
   async lierNatureAuxCostCenters(

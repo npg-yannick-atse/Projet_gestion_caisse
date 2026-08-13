@@ -201,7 +201,20 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const assignedProfils = useMemo(() => new Set((userProfils ?? []).map((p) => p.id)), [userProfils]);
   // Accès division (restitutions)
   const { data: pays } = usePays();
-  const { data: allDivisions } = useDivisions();
+  /**
+   * Recherche des divisions PAR PAYS, exécutée en base : le serveur cherche
+   * aussi dans le nom du pays, sans quoi taper « Côte d'Ivoire » ne trouverait
+   * rien — une division s'appelle « SS11 », pas du nom de son pays.
+   */
+  const [divisionSearch, setDivisionSearch] = useState('');
+  const [divisionSearchDebounced, setDivisionSearchDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDivisionSearchDebounced(divisionSearch), 300);
+    return () => clearTimeout(t);
+  }, [divisionSearch]);
+  const { data: allDivisions } = useDivisions(undefined, {
+    search: divisionSearchDebounced.trim() || undefined,
+  });
   const { data: userDivisions } = useUserDivisions(user.id);
   const toggleDivision = useToggleUserDivision(user.id);
   const divisionAccess = useMemo(() => new Set(userDivisions ?? []), [userDivisions]);
@@ -507,11 +520,23 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
               <p className="mb-1 text-[11px] text-[#94A3B8]">
                 Autorise l'utilisateur à créer des restitutions client sur les divisions cochées.
               </p>
+              <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+                <input
+                  value={divisionSearch}
+                  onChange={(e) => setDivisionSearch(e.target.value)}
+                  placeholder="Rechercher un pays ou une division…"
+                  className="flex-1 bg-transparent text-xs text-[#0F172A] outline-none"
+                />
+                <span className="shrink-0 text-[10px] text-[#94A3B8]">{divisionsParPays.length}</span>
+              </div>
+
               {/* Une ligne par division, le PAYS porté par l'étiquette.
                   Grouper par pays produisait un en-tête par pays pour une seule
-                  division en dessous — 71 titres, 71 cases isolées, et une
-                  grille à deux colonnes remplie à moitié. */}
-              <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
+                  division en dessous — 71 titres, 71 cases isolées.
+                  UNE seule colonne : sur deux, un nom de pays long débordait de
+                  sa moitié et poussait une barre de défilement horizontale. */}
+              <div className="max-h-[300px] space-y-0.5 overflow-y-auto">
                 {divisionsParPays.map(({ division, pays: nomPays }) => {
                   const has = divisionAccess.has(division.id);
                   return (
@@ -534,9 +559,16 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                   );
                 })}
               </div>
-              {(allDivisions ?? []).length === 0 && (
-                <p className="text-sm text-[#64748B]">Aucune division. Créez-en depuis « Pays &amp; Divisions ».</p>
-              )}
+              {divisionsParPays.length === 0 &&
+                (divisionSearchDebounced.trim() ? (
+                  <p className="text-xs text-[#64748B]">
+                    Aucun pays ne correspond à « {divisionSearchDebounced} ».
+                  </p>
+                ) : (
+                  <p className="text-sm text-[#64748B]">
+                    Aucune division. Créez-en depuis « Pays &amp; Divisions ».
+                  </p>
+                ))}
             </div>
           )}
 
