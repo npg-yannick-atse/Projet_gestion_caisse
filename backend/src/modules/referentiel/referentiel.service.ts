@@ -409,7 +409,7 @@ export class ReferentielService {
       withDeleted: true,
     });
     if (existing && !existing.deletedAt) {
-      throw new ConflictException(`Une nature d'opération avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(`Une nature comptable avec le code ${dto.code} existe déjà`);
     }
     if (existing) {
       // Réactivation d'une nature précédemment désactivée (même code).
@@ -446,7 +446,7 @@ export class ReferentielService {
         withDeleted: true,
       });
       if (dup && String(dup.id) !== String(n.id)) {
-        throw new ConflictException(`Une nature d'opération avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(`Une nature comptable avec le code ${dto.code} existe déjà`);
       }
       n.code = dto.code;
     }

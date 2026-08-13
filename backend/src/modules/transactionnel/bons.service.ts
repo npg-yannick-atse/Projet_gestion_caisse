@@ -290,7 +290,7 @@ export class BonsService {
     // super admin compris (aucun bypass) : sans nature attribuée, la création est bloquée.
     for (const sb of input.soubons) {
       if (!sb.natureOperationId) {
-        throw new BadRequestException("La nature d'opération est requise pour chaque sous-bon.");
+        throw new BadRequestException("La nature comptable est requise pour chaque sous-bon.");
       }
       await this.authz.assertNatureInPerimeter(currentUserId, String(sb.natureOperationId));
     }

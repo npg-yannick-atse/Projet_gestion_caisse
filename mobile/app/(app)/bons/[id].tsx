@@ -135,7 +135,7 @@ export default function BonDetailScreen() {
                     <DetailRow label="N° BL" value={sb.numeroBl || '—'} />
                     <DetailRow label="Code manutention" value={sb.codeManutention || '—'} />
                     <DetailRow label="Centre de coût" value={ccName(sb.costCenterId)} />
-                    <DetailRow label="Nature d'opération" value={natName(sb.natureOperationId)} />
+                    <DetailRow label="Nature comptable" value={natName(sb.natureOperationId)} />
                     {partName(sb.partenaireId) ? (
                       <DetailRow label="Partenaire" value={partName(sb.partenaireId) as string} />
                     ) : null}

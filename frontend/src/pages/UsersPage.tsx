@@ -368,7 +368,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           titre="Générer un profil depuis cet utilisateur"
           sourceLibelle={`${user.prenom} ${user.nom}`}
           nbPermissions={permissionsUtilisateur?.length ?? 0}
-          avertissement="Le profil embarque ses permissions, ses centres de coût, ses natures d'opération et ses divisions. Ne suivent PAS : ses rôles — dont le code ouvre la visibilité et le contournement administrateur — ses accès aux caisses, sa direction, et ce qu'il exerce au titre d'un intérim, qui est temporaire."
+          avertissement="Le profil embarque ses permissions, ses centres de coût, ses natures comptables et ses divisions. Ne suivent PAS : ses rôles — dont le code ouvre la visibilité et le contournement administrateur — ses accès aux caisses, sa direction, et ce qu'il exerce au titre d'un intérim, qui est temporaire."
           pending={genererDepuisUtilisateur.isPending}
           error={genererDepuisUtilisateur.error}
           onValider={(code, libelle) =>
@@ -432,7 +432,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           <TabBtn active={tab === 'roles'} onClick={() => setTab('roles')} icon={ShieldCheck} label="Rôles" count={assigned.size} />
           <TabBtn active={tab === 'profils'} onClick={() => setTab('profils')} icon={BadgeCheck} label="Profils" count={assignedProfils.size} />
           <TabBtn active={tab === 'divisions'} onClick={() => setTab('divisions')} icon={Globe} label="Divisions" count={divisionAccess.size} />
-          <TabBtn active={tab === 'natures'} onClick={() => setTab('natures')} icon={Tags} label="Natures" count={natureAccess.size} />
+          <TabBtn active={tab === 'natures'} onClick={() => setTab('natures')} icon={Tags} label="Natures comptables" count={natureAccess.size} />
           <TabBtn active={tab === 'cost-centers'} onClick={() => setTab('cost-centers')} icon={Building2} label="Centres de coût" count={costCenterAccess.size} />
         </div>
 
@@ -797,7 +797,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                   </p>
                 ) : (
                   <p className="text-sm text-[#64748B]">
-                    Aucune nature d'opération. Créez-en depuis « Natures d'opération ».
+                    Aucune nature comptable. Créez-en depuis « Natures comptables ».
                   </p>
                 ))}
             </div>

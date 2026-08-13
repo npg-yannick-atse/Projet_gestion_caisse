@@ -298,7 +298,7 @@ export default function NouvelleDemandeScreen() {
             )}
             {perimeter && naturesList.length === 0 && (
               <Text style={styles.alerte}>
-                Aucune nature d'opération ne vous est autorisée. Contactez un administrateur.
+                Aucune nature comptable ne vous est autorisée. Contactez un administrateur.
               </Text>
             )}
 

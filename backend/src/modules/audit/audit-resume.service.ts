@@ -81,7 +81,7 @@ const NOM_RESSOURCE: Record<string, string> = {
   portefeuilles: 'le portefeuille',
   partenaires: 'le partenaire',
   'cost-centers': 'le centre de coût',
-  'natures-operation': "la nature d'opération",
+  'natures-operation': 'la nature comptable',
   'plan-comptable': 'le compte',
   employes: "l'employé",
   'types-benefice': 'le type de bénéfice',

@@ -521,7 +521,7 @@ export class AuthorizationService {
     const perim = await this.getNatureOperationPerimeter(userId);
     if (perim === null) return; // admin : accès total
     if (!perim.has(String(natureOperationId))) {
-      throw new ForbiddenException("Cette nature d'opération ne vous est pas autorisée.");
+      throw new ForbiddenException("Cette nature comptable ne vous est pas autorisée.");
     }
   }
 }
