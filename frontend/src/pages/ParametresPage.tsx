@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Gift, Save, SlidersHorizontal } from 'lucide-react';
+import { Coins, Gift, Save, SlidersHorizontal } from 'lucide-react';
 import { useParametres, useUpdateParametre } from '@/api/parametres';
 import { apiErrorMessage } from '@/lib/utils';
 import { Panel, PanelHeader } from '@/components/ui/panel';
@@ -7,6 +7,7 @@ import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
 import { TypesBeneficePage } from '@/pages/TypesBeneficePage';
+import { DevisesPage } from '@/pages/DevisesPage';
 
 /** Une ligne éditable de paramètre. */
 function ParamRow({ cle, libelle, valeur }: { cle: string; libelle?: string | null; valeur?: string | null }) {
@@ -63,36 +64,29 @@ const PARAM_SORT_COLUMNS = ['libelle', 'valeur'] as const;
 type ParamSortCol = (typeof PARAM_SORT_COLUMNS)[number];
 
 export function ParametresPage() {
-  const [tab, setTab] = useState<'reglages' | 'benefices'>('reglages');
+  const [tab, setTab] = useState<'reglages' | 'benefices' | 'devises'>('reglages');
+  const ongletClass = (actif: boolean) =>
+    actif
+      ? 'inline-flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white'
+      : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]';
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          onClick={() => setTab('reglages')}
-          className={
-            tab === 'reglages'
-              ? 'inline-flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white'
-              : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]'
-          }
-        >
+        <button type="button" onClick={() => setTab('reglages')} className={ongletClass(tab === 'reglages')}>
           <SlidersHorizontal className="h-3.5 w-3.5" /> Réglages globaux
         </button>
-        <button
-          type="button"
-          onClick={() => setTab('benefices')}
-          className={
-            tab === 'benefices'
-              ? 'inline-flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white'
-              : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]'
-          }
-        >
+        <button type="button" onClick={() => setTab('devises')} className={ongletClass(tab === 'devises')}>
+          <Coins className="h-3.5 w-3.5" /> Devises
+        </button>
+        <button type="button" onClick={() => setTab('benefices')} className={ongletClass(tab === 'benefices')}>
           <Gift className="h-3.5 w-3.5" /> Types de bénéfice
         </button>
       </div>
 
-      {tab === 'benefices' ? <TypesBeneficePage /> : <ReglagesGlobaux />}
+      {tab === 'benefices' && <TypesBeneficePage />}
+      {tab === 'devises' && <DevisesPage />}
+      {tab === 'reglages' && <ReglagesGlobaux />}
     </div>
   );
 }

@@ -8,8 +8,30 @@ import type {
   UpdatePortefeuillePayload,
 } from '@/types/api';
 
-export async function listDevises(): Promise<Devise[]> {
-  const { data } = await api.get<Devise[]>('/devises');
+export async function listDevises(includeInactive = false): Promise<Devise[]> {
+  const { data } = await api.get<Devise[]>('/devises', {
+    // Filtre appliqué EN BASE : l'écran d'administration a besoin de voir les
+    // devises désactivées pour les réactiver, les autres écrans non.
+    params: includeInactive ? { includeInactive: 'true' } : undefined,
+  });
+  return data;
+}
+
+export type DevisePayload = {
+  code?: string;
+  libelle?: string;
+  symbole?: string | null;
+  nbDecimales?: number;
+  estActif?: boolean;
+};
+
+export async function createDevise(payload: DevisePayload): Promise<Devise> {
+  const { data } = await api.post<Devise>('/devises', payload);
+  return data;
+}
+
+export async function updateDevise(id: string, payload: DevisePayload): Promise<Devise> {
+  const { data } = await api.patch<Devise>(`/devises/${id}`, payload);
   return data;
 }
 
@@ -43,8 +65,27 @@ export function usePortefeuilleSolde(id: string) {
   return useQuery({ queryKey: ['portefeuille', id, 'solde'], queryFn: () => getPortefeuilleSolde(id) });
 }
 
-export function useDevises() {
-  return useQuery({ queryKey: ['devises'], queryFn: listDevises });
+export function useDevises(includeInactive = false) {
+  return useQuery({
+    queryKey: ['devises', includeInactive ? 'toutes' : 'actives'],
+    queryFn: () => listDevises(includeInactive),
+  });
+}
+
+export function useCreateDevise() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: DevisePayload) => createDevise(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devises'] }),
+  });
+}
+
+export function useUpdateDevise() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: DevisePayload }) => updateDevise(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devises'] }),
+  });
 }
 
 export function usePortefeuilles(caisseId?: string) {
