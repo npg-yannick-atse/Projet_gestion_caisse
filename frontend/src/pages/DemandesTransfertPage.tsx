@@ -103,6 +103,7 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
     handleSubmit,
     watch,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -111,6 +112,27 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
 
   const sourceType = watch('sourceType');
   const destinationType = watch('destinationType');
+
+  // Comptes réellement proposables comme SOURCE, dans le périmètre de l'utilisateur.
+  const sourcePortefeuilles = (perimeter?.portefeuilles ?? []).filter((p) => p.estActif !== false);
+  const sourceCaisses = perimeter?.caisses ?? [];
+  const sourceVide =
+    !!perimeter &&
+    (sourceType === 'PORTEFEUILLE' ? sourcePortefeuilles.length === 0 : sourceCaisses.length === 0);
+
+  /**
+   * Le formulaire s'ouvrait sur « Portefeuille ». Or un caissier n'est
+   * propriétaire ni gestionnaire d'aucun portefeuille : sa liste était donc
+   * toujours vide, sans explication, alors qu'il a bien le droit d'initier un
+   * transfert — depuis une caisse. On ouvre sur le type qui a des comptes.
+   */
+  const [sourceTypeChoisi, setSourceTypeChoisi] = useState(false);
+  useEffect(() => {
+    if (sourceTypeChoisi || !perimeter) return;
+    if (sourcePortefeuilles.length === 0 && sourceCaisses.length > 0) {
+      setValue('sourceType', 'CAISSE');
+    }
+  }, [perimeter, sourceTypeChoisi, sourcePortefeuilles.length, sourceCaisses.length, setValue]);
 
   const renderOptions = (type: TransfertCompteType, scope: 'source' | 'destination') => {
     // Source : restreinte au périmètre de l'utilisateur. Destination : tous les comptes.
@@ -190,7 +212,7 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
             aria-label="Type de compte source"
             title="Type de compte source"
             className={selectClass}
-            {...register('sourceType')}
+            {...register('sourceType', { onChange: () => setSourceTypeChoisi(true) })}
           >
             <option value="CAISSE">Caisse</option>
             <option value="PORTEFEUILLE">Portefeuille</option>
@@ -209,6 +231,15 @@ function CreateTransfertForm({ onDone }: { onDone: () => void }) {
             {renderOptions(sourceType, 'source')}
           </select>
           {errors.sourceId && <p className="text-sm text-destructive">{errors.sourceId.message}</p>}
+          {/* Une liste vide ne disait rien : le caissier voyait « — Choisir — »
+              seul et concluait que le champ était cassé. */}
+          {sourceVide && (
+            <p className="text-[11px] text-[#B42318]">
+              {sourceType === 'PORTEFEUILLE'
+                ? 'Aucun portefeuille dans votre périmètre. Un transfert ne peut partir que d’un portefeuille dont vous êtes propriétaire ou gestionnaire — choisissez « Caisse » comme type de source.'
+                : 'Aucune caisse dans votre périmètre. Contactez un administrateur.'}
+            </p>
+          )}
         </div>
 
         {/* DESTINATION */}
