@@ -137,9 +137,60 @@ export class InterimsService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("La date de début ne peut pas être antérieure à aujourd'hui");
     }
 
+    /**
+     * Copie en bloc : le remplaçant reçoit tout ce que l'initiateur détient.
+     *
+     * On crée UNE LIGNE PAR DROIT plutôt qu'une délégation « globale » qui
+     * suivrait l'initiateur. Trois raisons, dans l'ordre d'importance :
+     *
+     *  - ce qui est délégué reste LISIBLE — l'écran des intérims montre
+     *    exactement quels rôles et profils ont changé de mains, au lieu d'un
+     *    « tous ses droits » qu'il faudrait aller reconstituer ;
+     *  - ce qui est délégué est FIGÉ à la déclaration : si l'initiateur gagne
+     *    le rôle ADMINISTRATEUR pendant son absence, le remplaçant ne l'hérite
+     *    pas au passage ;
+     *  - chaque ligne se révoque séparément.
+     *
+     * Les rôles sont les rôles EFFECTIFS de l'initiateur : un DAF délègue donc
+     * bien ce que DAF recouvre.
+     */
+    if (dto.copierTousLesDroits) {
+      const roles = await this.authz.getEffectiveRoles(initiateurId);
+      const profils = await this.userProfilRepo.find({ where: { userId: initiateurId as any } });
+
+      if (roles.length === 0 && profils.length === 0) {
+        throw new BadRequestException(
+          "Cet utilisateur n'a ni rôle ni profil : il n'y a rien à déléguer.",
+        );
+      }
+
+      const base = {
+        initiateurId: initiateurId as any,
+        remplacantId: dto.remplacantId as any,
+        dateDebut,
+        dateFin,
+        commentaire: dto.commentaire,
+        statut: 'ACTIF' as const,
+      };
+
+      const lignes = [
+        ...roles.map((r) =>
+          this.interimRepo.create({ ...base, roleTransfereId: r.id as any }),
+        ),
+        ...profils.map((p) =>
+          this.interimRepo.create({ ...base, profilTransfereId: p.profilId as any }),
+        ),
+      ];
+
+      const crees = await this.interimRepo.save(lignes);
+      // On rend la PREMIÈRE ligne pour rester compatible avec l'appelant, qui
+      // attend un intérim. Le nombre réel est visible dans la liste.
+      return crees[0];
+    }
+
     if (!dto.permissionId && !dto.roleTransfereId && !dto.profilTransfereId) {
       throw new BadRequestException(
-        'Précisez ce qui est délégué : un rôle, un profil ou une permission.',
+        'Précisez ce qui est délégué : un rôle, un profil ou une permission, ou cochez la copie de tous les droits.',
       );
     }
 

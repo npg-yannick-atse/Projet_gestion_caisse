@@ -51,6 +51,12 @@ function CreateInterimForm({
   const [remplacantId, setRemplacantId] = useState('');
   const [delegType, setDelegType] = useState<DelegType>('ROLE');
   const [delegId, setDelegId] = useState('');
+  /**
+   * Copier TOUT ce que l'absent détient plutôt que de désigner un droit.
+   * Le serveur crée alors un intérim par rôle et par profil : ce qui est
+   * délégué reste lisible ligne à ligne, et se révoque séparément.
+   */
+  const [copieTout, setCopieTout] = useState(false);
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [commentaire, setCommentaire] = useState('');
@@ -71,7 +77,7 @@ function CreateInterimForm({
     remplacantId &&
     !sameUser &&
     !autoRemplacement &&
-    delegId &&
+    (copieTout || delegId) &&
     dateDebut &&
     dateFin &&
     dateDebut < dateFin;
@@ -83,9 +89,10 @@ function CreateInterimForm({
       {
         initiateurId: initiateurEffectif,
         remplacantId,
-        roleTransfereId: delegType === 'ROLE' ? delegId : undefined,
-        profilTransfereId: delegType === 'PROFIL' ? delegId : undefined,
-        permissionId: delegType === 'PERMISSION' ? delegId : undefined,
+        copierTousLesDroits: copieTout || undefined,
+        roleTransfereId: !copieTout && delegType === 'ROLE' ? delegId : undefined,
+        profilTransfereId: !copieTout && delegType === 'PROFIL' ? delegId : undefined,
+        permissionId: !copieTout && delegType === 'PERMISSION' ? delegId : undefined,
         dateDebut: new Date(dateDebut).toISOString(),
         dateFin: new Date(dateFin).toISOString(),
         commentaire: commentaire || undefined,
@@ -151,7 +158,25 @@ function CreateInterimForm({
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label className="flex cursor-pointer items-start gap-2 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-[#F8FAFC] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={copieTout}
+              onChange={(e) => setCopieTout(e.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span className="text-[12px] text-[#0F172A]">
+              <strong>Reprendre tous les droits de l'absent</strong>
+              <span className="block text-[11px] text-[#64748B]">
+                Un intérim est créé par rôle et par profil détenu. Ce qui est copié est figé
+                maintenant : un droit que l'absent obtiendrait pendant son absence ne sera pas transmis.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className={cn('flex flex-col gap-1.5', copieTout && 'opacity-40')}>
           <label className={labelClass}>Type de délégation</label>
           <select
             aria-label="Type de délégation"

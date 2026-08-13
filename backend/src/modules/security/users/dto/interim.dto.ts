@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNotEmpty, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty, IsDateString, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateInterimDto {
@@ -41,6 +41,22 @@ export class CreateInterimDto {
   @IsNotEmpty()
   @IsDateString()
   dateFin!: string;
+
+  /**
+   * Copier TOUS les droits de l'initiateur au lieu d'en désigner un seul.
+   *
+   * Le remplaçant reçoit alors un intérim par rôle et par profil détenu — pas
+   * une délégation « globale » qui suivrait l'initiateur : ce qui est copié est
+   * FIGÉ à la déclaration. Si l'initiateur gagne un rôle pendant son absence,
+   * le remplaçant ne l'hérite pas.
+   */
+  @ApiProperty({
+    required: false,
+    description: "Copier tous les rôles et profils de l'initiateur",
+  })
+  @IsOptional()
+  @IsBoolean()
+  copierTousLesDroits?: boolean;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -126,6 +126,8 @@ export interface CreateInterimPayload {
   permissionId?: string;
   roleTransfereId?: string;
   profilTransfereId?: string;
+  /** Copier tous les rôles et profils de l'initiateur — un intérim par droit. */
+  copierTousLesDroits?: boolean;
   dateDebut: string;
   dateFin: string;
   commentaire?: string;
