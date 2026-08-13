@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 
 /**
  * Sélecteur de date ET d'heure.
@@ -8,8 +8,8 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
  * Le champ natif `datetime-local` n'ouvre qu'un calendrier : Chrome n'y met
  * aucun sélecteur d'heure, il faut cliquer les chiffres et taper. Une liste
  * déroulante d'heures règle l'accessibilité mais impose un pas fixe. Ici, la
- * date se prend dans un calendrier et l'heure au chiffre près, dans deux
- * colonnes — on choisit vraiment, sans clavier et sans arrondi.
+ * date se prend dans un calendrier et l'heure sur deux molettes — au chiffre
+ * près, à la souris ou au clavier, sans arrondi imposé.
  *
  * `value` et `onChange` parlent le format des champs HTML — `YYYY-MM-DDTHH:mm` —
  * pour rester interchangeable avec un `datetime-local`.
@@ -19,9 +19,6 @@ const MOIS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
-
-const HEURES = Array.from({ length: 24 }, (_, i) => i);
-const MINUTES = Array.from({ length: 60 }, (_, i) => i);
 
 const deuxChiffres = (n: number) => String(n).padStart(2, '0');
 const versValeur = (d: Date) =>
@@ -63,8 +60,6 @@ export function DateTimePicker({
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const conteneur = useRef<HTMLDivElement>(null);
   const panneau = useRef<HTMLDivElement>(null);
-  const colonneHeures = useRef<HTMLDivElement>(null);
-  const colonneMinutes = useRef<HTMLDivElement>(null);
 
   const courant = useMemo(() => versDate(value), [value]);
   const [moisAffiche, setMoisAffiche] = useState(
@@ -94,26 +89,10 @@ export function DateTimePicker({
     };
   }, [ouvert]);
 
-  // À l'ouverture, on amène l'heure choisie sous les yeux : sans ça, 22 h se
-  // trouve tout en bas d'une colonne qui s'ouvre sur minuit.
-  //
-  // Le centrage est différé d'une frame : mesuré dans la foulée du rendu, les
-  // colonnes n'ont pas encore leur hauteur définitive et le calcul tombe à
-  // côté — c'est ce qui laissait les minutes à l'autre bout de la liste.
+  // Le panneau s'ouvre sur le mois de la valeur courante, pas sur le mois en
+  // cours : ouvrir une date de décembre en affichant août ferait chercher.
   useEffect(() => {
-    if (!ouvert) return;
-    setMoisAffiche(new Date(courant.getFullYear(), courant.getMonth(), 1));
-    const id = requestAnimationFrame(() => {
-      for (const col of [colonneHeures.current, colonneMinutes.current]) {
-        const actif = col?.querySelector<HTMLElement>('[data-actif="1"]');
-        if (!actif || !col) continue;
-        const cible = actif.offsetTop - (col.clientHeight - actif.clientHeight) / 2;
-        col.scrollTop = Math.max(0, Math.min(cible, col.scrollHeight - col.clientHeight));
-      }
-    });
-    return () => cancelAnimationFrame(id);
-    // Volontairement sur la seule ouverture : recentrer à chaque clic
-    // ramènerait la colonne sous le doigt et empêcherait de faire défiler.
+    if (ouvert) setMoisAffiche(new Date(courant.getFullYear(), courant.getMonth(), 1));
   }, [ouvert]);
 
   /**
@@ -177,45 +156,60 @@ export function DateTimePicker({
     ? `${deuxChiffres(courant.getDate())}/${deuxChiffres(courant.getMonth() + 1)}/${courant.getFullYear()} à ${deuxChiffres(courant.getHours())}:${deuxChiffres(courant.getMinutes())}`
     : 'Choisir…';
 
-  const caseHeure = (actif: boolean) =>
-    `cursor-pointer snap-center rounded-[7px] py-1.5 text-center text-xs tabular-nums transition ${
-      actif
-        ? 'bg-[#0F4C81] font-semibold text-white'
-        : 'text-[#475569] hover:bg-[#EFF6FF] hover:text-[#0F4C81]'
-    }`;
-
-  /** Colonne de nombres — heures ou minutes. Le défilement s'aligne sur les cases. */
-  const colonne = (
-    ref: React.RefObject<HTMLDivElement | null>,
+  /**
+   * Molette heure / minute : une valeur encadrée de deux flèches.
+   *
+   * Deux colonnes défilantes de 24 et 60 lignes prenaient toute la hauteur du
+   * panneau pour montrer six chiffres utiles. Ici on lit la valeur d'un coup,
+   * on la corrige d'un clic, et on peut la taper — la minute reste précise
+   * sans imposer un pas.
+   *
+   * Les flèches bouclent : 23 h + 1 donne minuit, pas une valeur refusée.
+   */
+  const molette = (
     titre: string,
-    nombres: number[],
     valeur: number,
+    modulo: number,
     poserValeur: (n: number) => void,
-  ) => (
-    <div className="flex flex-col">
-      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.5px] text-[#94A3B8]">
-        {titre}
-      </p>
-      <div
-        ref={ref}
-        className="scrollbar-discret-clair h-[11.5rem] w-14 snap-y snap-mandatory space-y-0.5 overflow-y-auto px-1"
-      >
-        {nombres.map((n) => (
-          <div
-            key={n}
-            role="button"
-            tabIndex={0}
-            data-actif={valeur === n ? '1' : '0'}
-            onClick={() => poserValeur(n)}
-            onKeyDown={(e) => e.key === 'Enter' && poserValeur(n)}
-            className={caseHeure(valeur === n)}
-          >
-            {deuxChiffres(n)}
-          </div>
-        ))}
+  ) => {
+    const decaler = (pas: number) => poserValeur((valeur + pas + modulo) % modulo);
+    return (
+      <div className="flex flex-col items-center">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-[#94A3B8]">
+          {titre}
+        </p>
+        <button
+          type="button"
+          aria-label={`${titre} suivante`}
+          onClick={() => decaler(1)}
+          className="flex h-6 w-12 items-center justify-center rounded-[6px] text-[#94A3B8] transition hover:bg-[#EFF6FF] hover:text-[#0F4C81]"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+        <input
+          aria-label={titre}
+          inputMode="numeric"
+          value={deuxChiffres(valeur)}
+          onChange={(e) => {
+            const n = Number(e.target.value.replace(/\D/g, ''));
+            if (Number.isFinite(n) && n >= 0 && n < modulo) poserValeur(n);
+          }}
+          // La molette de la souris fait défiler la valeur, comme sur un champ
+          // horaire natif — geste attendu une fois le pointeur dessus.
+          onWheel={(e) => decaler(e.deltaY > 0 ? 1 : -1)}
+          className="h-10 w-12 rounded-[8px] border border-[rgba(15,76,129,0.12)] bg-[#F8FAFC] text-center font-display text-lg font-semibold tabular-nums text-[#0F172A] outline-none transition focus:border-[#1A6DB5] focus:bg-white"
+        />
+        <button
+          type="button"
+          aria-label={`${titre} précédente`}
+          onClick={() => decaler(-1)}
+          className="flex h-6 w-12 items-center justify-center rounded-[6px] text-[#94A3B8] transition hover:bg-[#EFF6FF] hover:text-[#0F4C81]"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div ref={conteneur} className="relative">
@@ -312,13 +306,10 @@ export function DateTimePicker({
           </div>
 
           {/* ---- Heures et minutes, au chiffre près ---- */}
-          <div className="flex gap-1 border-l border-[rgba(15,76,129,0.08)] pl-3">
-            {colonne(colonneHeures, 'Heure', HEURES, courant.getHours(), (h) =>
-              poser((d) => d.setHours(h)),
-            )}
-            {colonne(colonneMinutes, 'Min', MINUTES, courant.getMinutes(), (m) =>
-              poser((d) => d.setMinutes(m)),
-            )}
+          <div className="flex items-start gap-1 self-center border-l border-[rgba(15,76,129,0.08)] pl-3">
+            {molette('Heure', courant.getHours(), 24, (h) => poser((d) => d.setHours(h)))}
+            <span className="pt-[2.1rem] font-display text-lg font-semibold text-[#94A3B8]">:</span>
+            {molette('Min', courant.getMinutes(), 60, (m) => poser((d) => d.setMinutes(m)))}
           </div>
           </div>
 
