@@ -45,6 +45,9 @@ export function DateTimePicker({
   className?: string;
 }) {
   const [ouvert, setOuvert] = useState(false);
+  // Le panneau s'ouvre vers le haut quand il n'y a pas la place en dessous :
+  // dans une modale, il sortait du cadre et recouvrait les champs suivants.
+  const [versLeHaut, setVersLeHaut] = useState(false);
   const conteneur = useRef<HTMLDivElement>(null);
   const colonneHeures = useRef<HTMLDivElement>(null);
   const colonneMinutes = useRef<HTMLDivElement>(null);
@@ -74,14 +77,25 @@ export function DateTimePicker({
 
   // À l'ouverture, on amène l'heure choisie sous les yeux : sans ça, 22 h se
   // trouve tout en bas d'une colonne qui s'ouvre sur minuit.
+  //
+  // Le centrage est différé d'une frame : mesuré dans la foulée du rendu, les
+  // colonnes n'ont pas encore leur hauteur définitive et le calcul tombe à
+  // côté — c'est ce qui laissait les minutes à l'autre bout de la liste.
   useEffect(() => {
     if (!ouvert) return;
     setMoisAffiche(new Date(courant.getFullYear(), courant.getMonth(), 1));
-    for (const col of [colonneHeures.current, colonneMinutes.current]) {
-      const actif = col?.querySelector('[data-actif="1"]') as HTMLElement | null;
-      if (actif && col) col.scrollTop = actif.offsetTop - col.clientHeight / 2 + actif.clientHeight / 2;
-    }
-  }, [ouvert, courant]);
+    const id = requestAnimationFrame(() => {
+      for (const col of [colonneHeures.current, colonneMinutes.current]) {
+        const actif = col?.querySelector<HTMLElement>('[data-actif="1"]');
+        if (!actif || !col) continue;
+        const cible = actif.offsetTop - (col.clientHeight - actif.clientHeight) / 2;
+        col.scrollTop = Math.max(0, Math.min(cible, col.scrollHeight - col.clientHeight));
+      }
+    });
+    return () => cancelAnimationFrame(id);
+    // Volontairement sur la seule ouverture : recentrer à chaque clic
+    // ramènerait la colonne sous le doigt et empêcherait de faire défiler.
+  }, [ouvert]);
 
   /** Cases du mois affiché, complétées à gauche pour démarrer un lundi. */
   const cases = useMemo(() => {
@@ -124,7 +138,12 @@ export function DateTimePicker({
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={ouvert}
-        onClick={() => setOuvert((o) => !o)}
+        onClick={() => {
+          const rect = conteneur.current?.getBoundingClientRect();
+          // 320 px : hauteur du panneau. En dessous de ce reste, on bascule.
+          setVersLeHaut(!!rect && window.innerHeight - rect.bottom < 320 && rect.top > 320);
+          setOuvert((o) => !o);
+        }}
         className={
           className ??
           'flex h-10 w-full items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition hover:border-[#1A6DB5] focus:border-[#1A6DB5]'
@@ -137,7 +156,9 @@ export function DateTimePicker({
       {ouvert && (
         <div
           role="dialog"
-          className="absolute left-0 z-50 mt-1 flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)]"
+          className={`absolute left-0 z-50 flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)] ${
+            versLeHaut ? 'bottom-full mb-1' : 'top-full mt-1'
+          }`}
         >
           {/* ---- Calendrier ---- */}
           <div className="w-[15rem]">
@@ -204,7 +225,7 @@ export function DateTimePicker({
           <div className="flex gap-1 border-l border-[rgba(15,76,129,0.08)] pl-3">
             <div>
               <p className="mb-1 text-center text-[10px] font-semibold text-[#94A3B8]">H</p>
-              <div ref={colonneHeures} className="h-[13.5rem] w-12 overflow-y-auto">
+              <div ref={colonneHeures} className="h-[11rem] w-12 overflow-y-auto">
                 {Array.from({ length: 24 }, (_, h) => (
                   <div
                     key={h}
@@ -222,7 +243,7 @@ export function DateTimePicker({
             </div>
             <div>
               <p className="mb-1 text-center text-[10px] font-semibold text-[#94A3B8]">Min</p>
-              <div ref={colonneMinutes} className="h-[13.5rem] w-12 overflow-y-auto">
+              <div ref={colonneMinutes} className="h-[11rem] w-12 overflow-y-auto">
                 {Array.from({ length: 60 }, (_, m) => (
                   <div
                     key={m}
