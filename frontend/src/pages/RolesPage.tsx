@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Copy, Banknote, Briefcase, Check, Eye, Pencil, ShieldCheck, User, X, type LucideIcon } from 'lucide-react';
+import { Copy, Settings2, Banknote, Briefcase, Check, Eye, Pencil, ShieldCheck, User, X, type LucideIcon } from 'lucide-react';
 import { useRoles, usePermissions, useRolePermissions, useTogglePermission } from '@/api/roles';
 import type { Permission, Role, RoleCode } from '@/types/api';
 import { cn } from '@/lib/utils';
@@ -21,12 +21,27 @@ const ROLE_BADGE: Record<RoleCode, { cls: string; icon: LucideIcon }> = {
   DEMANDEUR: { cls: 'bg-[#F8FAFC] text-[#475569]', icon: User },
 };
 
-const MATRIX_COLS: { code: string; label: string }[] = [
-  { code: 'BON_CREER', label: 'Créer bon' },
-  { code: 'BON_VALIDER', label: 'Valider' },
-  { code: 'BON_DECAISSER', label: 'Décaisser' },
-  { code: 'ADMIN_USER', label: 'Gestion users' },
-];
+/**
+ * Colonnes proposées au premier affichage. Ce ne sont QUE des raccourcis de
+ * lecture : un rôle porte des dizaines de permissions, ces quatre-là n'en sont
+ * qu'un aperçu. La matrice laissait croire l'inverse — d'où le compteur
+ * « Permissions » ajouté à côté, et la possibilité de choisir les colonnes.
+ */
+const COLONNES_PAR_DEFAUT = ['BON_CREER', 'BON_VALIDER', 'BON_DECAISSER', 'ADMIN_USER'];
+
+/** Le choix survit au rechargement : c'est un réglage de confort, pas une donnée. */
+const CLE_COLONNES = 'roles.colonnes';
+
+function lireColonnes(): string[] {
+  try {
+    const brut = localStorage.getItem(CLE_COLONNES);
+    const liste = brut ? (JSON.parse(brut) as unknown) : null;
+    if (Array.isArray(liste) && liste.every((c) => typeof c === 'string')) return liste as string[];
+  } catch {
+    /* réglage illisible : on repart du défaut plutôt que de planter l'écran */
+  }
+  return COLONNES_PAR_DEFAUT;
+}
 
 function RoleBadge({ role }: { role: Role }) {
   const b = ROLE_BADGE[role.code] ?? { cls: 'bg-[#F8FAFC] text-[#475569]', icon: User };
@@ -43,7 +58,17 @@ function Cell({ on }: { on: boolean }) {
   return on ? <Check className="mx-auto h-4 w-4 text-[#00C896]" /> : <X className="mx-auto h-4 w-4 text-[#CBD5E1]" />;
 }
 
-function RoleRow({ role, selected, onEdit }: { role: Role; selected: boolean; onEdit: () => void }) {
+function RoleRow({
+  role,
+  colonnes,
+  selected,
+  onEdit,
+}: {
+  role: Role;
+  colonnes: { code: string; label: string }[];
+  selected: boolean;
+  onEdit: () => void;
+}) {
   const { data: perms } = useRolePermissions(role.id);
   const has = (code: string) => !!perms?.some((p) => p.code === code);
   return (
@@ -51,7 +76,12 @@ function RoleRow({ role, selected, onEdit }: { role: Role; selected: boolean; on
       <td className="px-4 py-3">
         <RoleBadge role={role} />
       </td>
-      {MATRIX_COLS.map((c) => (
+      {/* Total AVANT les colonnes cochées : on lit d'abord combien de droits
+          porte le rôle, ensuite le détail de quelques-uns. */}
+      <td className="px-4 py-3 text-center text-xs tabular-nums font-semibold text-[#0F172A]">
+        {perms?.length ?? '—'}
+      </td>
+      {colonnes.map((c) => (
         <td key={c.code} className="px-4 py-3 text-center">
           <Cell on={has(c.code)} />
         </td>
@@ -173,7 +203,25 @@ function RolesPageInner() {
   // cases à cocher (permission accordée ou non), trier dessus n'aurait pas de sens.
   const sort = useTableSort<RoleSortCol>('/roles', ROLE_SORT_COLUMNS);
   const roles = useClientSort(rolesBruts, sort.state, { libelle: (r) => r.libelle });
+  const { data: permissions } = usePermissions();
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [choixOuvert, setChoixOuvert] = useState(false);
+  const [colonnes, setColonnes] = useState<string[]>(() => lireColonnes());
+  useEffect(() => {
+    localStorage.setItem(CLE_COLONNES, JSON.stringify(colonnes));
+  }, [colonnes]);
+  /**
+   * Colonnes résolues en libellés. Une permission supprimée du référentiel
+   * disparaît d'elle-même : on n'affiche que ce qui existe encore.
+   */
+  const colonnesAffichees = useMemo(
+    () =>
+      colonnes
+        .map((code) => (permissions ?? []).find((p) => p.code === code))
+        .filter((p): p is NonNullable<typeof p> => !!p)
+        .map((p) => ({ code: p.code, label: p.libelle })),
+    [colonnes, permissions],
+  );
   const selectedRole = roles?.find((r) => r.id === selectedRoleId) ?? null;
 
   // Échap ferme la modale, comme attendu de toute boîte de dialogue.
@@ -189,7 +237,59 @@ function RolesPageInner() {
   return (
     <div className="flex flex-col gap-4">
       <Panel>
-        <PanelHeader title="Gestion des rôles" badge={`${roles?.length ?? 0}`} />
+        <PanelHeader title="Gestion des rôles" badge={`${roles?.length ?? 0}`}>
+          <button
+            type="button"
+            onClick={() => setChoixOuvert((v) => !v)}
+            className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+          >
+            <Settings2 className="h-3.5 w-3.5" /> Colonnes ({colonnes.length})
+          </button>
+        </PanelHeader>
+
+        {/* Choix des colonnes : n'importe quelle permission peut en devenir une.
+            Les quatre d'origine étaient écrites en dur, ce qui laissait croire
+            qu'un rôle ne portait que celles-là. */}
+        {choixOuvert && (
+          <div className="border-b border-[rgba(15,76,129,0.08)] bg-[#F8FAFC] px-[18px] py-3">
+            <p className="mb-2 text-[11px] text-[#64748B]">
+              Colonnes affichées — un aperçu, jamais la liste complète des droits d'un rôle.
+              Le total figure dans la colonne « Permissions », le détail derrière le crayon.
+            </p>
+            <div className="grid max-h-[220px] grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-3">
+              {(permissions ?? []).map((p) => {
+                const coche = colonnes.includes(p.code);
+                return (
+                  <label
+                    key={p.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 text-[11px] hover:bg-white"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={coche}
+                      onChange={() =>
+                        setColonnes((liste) =>
+                          coche ? liste.filter((c) => c !== p.code) : [...liste, p.code],
+                        )
+                      }
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="truncate text-[#0F172A]" title={p.code}>
+                      {p.libelle}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setColonnes(COLONNES_PAR_DEFAUT)}
+              className="mt-2 text-[11px] font-medium text-[#0F4C81] hover:underline"
+            >
+              Rétablir les colonnes d'origine
+            </button>
+          </div>
+        )}
 
         {isLoading && <div className="px-[18px] py-8 text-sm text-[#64748B]">Chargement…</div>}
 
@@ -198,8 +298,11 @@ function RolesPageInner() {
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Rôle</SortableHeader>
-                {MATRIX_COLS.map((c) => (
-                  <th key={c.code} className="px-4 py-2.5 text-center font-semibold">
+                <th className="w-28 px-4 py-2.5 text-center font-semibold" title="Nombre total de permissions du rôle">
+                  Permissions
+                </th>
+                {colonnesAffichees.map((c) => (
+                  <th key={c.code} className="px-4 py-2.5 text-center font-semibold" title={c.code}>
                     {c.label}
                   </th>
                 ))}
@@ -213,6 +316,7 @@ function RolesPageInner() {
                 <RoleRow
                   key={role.id}
                   role={role}
+                  colonnes={colonnesAffichees}
                   selected={selectedRoleId === role.id}
                   onEdit={() => setSelectedRoleId((id) => (id === role.id ? null : role.id))}
                 />
