@@ -20,6 +20,9 @@ const MOIS = [
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
 
+const HEURES = Array.from({ length: 24 }, (_, i) => i);
+const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+
 const deuxChiffres = (n: number) => String(n).padStart(2, '0');
 const versValeur = (d: Date) =>
   `${d.getFullYear()}-${deuxChiffres(d.getMonth() + 1)}-${deuxChiffres(d.getDate())}` +
@@ -175,9 +178,44 @@ export function DateTimePicker({
     : 'Choisir…';
 
   const caseHeure = (actif: boolean) =>
-    `cursor-pointer rounded-[6px] px-2 py-1 text-center text-xs tabular-nums transition ${
-      actif ? 'bg-[#0F4C81] font-semibold text-white' : 'text-[#475569] hover:bg-[#EFF6FF]'
+    `cursor-pointer snap-center rounded-[7px] py-1.5 text-center text-xs tabular-nums transition ${
+      actif
+        ? 'bg-[#0F4C81] font-semibold text-white'
+        : 'text-[#475569] hover:bg-[#EFF6FF] hover:text-[#0F4C81]'
     }`;
+
+  /** Colonne de nombres — heures ou minutes. Le défilement s'aligne sur les cases. */
+  const colonne = (
+    ref: React.RefObject<HTMLDivElement | null>,
+    titre: string,
+    nombres: number[],
+    valeur: number,
+    poserValeur: (n: number) => void,
+  ) => (
+    <div className="flex flex-col">
+      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.5px] text-[#94A3B8]">
+        {titre}
+      </p>
+      <div
+        ref={ref}
+        className="scrollbar-discret-clair h-[11.5rem] w-14 snap-y snap-mandatory space-y-0.5 overflow-y-auto px-1"
+      >
+        {nombres.map((n) => (
+          <div
+            key={n}
+            role="button"
+            tabIndex={0}
+            data-actif={valeur === n ? '1' : '0'}
+            onClick={() => poserValeur(n)}
+            onKeyDown={(e) => e.key === 'Enter' && poserValeur(n)}
+            className={caseHeure(valeur === n)}
+          >
+            {deuxChiffres(n)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div ref={conteneur} className="relative">
@@ -209,8 +247,9 @@ export function DateTimePicker({
               // que d'afficher un panneau qui saute du coin vers sa place.
               visibility: pos ? 'visible' : 'hidden',
             }}
-            className="fixed z-[100] flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)]"
+            className="fixed z-[100] rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)]"
           >
+          <div className="flex gap-3">
           {/* ---- Calendrier ---- */}
           <div className="w-[15rem]">
             <div className="mb-2 flex items-center justify-between">
@@ -257,11 +296,11 @@ export function DateTimePicker({
                         d.setFullYear(moisAffiche.getFullYear(), moisAffiche.getMonth(), jour);
                       })
                     }
-                    className={`rounded-[7px] py-1 text-xs tabular-nums transition ${
+                    className={`rounded-[7px] py-1.5 text-xs tabular-nums transition ${
                       memeJour(courant, jour)
                         ? 'bg-[#0F4C81] font-semibold text-white'
                         : memeJour(aujourdhui, jour)
-                          ? 'font-semibold text-[#0F4C81] hover:bg-[#EFF6FF]'
+                          ? 'font-semibold text-[#0F4C81] ring-1 ring-inset ring-[#BFDBFE] hover:bg-[#EFF6FF]'
                           : 'text-[#334155] hover:bg-[#F1F5F9]'
                     }`}
                   >
@@ -274,42 +313,39 @@ export function DateTimePicker({
 
           {/* ---- Heures et minutes, au chiffre près ---- */}
           <div className="flex gap-1 border-l border-[rgba(15,76,129,0.08)] pl-3">
-            <div>
-              <p className="mb-1 text-center text-[10px] font-semibold text-[#94A3B8]">H</p>
-              <div ref={colonneHeures} className="h-[11rem] w-12 overflow-y-auto">
-                {Array.from({ length: 24 }, (_, h) => (
-                  <div
-                    key={h}
-                    role="button"
-                    tabIndex={0}
-                    data-actif={courant.getHours() === h ? '1' : '0'}
-                    onClick={() => poser((d) => d.setHours(h))}
-                    onKeyDown={(e) => e.key === 'Enter' && poser((d) => d.setHours(h))}
-                    className={caseHeure(courant.getHours() === h)}
-                  >
-                    {deuxChiffres(h)}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="mb-1 text-center text-[10px] font-semibold text-[#94A3B8]">Min</p>
-              <div ref={colonneMinutes} className="h-[11rem] w-12 overflow-y-auto">
-                {Array.from({ length: 60 }, (_, m) => (
-                  <div
-                    key={m}
-                    role="button"
-                    tabIndex={0}
-                    data-actif={courant.getMinutes() === m ? '1' : '0'}
-                    onClick={() => poser((d) => d.setMinutes(m))}
-                    onKeyDown={(e) => e.key === 'Enter' && poser((d) => d.setMinutes(m))}
-                    className={caseHeure(courant.getMinutes() === m)}
-                  >
-                    {deuxChiffres(m)}
-                  </div>
-                ))}
-              </div>
-            </div>
+            {colonne(colonneHeures, 'Heure', HEURES, courant.getHours(), (h) =>
+              poser((d) => d.setHours(h)),
+            )}
+            {colonne(colonneMinutes, 'Min', MINUTES, courant.getMinutes(), (m) =>
+              poser((d) => d.setMinutes(m)),
+            )}
+          </div>
+          </div>
+
+          {/* Pied : la valeur relue en clair — un panneau qui ne redit pas ce
+              qu'on vient de choisir oblige à le refermer pour vérifier. */}
+          <div className="mt-2.5 flex items-center gap-2 border-t border-[rgba(15,76,129,0.08)] pt-2.5">
+            <span className="flex-1 text-[11px] text-[#475569]">
+              <span className="font-semibold text-[#0F172A]">{libelle}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const n = new Date();
+                onChange(versValeur(n));
+                setMoisAffiche(new Date(n.getFullYear(), n.getMonth(), 1));
+              }}
+              className="rounded-[7px] px-2 py-1 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+            >
+              Maintenant
+            </button>
+            <button
+              type="button"
+              onClick={() => setOuvert(false)}
+              className="rounded-[7px] bg-[#0F4C81] px-3 py-1 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5]"
+            >
+              Terminé
+            </button>
           </div>
           </div>,
           document.body,
