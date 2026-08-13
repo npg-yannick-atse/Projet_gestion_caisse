@@ -57,9 +57,40 @@ function CreateInterimForm({
    * délégué reste lisible ligne à ligne, et se révoque séparément.
    */
   const [copieTout, setCopieTout] = useState(false);
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
+  /**
+   * Date et heure SÉPARÉES.
+   *
+   * Un seul champ `datetime-local` obligeait à viser la zone des minutes pour
+   * la modifier — en pratique, l'heure était intouchable. Deux champs distincts
+   * s'ouvrent chacun sur le sélecteur natif adapté, et se tabulent.
+   *
+   * Valeurs par défaut utiles plutôt que vides : commence maintenant, finit
+   * demain. Une fenêtre de deux minutes tapée à la main est une source d'échec,
+   * pas une souplesse.
+   */
+  const maintenant = new Date();
+  const isoJour = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const isoHeure = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const demain = new Date(maintenant.getTime() + 86_400_000);
+
+  const [jourDebut, setJourDebut] = useState(() => isoJour(maintenant));
+  const [heureDebut, setHeureDebut] = useState(() => isoHeure(maintenant));
+  const [jourFin, setJourFin] = useState(() => isoJour(demain));
+  const [heureFin, setHeureFin] = useState(() => isoHeure(demain));
   const [commentaire, setCommentaire] = useState('');
+
+  const dateDebut = jourDebut && heureDebut ? `${jourDebut}T${heureDebut}` : '';
+  const dateFin = jourFin && heureFin ? `${jourFin}T${heureFin}` : '';
+
+  /** Raccourci de durée : la fin se recale sur le début + N jours. */
+  const dureeDepuisDebut = (jours: number) => {
+    const base = dateDebut ? new Date(dateDebut) : new Date();
+    const fin = new Date(base.getTime() + jours * 86_400_000);
+    setJourFin(isoJour(fin));
+    setHeureFin(isoHeure(fin));
+  };
 
   // Initiateur effectif : celui choisi si on en a le droit, sinon soi-même.
   const initiateurEffectif = peutDeclarerPourAutrui ? initiateurId : String(currentUser?.id ?? '');
@@ -225,24 +256,72 @@ function CreateInterimForm({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className={labelClass}>Début</label>
-          <input
-            type="datetime-local"
-            aria-label="Date de début"
-            className={inputClass}
-            value={dateDebut}
-            onChange={(e) => setDateDebut(e.target.value)}
-          />
+          <label className={labelClass} htmlFor="int-jour-debut">Début</label>
+          <div className="flex gap-2">
+            <input
+              id="int-jour-debut"
+              type="date"
+              aria-label="Jour de début"
+              className={`${inputClass} flex-1`}
+              value={jourDebut}
+              onChange={(e) => setJourDebut(e.target.value)}
+            />
+            <input
+              type="time"
+              aria-label="Heure de début"
+              className={`${inputClass} w-28 shrink-0`}
+              value={heureDebut}
+              onChange={(e) => setHeureDebut(e.target.value)}
+            />
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className={labelClass}>Fin</label>
-          <input
-            type="datetime-local"
-            aria-label="Date de fin"
-            className={inputClass}
-            value={dateFin}
-            onChange={(e) => setDateFin(e.target.value)}
-          />
+          <label className={labelClass} htmlFor="int-jour-fin">Fin</label>
+          <div className="flex gap-2">
+            <input
+              id="int-jour-fin"
+              type="date"
+              aria-label="Jour de fin"
+              className={`${inputClass} flex-1`}
+              value={jourFin}
+              onChange={(e) => setJourFin(e.target.value)}
+            />
+            <input
+              type="time"
+              aria-label="Heure de fin"
+              className={`${inputClass} w-28 shrink-0`}
+              value={heureFin}
+              onChange={(e) => setHeureFin(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Raccourcis : une durée usuelle se pose d'un clic, au lieu de calculer
+            une date de fin de tête. */}
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+          <span className="text-[11px] text-[#94A3B8]">Durée :</span>
+          {(
+            [
+              ['1 jour', 1],
+              ['1 semaine', 7],
+              ['2 semaines', 14],
+              ['1 mois', 30],
+            ] as const
+          ).map(([libelle, jours]) => (
+            <button
+              key={libelle}
+              type="button"
+              onClick={() => dureeDepuisDebut(jours)}
+              className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 text-[11px] font-medium text-[#475569] transition hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+            >
+              {libelle}
+            </button>
+          ))}
+          {dateDebut && dateFin && dateDebut >= dateFin && (
+            <span className="text-[11px] text-[#B42318]">
+              La fin doit être postérieure au début.
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5 sm:col-span-2">
