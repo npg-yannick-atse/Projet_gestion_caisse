@@ -222,6 +222,26 @@ export class UsersController {
      autant de requêtes que d'éléments — et laisserait un état à moitié appliqué
      si l'une d'elles échouait. */
 
+  @Post(':id/cloner-depuis/:sourceId')
+  @ApiOperation({
+    summary: 'Recopier sur cet utilisateur les rôles, profils et périmètres d’un autre',
+  })
+  async clonerDroits(
+    @Param('id') id: string,
+    @Param('sourceId') sourceId: string,
+    @CurrentUser() user: JwtPayload,
+    @Ip() ip: string,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'cloner les droits d’un utilisateur');
+    // Même verrou que pour les rôles : on ne se donne pas les droits d'un autre.
+    if (String(id) === String(user.sub)) {
+      throw new ForbiddenException(
+        'Vous ne pouvez pas recopier des droits sur vous-même. Demandez à un autre administrateur.',
+      );
+    }
+    return this.usersService.clonerDroits(sourceId, id, user.sub, ip);
+  }
+
   @Put(':id/divisions')
   @ApiOperation({ summary: 'Remplacer les divisions accessibles à un utilisateur' })
   async setDivisions(

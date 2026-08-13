@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Building2, Copy, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Building2, Copy, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, Users2, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
   type StatutUtilisateur,
@@ -21,6 +21,8 @@ import {
   useSetUserDivisions,
   useSetUserNaturesOperation,
   useSetUserCostCenters,
+  useClonerDroits,
+  type ResumeClonage,
 } from '@/api/users';
 import { useProfils, useGenererProfilDepuisUtilisateur } from '@/api/profils';
 import { GenererDepuisModal } from '@/components/GenererDepuisModal';
@@ -46,6 +48,7 @@ import { apiErrorMessage, libelleDivision } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { LdapUser, User } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
+import { Button } from '@/components/ui/button';
 import { Pill } from '@/components/ui/pill';
 import { RoleGuard } from '@/components/RoleGuard';
 
@@ -249,6 +252,134 @@ function SelectionEnMasse({
   );
 }
 
+/**
+ * Recopier tous les droits d'un collègue sur cette personne.
+ *
+ * Le geste ANNONCE qu'il remplace : « les mêmes accès que X » ne veut pas dire
+ * « les siens plus ceux de X », et un cumul silencieux laisserait des droits
+ * résiduels que personne ne penserait à retirer.
+ */
+function ClonageModal({
+  cible,
+  onFermer,
+}: {
+  cible: User;
+  onFermer: () => void;
+}) {
+  const { data: tous } = useUsers();
+  const cloner = useClonerDroits(cible.id);
+  const [recherche, setRecherche] = useState('');
+  const [source, setSource] = useState<User | null>(null);
+  const [resume, setResume] = useState<ResumeClonage | null>(null);
+
+  const candidats = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return (tous ?? [])
+      .filter((u) => String(u.id) !== String(cible.id))
+      .filter((u) =>
+        !q ? true : `${u.prenom} ${u.nom} ${u.matricule} ${u.email}`.toLowerCase().includes(q),
+      )
+      .slice(0, 30);
+  }, [tous, recherche, cible.id]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+      onClick={onFermer}
+    >
+      <div className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <Panel>
+          <PanelHeader title={`Recopier des droits sur ${cible.prenom} ${cible.nom}`} />
+
+          {resume ? (
+            <div className="space-y-3 p-[18px]">
+              <p className="text-sm text-[#0F172A]">Droits recopiés :</p>
+              <ul className="space-y-1 text-xs text-[#475569]">
+                <li>{resume.roles} rôle(s)</li>
+                <li>{resume.profils} profil(s)</li>
+                <li>{resume.divisions} division(s)</li>
+                <li>{resume.natures} nature(s)</li>
+                <li>{resume.costCenters} centre(s) de coût</li>
+              </ul>
+              <p className="text-[11px] text-[#94A3B8]">
+                La direction n'est pas recopiée : elle relève de l'organigramme, pas des droits.
+              </p>
+              <Button type="button" onClick={onFermer}>
+                Fermer
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2 p-[18px] pb-3">
+                <div className="rounded-[9px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[11px] text-[#92400E]">
+                  Le périmètre actuel de {cible.prenom} sera <strong>remplacé</strong>, pas complété :
+                  ses rôles, profils, divisions, natures et centres de coût deviendront exactement
+                  ceux de la personne choisie.
+                </div>
+                <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2.5 py-1.5">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+                  <input
+                    value={recherche}
+                    onChange={(e) => setRecherche(e.target.value)}
+                    placeholder="Chercher la personne à copier…"
+                    className="flex-1 bg-transparent text-xs text-[#0F172A] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-[40vh] overflow-y-auto border-y border-[rgba(15,76,129,0.07)]">
+                {candidats.map((u) => (
+                  <label
+                    key={u.id}
+                    className="flex cursor-pointer items-center gap-3 px-[18px] py-2 hover:bg-[#F8FAFC]"
+                  >
+                    <input
+                      type="radio"
+                      name="source-clonage"
+                      checked={String(source?.id) === String(u.id)}
+                      onChange={() => setSource(u)}
+                      className="h-4 w-4"
+                    />
+                    <span className="text-xs">
+                      <span className="font-medium text-[#0F172A]">
+                        {u.prenom} {u.nom}
+                      </span>{' '}
+                      <span className="text-[#94A3B8]">#{u.matricule}</span>
+                    </span>
+                  </label>
+                ))}
+                {candidats.length === 0 && (
+                  <p className="px-[18px] py-8 text-center text-sm text-[#64748B]">Aucun résultat.</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 p-[18px]">
+                <Button
+                  type="button"
+                  disabled={!source || cloner.isPending}
+                  onClick={() =>
+                    source && cloner.mutate(source.id, { onSuccess: (r) => setResume(r) })
+                  }
+                >
+                  {cloner.isPending ? 'Copie…' : 'Recopier ces droits'}
+                </Button>
+                <Button type="button" variant="ghost" onClick={onFermer}>
+                  Annuler
+                </Button>
+                {cloner.isError && (
+                  <p className="text-sm text-destructive">
+                    {apiErrorMessage(cloner.error, 'Copie impossible')}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void }) {
   const { data: roles } = useRoles();
   const { data: userRoles, isLoading } = useUserAssignedRoles(user.id);
@@ -258,6 +389,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userProfils } = useUserProfils(user.id);
   const toggleProfil = useToggleUserProfil(user.id);
   const [genererProfil, setGenererProfil] = useState(false);
+  const [clonage, setClonage] = useState(false);
   const setDivisions = useSetUserDivisions(user.id);
   const setNatures = useSetUserNaturesOperation(user.id);
   const setCostCenters = useSetUserCostCenters(user.id);
@@ -373,6 +505,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           onClose={() => setGenererProfil(false)}
         />
       )}
+      {clonage && <ClonageModal cible={user} onFermer={() => setClonage(false)} />}
       <div
         className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
         onClick={(e) => e.stopPropagation()}
@@ -401,6 +534,22 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
             className="ml-auto flex shrink-0 items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
           >
             <Copy className="h-3.5 w-3.5" /> Générer un profil
+          </button>
+
+          {/* Clonage complet : un profil ne peut pas transporter les périmètres,
+              seul un geste utilisateur → utilisateur le peut. */}
+          <button
+            type="button"
+            disabled={isSelf}
+            onClick={() => setClonage(true)}
+            title={
+              isSelf
+                ? 'Vous ne pouvez pas recopier des droits sur vous-même'
+                : 'Recopier les rôles, profils et périmètres d’un collègue'
+            }
+            className="flex shrink-0 items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-40"
+          >
+            <Users2 className="h-3.5 w-3.5" /> Cloner un utilisateur
           </button>
 
           <button

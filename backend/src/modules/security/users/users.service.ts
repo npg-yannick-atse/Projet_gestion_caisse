@@ -156,6 +156,92 @@ export class UsersService {
     );
   }
 
+  /**
+   * Recopie sur `cibleId` TOUT ce qui fait le périmètre de `sourceId`.
+   *
+   * Un profil ne peut pas transporter ça : divisions, natures et centres de coût
+   * vivent dans des tables attachées à la personne, pas dans un paquet de
+   * permissions. D'où un geste utilisateur → utilisateur.
+   *
+   * La cible est REMPLACÉE, pas complétée : « les mêmes accès que X » veut dire
+   * les mêmes, pas les siens plus ceux de X. Un cumul silencieux laisserait des
+   * droits résiduels que personne ne penserait à retirer.
+   *
+   * Volontairement HORS du clonage :
+   *  - la direction, qui relève de l'identité dans l'organigramme, pas des droits ;
+   *  - les permissions exceptionnelles, accordées à une personne pour un motif
+   *    et une durée qui n'ont pas de sens transposés ;
+   *  - les droits exercés au titre d'un intérim, qui sont temporaires.
+   */
+  async clonerDroits(
+    sourceId: string,
+    cibleId: string,
+    actorId: string,
+    ip?: string | null,
+  ): Promise<{
+    roles: number;
+    profils: number;
+    divisions: number;
+    natures: number;
+    costCenters: number;
+  }> {
+    if (String(sourceId) === String(cibleId)) {
+      throw new BadRequestException('La source et la destination du clonage sont la même personne.');
+    }
+    await this.findOne(sourceId);
+    await this.findOne(cibleId);
+
+    // Rôles : on passe par assignRole/removeRole pour conserver la journalisation
+    // des gains et pertes de permission, que l'audit exploite.
+    const rolesSource = await this.userRoleRepo.find({ where: { userId: sourceId } });
+    const rolesCible = await this.userRoleRepo.find({ where: { userId: cibleId } });
+    const voulus = new Set(rolesSource.map((r) => String(r.roleId)));
+    const actuels = new Set(rolesCible.map((r) => String(r.roleId)));
+    for (const roleId of [...voulus].filter((id) => !actuels.has(id))) {
+      await this.assignRole(cibleId, roleId, actorId, ip);
+    }
+    for (const roleId of [...actuels].filter((id) => !voulus.has(id))) {
+      await this.removeRole(cibleId, roleId, actorId, ip);
+    }
+
+    // Profils : la période de validité suit. Un profil prêté jusqu'au 31 doit
+    // l'être aussi chez la cible, sinon le clone hérite d'un droit permanent.
+    const profilsSource = await this.userProfilRepo.find({ where: { userId: sourceId } });
+    await this.userProfilRepo.delete({ userId: cibleId });
+    for (const p of profilsSource) {
+      await this.userProfilRepo.save(
+        this.userProfilRepo.create({
+          userId: cibleId,
+          profilId: p.profilId,
+          dateDebut: p.dateDebut ?? null,
+          dateFin: p.dateFin ?? null,
+          attribueParId: actorId,
+        }),
+      );
+    }
+
+    const divisions = (await this.userDivisionRepo.find({ where: { userId: sourceId } })).map((r) =>
+      String(r.divisionId),
+    );
+    const natures = (await this.userNatureRepo.find({ where: { userId: sourceId } })).map((r) =>
+      String(r.natureOperationId),
+    );
+    const costCenters = (await this.userCostCenterRepo.find({ where: { userId: sourceId } })).map(
+      (r) => String(r.costCenterId),
+    );
+    await this.setDivisions(cibleId, divisions, actorId);
+    await this.setNaturesOperation(cibleId, natures, actorId);
+    await this.setCostCenters(cibleId, costCenters, actorId);
+
+    return {
+      roles: voulus.size,
+      profils: profilsSource.length,
+      divisions: divisions.length,
+      natures: natures.length,
+      costCenters: costCenters.length,
+    };
+  }
+
   setCostCenters(userId: string, costCenterIds: string[], actorId: string): Promise<string[]> {
     // `estPrincipal` reste faux : le centre principal se désigne ailleurs, et
     // une sélection en masse ne doit pas décider qui il est.

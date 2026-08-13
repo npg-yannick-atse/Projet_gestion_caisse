@@ -202,6 +202,31 @@ export function useSetUserCostCenters(userId: string) {
   });
 }
 
+/**
+ * Recopie sur `userId` les rôles, profils et périmètres de `sourceId`.
+ * Le périmètre de la cible est REMPLACÉ, pas complété.
+ */
+export interface ResumeClonage {
+  roles: number;
+  profils: number;
+  divisions: number;
+  natures: number;
+  costCenters: number;
+}
+
+export function useClonerDroits(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (sourceId: string) => {
+      const { data } = await api.post<ResumeClonage>(`/users/${userId}/cloner-depuis/${sourceId}`);
+      return data;
+    },
+    // Le clonage touche cinq collections : on périme tout ce qui concerne
+    // l'utilisateur plutôt que d'énumérer les clés une à une.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId] }),
+  });
+}
+
 export function useToggleUserProfil(userId: string) {
   const qc = useQueryClient();
   return useMutation({
