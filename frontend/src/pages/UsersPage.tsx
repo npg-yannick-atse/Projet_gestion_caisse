@@ -10,6 +10,7 @@ import {
   useToggleUserRole,
   useUserProfils,
   useToggleUserProfil,
+  useSetProfilEcheance,
   useUserDivisions,
   useToggleUserDivision,
   useUserNaturesOperation,
@@ -196,6 +197,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: profils } = useProfils();
   const { data: userProfils } = useUserProfils(user.id);
   const toggleProfil = useToggleUserProfil(user.id);
+  const setEcheance = useSetProfilEcheance(user.id);
   const assignedProfils = useMemo(() => new Set((userProfils ?? []).map((p) => p.id)), [userProfils]);
   // Accès division (restitutions)
   const { data: pays } = usePays();
@@ -421,25 +423,63 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                 Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
               </p>
               {profils?.map((profil) => {
-                const has = assignedProfils.has(profil.id);
+                const attribue = (userProfils ?? []).find((p) => p.id === profil.id);
+                const has = !!attribue;
                 return (
-                  <label
-                    key={profil.id}
-                    className={`flex items-center gap-3 rounded-[7px] px-2 py-2 ${
-                      isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-[#F8FAFC]'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={has}
-                      disabled={toggleProfil.isPending || isSelf}
-                      onChange={() => toggleProfil.mutate({ profilId: profil.id, assigned: has })}
-                      className="h-4 w-4"
-                    />
-                    <span className="flex-1 text-sm">
-                      <span className="font-medium text-[#0F172A]">{profil.libelle}</span>{' '}
-                    </span>
-                  </label>
+                  <div key={profil.id} className="rounded-[7px] px-2 py-2 hover:bg-[#F8FAFC]">
+                    <label
+                      className={`flex items-center gap-3 ${
+                        isSelf ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={has}
+                        disabled={toggleProfil.isPending || isSelf}
+                        onChange={() => toggleProfil.mutate({ profilId: profil.id, assigned: has })}
+                        className="h-4 w-4"
+                      />
+                      <span className="flex-1 text-sm">
+                        <span className="font-medium text-[#0F172A]">{profil.libelle}</span>{' '}
+                        {attribue?.statut === 'EXPIRE' && (
+                          <span className="ml-1 rounded-full bg-[#FEF3F2] px-1.5 py-0.5 text-[9px] font-semibold text-[#B42318]">
+                            Expiré
+                          </span>
+                        )}
+                        {attribue?.statut === 'A_VENIR' && (
+                          <span className="ml-1 rounded-full bg-[#FFFBEB] px-1.5 py-0.5 text-[9px] font-semibold text-[#B45309]">
+                            À venir
+                          </span>
+                        )}
+                      </span>
+                    </label>
+
+                    {/* Échéance : visible seulement quand le profil est attribué.
+                        Vide = permanent, ce qui reste le cas par défaut. */}
+                    {has && !isSelf && (
+                      <div className="ml-7 mt-1.5 flex items-center gap-2">
+                        <label className="text-[11px] text-[#64748B]" htmlFor={`fin-${profil.id}`}>
+                          Jusqu’au
+                        </label>
+                        <input
+                          id={`fin-${profil.id}`}
+                          type="date"
+                          value={attribue?.dateFin ? String(attribue.dateFin).slice(0, 10) : ''}
+                          disabled={setEcheance.isPending}
+                          onChange={(e) =>
+                            setEcheance.mutate({
+                              profilId: profil.id,
+                              dateFin: e.target.value ? new Date(`${e.target.value}T23:59:59`).toISOString() : null,
+                            })
+                          }
+                          className="h-7 rounded-[7px] border border-[rgba(15,76,129,0.15)] bg-white px-2 text-[11px] text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+                        />
+                        <span className="text-[11px] text-[#94A3B8]">
+                          {attribue?.dateFin ? 'Le profil s’éteindra seul.' : 'Vide = sans limite de temps.'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {profils && profils.length === 0 && (

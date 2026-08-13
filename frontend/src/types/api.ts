@@ -141,6 +141,18 @@ export interface Profil {
   estActif: boolean;
 }
 
+/**
+ * Profil tel qu'il est ATTRIBUÉ à quelqu'un : le profil lui-même, plus la
+ * période pendant laquelle il agit (migration 0061). Deux bornes nulles =
+ * permanent. `statut` est calculé par le serveur pour que l'écran n'ait pas à
+ * refaire la comparaison de dates — et n'affiche pas un profil éteint comme actif.
+ */
+export interface ProfilAttribue extends Profil {
+  dateDebut?: string | null;
+  dateFin?: string | null;
+  statut: 'ACTIF' | 'A_VENIR' | 'EXPIRE';
+}
+
 export interface CreateUserPayload {
   matricule: string;
   nom: string;

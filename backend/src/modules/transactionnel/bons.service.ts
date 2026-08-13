@@ -88,6 +88,64 @@ export class BonsService {
   ) {}
 
   /**
+   * Le pays déclaré sur un sous-bon doit être celui du CLIENT choisi.
+   *
+   * L'habilitation porte sur la division que l'utilisateur déclare, pas sur le
+   * client réel : un agent habilité sur une division ivoirienne pouvait donc
+   * créer un bon pour un client angolais en déclarant la Côte d'Ivoire. Le pays
+   * du client n'était qu'une suggestion de l'écran, que rien n'empêchait de
+   * modifier.
+   *
+   * Le rapprochement se fait sur le code ISO-2 (LAND1 de SAP), en une seule
+   * requête. Un client dont le pays est inconnu ne bloque pas : on ne refuse
+   * que sur une contradiction constatée, jamais sur une absence d'information.
+   */
+  private async assertPaysCoherentAvecClient(
+    soubons: Array<{ numeroClient?: string; paysId?: string }>,
+  ): Promise<void> {
+    const aVerifier = soubons.filter(
+      (sb) => sb.numeroClient && String(sb.numeroClient).trim() !== '' && sb.paysId,
+    );
+    if (aVerifier.length === 0) return;
+
+    const numeros = [...new Set(aVerifier.map((sb) => String(sb.numeroClient).trim()))];
+    const paysIds = [...new Set(aVerifier.map((sb) => String(sb.paysId)))];
+    const phNum = numeros.map((_, i) => `@${i}`).join(', ');
+    const phPays = paysIds.map((_, i) => `@${i}`).join(', ');
+
+    const [clients, pays]: [
+      Array<{ numero_client: string; raison_sociale: string; pays: string | null }>,
+      Array<{ id: string; code: string; libelle: string }>,
+    ] = await Promise.all([
+      this.dataSource.query(
+        `SELECT numero_client, raison_sociale, pays FROM dbo.ref_partenaire
+         WHERE numero_client IN (${phNum}) AND deleted_at IS NULL`,
+        numeros,
+      ),
+      this.dataSource.query(
+        `SELECT id, code, libelle FROM dbo.ref_pays WHERE id IN (${phPays})`,
+        paysIds,
+      ),
+    ]);
+
+    const parNumero = new Map(clients.map((c) => [String(c.numero_client), c]));
+    const parId = new Map(pays.map((p) => [String(p.id), p]));
+
+    for (const sb of aVerifier) {
+      const client = parNumero.get(String(sb.numeroClient).trim());
+      const paysDeclare = parId.get(String(sb.paysId));
+      if (!client?.pays || !paysDeclare) continue; // information manquante : on n'accuse pas
+      if (String(client.pays).toUpperCase() !== String(paysDeclare.code).toUpperCase()) {
+        throw new BadRequestException(
+          `Le client « ${client.raison_sociale} » est enregistré en ${client.pays}, ` +
+            `mais le bon déclare ${paysDeclare.code} (${paysDeclare.libelle}). ` +
+            `Corrigez le pays, ou la fiche du client dans SAP.`,
+        );
+      }
+    }
+  }
+
+  /**
    * Crée un bon avec ses sous-bons
    * Règle : si le demandeur est un signataire, le bon est auto-validé
    */
@@ -171,6 +229,7 @@ export class BonsService {
         );
       }
     }
+    await this.assertPaysCoherentAvecClient(input.soubons);
     // Type exigeant un partenaire : présence obligatoire ET le partenaire doit être
     // relié à un fournisseur SAP (n° fournisseur / LIFNR). Contrôle serveur (vaut pour
     // l'API et le mobile), pas seulement le formulaire web.

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { CreateUserPayload, Profil, Role, User } from '@/types/api';
+import type { CreateUserPayload, ProfilAttribue, Role, User } from '@/types/api';
 
 export interface UsersFilters {
   /** Recherche en base sur nom, prénom, matricule et email. */
@@ -143,13 +143,18 @@ export function useToggleUserRole(userId: string) {
 
 // ---------- Profils d'un utilisateur ----------
 
-export async function getUserProfils(userId: string): Promise<Profil[]> {
-  const { data } = await api.get<Profil[]>(`/users/${userId}/profils`);
+export async function getUserProfils(userId: string): Promise<ProfilAttribue[]> {
+  const { data } = await api.get<ProfilAttribue[]>(`/users/${userId}/profils`);
   return data;
 }
 
-export async function assignUserProfil(userId: string, profilId: string): Promise<void> {
-  await api.post(`/users/${userId}/profils/${profilId}`);
+/** Période optionnelle : sans elle, le profil est permanent (comportement d'origine). */
+export async function assignUserProfil(
+  userId: string,
+  profilId: string,
+  validite?: { dateDebut?: string | null; dateFin?: string | null },
+): Promise<void> {
+  await api.post(`/users/${userId}/profils/${profilId}`, validite ?? {});
 }
 
 export async function removeUserProfil(userId: string, profilId: string): Promise<void> {
@@ -167,8 +172,26 @@ export function useUserProfils(userId: string | null) {
 export function useToggleUserProfil(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ profilId, assigned }: { profilId: string; assigned: boolean }) =>
-      assigned ? removeUserProfil(userId, profilId) : assignUserProfil(userId, profilId),
+    mutationFn: ({
+      profilId,
+      assigned,
+      dateFin,
+    }: {
+      profilId: string;
+      assigned: boolean;
+      dateFin?: string | null;
+    }) =>
+      assigned ? removeUserProfil(userId, profilId) : assignUserProfil(userId, profilId, { dateFin }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'profils'] }),
+  });
+}
+
+/** Change la seule échéance d'un profil déjà attribué, sans le retirer. */
+export function useSetProfilEcheance(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ profilId, dateFin }: { profilId: string; dateFin: string | null }) =>
+      assignUserProfil(userId, profilId, { dateFin }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'profils'] }),
   });
 }

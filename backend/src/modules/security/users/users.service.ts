@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -114,20 +114,69 @@ export class UsersService {
     }
   }
 
-  async getProfils(userId: string): Promise<Profil[]> {
+  /**
+   * Profils attribués, enrichis de leur période de validité et de l'état qui en
+   * découle. L'écran doit pouvoir distinguer « accordé pour toujours » de
+   * « expire vendredi » et de « déjà expiré » — sans quoi un profil éteint
+   * s'afficherait comme un profil actif.
+   */
+  async getProfils(
+    userId: string,
+  ): Promise<Array<Profil & { dateDebut: Date | null; dateFin: Date | null; statut: 'ACTIF' | 'A_VENIR' | 'EXPIRE' }>> {
     await this.findOne(userId);
     const links = await this.userProfilRepo.find({ where: { userId }, relations: ['profil'] });
-    return links.map((l) => l.profil).filter((p) => p && p.estActif !== false);
+    const maintenant = Date.now();
+    return links
+      .filter((l) => l.profil && l.profil.estActif !== false)
+      .map((l) => {
+        const debut = l.dateDebut ? new Date(l.dateDebut).getTime() : null;
+        const fin = l.dateFin ? new Date(l.dateFin).getTime() : null;
+        const statut = debut !== null && debut > maintenant ? 'A_VENIR' : fin !== null && fin < maintenant ? 'EXPIRE' : 'ACTIF';
+        return {
+          ...l.profil,
+          dateDebut: l.dateDebut ?? null,
+          dateFin: l.dateFin ?? null,
+          statut: statut as 'ACTIF' | 'A_VENIR' | 'EXPIRE',
+        };
+      });
   }
 
-  async assignProfil(userId: string, profilId: string, actorId: string, ip?: string | null): Promise<void> {
+  /**
+   * Attribue un profil, éventuellement pour une durée limitée.
+   *
+   * Réattribuer un profil déjà présent ne sortait pas en erreur mais ne faisait
+   * rien : c'était sans conséquence quand l'attribution était définitive. Avec
+   * des dates, ce silence deviendrait un piège — prolonger un profil semblerait
+   * fonctionner sans rien changer. On met donc les bornes à jour.
+   */
+  async assignProfil(
+    userId: string,
+    profilId: string,
+    actorId: string,
+    ip?: string | null,
+    validite?: { dateDebut?: string | Date | null; dateFin?: string | Date | null },
+  ): Promise<void> {
     await this.findOne(userId);
     const profil = await this.profilRepo.findOne({ where: { id: profilId } });
     if (!profil) throw new NotFoundException(`Profil ${profilId} introuvable`);
+
+    const dateDebut = validite?.dateDebut ? new Date(validite.dateDebut) : null;
+    const dateFin = validite?.dateFin ? new Date(validite.dateFin) : null;
+    if (dateDebut && dateFin && dateFin < dateDebut) {
+      throw new BadRequestException(
+        'La fin de validité du profil est antérieure à son début : le profil ne serait jamais actif.',
+      );
+    }
+
     const existing = await this.userProfilRepo.findOne({ where: { userId, profilId } });
-    if (existing) return;
+    if (existing) {
+      existing.dateDebut = dateDebut;
+      existing.dateFin = dateFin;
+      await this.userProfilRepo.save(existing);
+      return;
+    }
     await this.userProfilRepo.save(
-      this.userProfilRepo.create({ userId, profilId, attribueParId: actorId }),
+      this.userProfilRepo.create({ userId, profilId, attribueParId: actorId, dateDebut, dateFin }),
     );
     await this.auditPerm.logUserProfilChange(userId, profilId, 'GAIN', actorId, ip);
   }

@@ -199,12 +199,18 @@ export class AuthorizationService {
       console.warn('[authz] résolution permissions via rôles échouée :', (e as Error).message);
     }
 
+    // Profils : seulement ceux VALIDES aujourd'hui (migration 0061). Un profil
+    // prêté le temps d'un remplacement s'éteint de lui-même à l'échéance ; deux
+    // bornes nulles = permanent, ce qui couvre toutes les attributions d'avant.
     try {
+      const maintenant = new Date();
       const profilRows: Array<{ code: string }> = await this.dataSource
         .getRepository(ProfilPermission)
         .createQueryBuilder('pp')
         .innerJoin(UserProfil, 'up', 'up.profil_id = pp.profil_id AND up.user_id = :userId', { userId })
         .innerJoin(Permission, 'p', 'p.id = pp.permission_id')
+        .where('(up.date_debut IS NULL OR up.date_debut <= :maintenant)', { maintenant })
+        .andWhere('(up.date_fin IS NULL OR up.date_fin >= :maintenant)')
         .select('p.code', 'code')
         .getRawMany();
       for (const r of profilRows) codes.add(r.code);
@@ -366,10 +372,24 @@ export class AuthorizationService {
     return new Set(rows.map((r) => String(r.divisionId)));
   }
 
-  /** Vérifie que l'utilisateur a accès à la division (sinon Forbidden). */
+  /**
+   * Vérifie que l'utilisateur a accès à la division (sinon Forbidden).
+   *
+   * Le refus distingue deux causes que le même message confondait : « vous avez
+   * des divisions, mais pas celle-là » et « vous n'en avez AUCUNE ». Le second
+   * cas n'est pas une erreur de saisie mais une habilitation jamais accordée —
+   * et il se produit pour tout nouvel utilisateur, dont aucune division n'a
+   * encore été renseignée. Envoyer chercher au mauvais endroit coûte cher.
+   */
   async assertDivisionInPerimeter(userId: string, divisionId: string): Promise<void> {
     const perim = await this.getDivisionPerimeter(userId);
     if (perim === null) return; // admin : accès total
+    if (perim.size === 0) {
+      throw new ForbiddenException(
+        "Aucune division ne vous est attribuée : vous ne pouvez pas créer de bon client. " +
+          "Demandez à un administrateur de vous donner accès à vos pays d'intervention.",
+      );
+    }
     if (!perim.has(String(divisionId))) {
       throw new ForbiddenException("Cette division est hors de votre périmètre d'autorisation.");
     }

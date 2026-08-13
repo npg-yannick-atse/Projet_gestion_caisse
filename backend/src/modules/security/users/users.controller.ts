@@ -19,6 +19,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { AssignProfilDto } from './dto/profil.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '../authorization.service';
@@ -170,6 +171,9 @@ export class UsersController {
   async assignProfil(
     @Param('id') id: string,
     @Param('profilId') profilId: string,
+    // Période de validité optionnelle : corps absent ou vide = profil permanent,
+    // ce qui préserve le comportement des appels existants (et du mobile).
+    @Body() body: AssignProfilDto | undefined,
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
@@ -179,7 +183,10 @@ export class UsersController {
         'Vous ne pouvez pas modifier vos propres profils. Demandez à un autre administrateur.',
       );
     }
-    await this.usersService.assignProfil(id, profilId, user.sub, ip);
+    await this.usersService.assignProfil(id, profilId, user.sub, ip, {
+      dateDebut: body?.dateDebut ?? null,
+      dateFin: body?.dateFin ?? null,
+    });
   }
 
   @Delete(':id/profils/:profilId')
