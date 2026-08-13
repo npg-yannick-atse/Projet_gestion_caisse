@@ -166,6 +166,26 @@ export class ProfilsController {
     return this.profilsService.setPerimetreProfil(profilId, 'natures-operation', dto.ids ?? [], user.sub);
   }
 
+  @Get(':profilId/roles')
+  @ApiOperation({ summary: 'Rôles portés par un profil' })
+  getProfilRoles(@Param('profilId') profilId: string) {
+    return this.profilsService.getPerimetreProfil(profilId, 'roles');
+  }
+
+  @Put(':profilId/roles')
+  @ApiOperation({ summary: 'Choisir les rôles portés par un profil' })
+  async setProfilRoles(
+    @Param('profilId') profilId: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // ADMIN_ROLE, comme pour attacher une permission — et pour une raison plus
+    // forte : un profil portant SUPER_ADMIN rend administrateur quiconque le
+    // reçoit. PROFIL_GERER, qui suffit à renommer un profil, serait trop faible.
+    await this.authz.assertPermission(user.sub, 'ADMIN_ROLE', 'attacher un rôle à un profil');
+    return this.profilsService.setPerimetreProfil(profilId, 'roles', dto.ids ?? [], user.sub);
+  }
+
   @Get(':profilId/permissions')
   @ApiOperation({ summary: "Lister les permissions d'un profil" })
   getProfilPermissions(@Param('profilId') profilId: string) {

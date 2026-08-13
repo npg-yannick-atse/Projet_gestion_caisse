@@ -103,7 +103,7 @@ export function useDeleteProfil() {
    Un profil transmet désormais divisions, natures et centres de coût, pas
    seulement des permissions. On envoie la sélection COMPLÈTE, comme partout. */
 
-export type PerimetreProfil = 'cost-centers' | 'divisions' | 'natures-operation';
+export type PerimetreProfil = 'cost-centers' | 'divisions' | 'natures-operation' | 'roles';
 
 export async function getPerimetreProfil(profilId: string, quoi: PerimetreProfil): Promise<string[]> {
   const { data } = await api.get<string[]>(`/profils/${profilId}/${quoi}`);

@@ -15,6 +15,7 @@ import { UserNatureOperation } from './entities/user-nature-operation.entity';
 import { ProfilCostCenter } from './entities/profil-cost-center.entity';
 import { ProfilNatureOperation } from './entities/profil-nature-operation.entity';
 import { ProfilDivisionAccess } from './entities/profil-division-access.entity';
+import { ProfilRole } from './entities/profil-role.entity';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRATEUR'];
 
@@ -82,6 +83,21 @@ export class AuthorizationService {
       console.warn('[authz] rôles effectifs (intérim) échoués :', (e as Error).message);
     }
 
+    // Rôles portés par ses PROFILS (migration 0068). Un profil est un paquet
+    // complet : sans ça, il transmettait ce qu'on peut faire mais pas ce qu'on
+    // est — et son porteur restait bloqué au verrou d'entrée.
+    try {
+      const ids = await this.rolesViaProfils(userId);
+      if (ids.length > 0) {
+        const portes = await this.dataSource
+          .getRepository(Role)
+          .find({ where: { id: In(ids) as any } });
+        for (const r of portes) if (r.estActif !== false) byId.set(String(r.id), r);
+      }
+    } catch (e) {
+      console.warn('[authz] rôles effectifs (profils) échoués :', (e as Error).message);
+    }
+
     // Dépliage des méta-rôles : on AJOUTE les rôles de base ciblés (ex. DAF →
     // ADMINISTRATEUR + CAISSIER) pour que la navigation et les gardes voient les
     // bons droits, tout en CONSERVANT le méta-rôle lui-même (DAF garde son propre
@@ -126,6 +142,25 @@ export class AuthorizationService {
       }
     } catch (e) {
       console.warn('[authz] résolution des rôles délégués (intérim) échouée :', (e as Error).message);
+    }
+
+    // Rôles portés par ses profils (migration 0068). C'est ici que se joue le
+    // statut d'administrateur : `isAdmin` lit ces codes. Un profil portant
+    // SUPER_ADMIN rend donc administrateur — c'est voulu, et c'est pourquoi
+    // attacher un rôle à un profil exige ADMIN_ROLE.
+    try {
+      const ids = await this.rolesViaProfils(userId);
+      if (ids.length > 0) {
+        const portes: Array<{ code: string }> = await this.dataSource
+          .getRepository(Role)
+          .createQueryBuilder('r')
+          .where('r.id IN (:...ids)', { ids })
+          .select('r.code', 'code')
+          .getRawMany();
+        for (const r of portes) codes.add(r.code);
+      }
+    } catch (e) {
+      console.warn('[authz] résolution des rôles via profils échouée :', (e as Error).message);
     }
 
     // Dépliage des méta-rôles (ex. DAF → ADMINISTRATEUR + CAISSIER).
@@ -392,6 +427,21 @@ export class AuthorizationService {
       .andWhere('(up.date_fin IS NULL OR up.date_fin >= :maintenant)')
       .getMany();
     return liens.map((l) => String(l.profilId));
+  }
+
+  /**
+   * Rôles portés par les profils VALIDES de l'utilisateur (migration 0068).
+   *
+   * Passe par `getProfilIds`, qui écarte déjà les profils expirés : un profil
+   * prêté jusqu'au 31 ne doit pas laisser son rôle actif le 1er.
+   */
+  private async rolesViaProfils(userId: string): Promise<string[]> {
+    const profilIds = await this.getProfilIds(userId);
+    if (profilIds.length === 0) return [];
+    const rows = await this.dataSource
+      .getRepository(ProfilRole)
+      .find({ where: { profilId: In(profilIds) as any } });
+    return rows.map((r) => String(r.roleId));
   }
 
   /** Cibles d'un périmètre portées par les profils de l'utilisateur. */

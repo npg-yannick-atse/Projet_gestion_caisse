@@ -14,6 +14,7 @@ import { UserCostCenter } from './entities/user-cost-center.entity';
 import { ProfilCostCenter } from './entities/profil-cost-center.entity';
 import { ProfilNatureOperation } from './entities/profil-nature-operation.entity';
 import { ProfilDivisionAccess } from './entities/profil-division-access.entity';
+import { ProfilRole } from './entities/profil-role.entity';
 import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
 import { UserNatureOperation } from './entities/user-nature-operation.entity';
@@ -51,6 +52,7 @@ import { AuthorizationService } from './authorization.service';
       ProfilCostCenter,
       ProfilNatureOperation,
       ProfilDivisionAccess,
+      ProfilRole,
       UserPermissionExtra,
       UserDivisionAccess,
       UserNatureOperation,

@@ -23,7 +23,7 @@ import {
   useSetPerimetreProfil,
   type PerimetreProfil,
 } from '@/api/profils';
-import { usePermissions } from '@/api/roles';
+import { usePermissions, useRoles } from '@/api/roles';
 import { useCostCenters, useDivisions, useNaturesOperation } from '@/api/referentiel';
 import type { Permission, Profil } from '@/types/api';
 import { apiErrorMessage, cn } from '@/lib/utils';
@@ -401,10 +401,11 @@ function ProfilsPageInner() {
   const [form, setForm] = useState<{ profil: Profil | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Profil | null>(null);
   const selected = profils?.find((p) => p.id === selectedId) ?? null;
-  const [volet, setVolet] = useState<'permissions' | 'cost-centers' | 'divisions' | 'natures-operation'>('permissions');
+  const [volet, setVolet] = useState<'permissions' | 'roles' | 'cost-centers' | 'divisions' | 'natures-operation'>('permissions');
   const { data: costCenters } = useCostCenters();
   const { data: divisions } = useDivisions();
   const { data: natures } = useNaturesOperation();
+  const { data: roles } = useRoles();
 
   return (
     <div className="flex flex-col gap-4">
@@ -504,6 +505,7 @@ function ProfilsPageInner() {
             {(
               [
                 ['permissions', 'Permissions'],
+                ['roles', 'Rôles'],
                 ['cost-centers', 'Centres de coût'],
                 ['divisions', 'Divisions'],
                 ['natures-operation', 'Natures'],
@@ -528,6 +530,15 @@ function ProfilsPageInner() {
               largement la hauteur de l'écran. */}
           <div className="flex-1 overflow-y-auto p-4">
           {volet === 'permissions' && <PermissionEditor profil={selected} />}
+          {volet === 'roles' && (
+            <PerimetreEditor
+              profil={selected}
+              quoi="roles"
+              titre="Rôles"
+              aide="Quiconque reçoit ce profil obtient ces rôles. Un profil portant Super Administrateur rend donc administrateur — avec le contournement des contrôles que cela implique."
+              elements={(roles ?? []).map((r) => ({ id: r.id, code: r.code, libelle: r.libelle }))}
+            />
+          )}
           {volet === 'cost-centers' && (
             <PerimetreEditor
               profil={selected}

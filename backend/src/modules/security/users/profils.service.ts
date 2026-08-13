@@ -10,6 +10,7 @@ import { User } from '../entities/user.entity';
 import { UserCostCenter } from '../entities/user-cost-center.entity';
 import { UserNatureOperation } from '../entities/user-nature-operation.entity';
 import { UserDivisionAccess } from '../entities/user-division-access.entity';
+import { UserRole } from '../entities/user-role.entity';
 import { ProfilCostCenter } from '../entities/profil-cost-center.entity';
 import { ProfilNatureOperation } from '../entities/profil-nature-operation.entity';
 import { ProfilDivisionAccess } from '../entities/profil-division-access.entity';
@@ -123,15 +124,15 @@ export class ProfilsService {
    * aplati en un seul objet attribuable. C'est la réponse à « donne-lui les
    * mêmes droits qu'elle », sans avoir à retrouver d'où chaque droit provient.
    *
-   * DEUX LIMITES à connaître, et elles sont dans la nature d'un profil :
+   * Depuis la migration 0068, les RÔLES de la personne sont recopiés eux aussi.
+   * Un profil transporte donc ce qu'elle peut faire ET ce qu'elle est : copier
+   * un administrateur fabrique bien un administrateur. C'est ce qu'on attend de
+   * « donne-lui les mêmes droits », et c'est aussi ce qui rend l'opération
+   * sensible — d'où ADMIN_ROLE pour attacher un rôle à un profil.
    *
-   *  - un profil ne transporte QUE des permissions. Ce qu'un rôle décide par
-   *    son code — voir les bons de tous, contourner les contrôles en tant
-   *    qu'administrateur, modifier un bon — ne s'y met pas. Copier un
-   *    administrateur ne fabrique donc pas un administrateur ;
-   *  - les périmètres ne suivent pas non plus : direction, caisses,
-   *    portefeuilles, centres de coût et natures restent attachés à la
-   *    personne, pas à ses droits.
+   * CE QUI NE SUIT TOUJOURS PAS : la direction de la personne, qui relève de
+   * l'organigramme et non des droits. Les périmètres, eux, se posent sur le
+   * profil lui-même (migration 0067) plutôt que d'être recopiés d'un individu.
    *
    * La copie est ponctuelle : le profil ne suivra pas l'utilisateur d'origine.
    */
@@ -169,6 +170,21 @@ export class ProfilsService {
       libelle,
       description: `Généré depuis les droits de ${utilisateur.prenom} ${utilisateur.nom}`,
     } as CreateProfilDto);
+
+    // Les RÔLES de la personne suivent aussi (migration 0068). Sans eux, le
+    // profil transmettait ce qu'elle peut faire mais pas ce qu'elle est : son
+    // porteur restait bloqué au verrou d'entrée, avec des dizaines de
+    // permissions inutilisables.
+    const rolesPropres = await this.profilRepo.manager
+      .getRepository(UserRole)
+      .find({ where: { userId: userId as any } });
+    for (const r of rolesPropres) {
+      await this.profilRepo.manager.query(
+        `IF NOT EXISTS (SELECT 1 FROM dbo.sec_profil_role WHERE profil_id=@0 AND role_id=@1)
+         INSERT INTO dbo.sec_profil_role (profil_id, role_id, created_by_id) VALUES (@0, @1, @2)`,
+        [String(profil.id), String(r.roleId), actorId],
+      );
+    }
 
     for (const permission of permissions) {
       await this.assignPermissionToProfil(String(profil.id), String(permission.id), actorId);
@@ -221,7 +237,7 @@ export class ProfilsService {
      ====================================================================== */
 
   /** Le nom de la table et de la colonne cible, par périmètre. */
-  private perimetreProfil(quoi: 'cost-centers' | 'divisions' | 'natures-operation'): {
+  private perimetreProfil(quoi: 'cost-centers' | 'divisions' | 'natures-operation' | 'roles'): {
     table: string;
     colonne: string;
   } {
@@ -232,12 +248,14 @@ export class ProfilsService {
         return { table: 'sec_profil_division_access', colonne: 'division_id' };
       case 'natures-operation':
         return { table: 'sec_profil_nature_operation', colonne: 'nature_operation_id' };
+      case 'roles':
+        return { table: 'sec_profil_role', colonne: 'role_id' };
     }
   }
 
   async getPerimetreProfil(
     profilId: string,
-    quoi: 'cost-centers' | 'divisions' | 'natures-operation',
+    quoi: 'cost-centers' | 'divisions' | 'natures-operation' | 'roles',
   ): Promise<string[]> {
     await this.findProfil(profilId);
     const { table, colonne } = this.perimetreProfil(quoi);
@@ -250,7 +268,7 @@ export class ProfilsService {
 
   async setPerimetreProfil(
     profilId: string,
-    quoi: 'cost-centers' | 'divisions' | 'natures-operation',
+    quoi: 'cost-centers' | 'divisions' | 'natures-operation' | 'roles',
     idsVoulus: string[],
     actorId: string,
   ): Promise<string[]> {
