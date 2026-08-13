@@ -206,9 +206,13 @@ export class ProfilsService {
      * sans dire sur quoi — un demandeur cloné pouvait créer un bon en théorie,
      * et se voyait refuser chaque nature d'opération en pratique.
      *
-     * Ce qui NE suit pas, faute de sens : les rôles (leur code déclenche des
-     * règles écrites en dur) et les accès aux caisses (un coffre se confie à
-     * une personne nommée, pas à un paquet de droits).
+     * Ce qui NE suit pas, faute de sens : les accès aux caisses — un coffre se
+     * confie à une personne nommée, pas à un paquet de droits — et la
+     * direction, qui relève de l'organigramme.
+     *
+     * Les rôles, eux, suivent depuis la migration 0068 : sans eux le profil
+     * transmettait ce qu'on peut faire mais pas ce qu'on est, et son porteur
+     * restait bloqué au verrou d'entrée de l'application.
      */
     const m = this.profilRepo.manager;
     const copier = async <S extends object, C extends object>(
