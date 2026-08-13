@@ -507,7 +507,10 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
       )}
       {clonage && <ClonageModal cible={user} onFermer={() => setClonage(false)} />}
       <div
-        className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
+        /* max-w-4xl : à 2xl, les six onglets et les deux boutons d'en-tête
+           débordaient et imposaient un défilement horizontal alors que l'écran
+           est large. */
+        className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* En-tête : identité de l'utilisateur */}
@@ -563,7 +566,10 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
         </div>
 
         {/* Onglets (volets) */}
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-[rgba(15,76,129,0.08)] px-3">
+        {/* `flex-wrap` plutôt que `overflow-x-auto` : sur un écran étroit les
+            onglets passent à la ligne au lieu d'exiger un glissement latéral,
+            qui masque toujours ceux qu'on cherche. */}
+        <div className="flex flex-wrap items-center gap-1 border-b border-[rgba(15,76,129,0.08)] px-3">
           <TabBtn active={tab === 'general'} onClick={() => setTab('general')} icon={Settings2} label="Général" />
           <TabBtn active={tab === 'roles'} onClick={() => setTab('roles')} icon={ShieldCheck} label="Rôles" count={assigned.size} />
           <TabBtn active={tab === 'profils'} onClick={() => setTab('profils')} icon={BadgeCheck} label="Profils" count={assignedProfils.size} />
