@@ -214,11 +214,15 @@ export interface ResumeClonage {
   costCenters: number;
 }
 
+export type ModeClonage = 'REMPLACER' | 'AJOUTER';
+
 export function useClonerDroits(userId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (sourceId: string) => {
-      const { data } = await api.post<ResumeClonage>(`/users/${userId}/cloner-depuis/${sourceId}`);
+    mutationFn: async ({ sourceId, mode }: { sourceId: string; mode: ModeClonage }) => {
+      const { data } = await api.post<ResumeClonage>(`/users/${userId}/cloner-depuis/${sourceId}`, {
+        mode,
+      });
       return data;
     },
     // Le clonage touche cinq collections : on périme tout ce qui concerne

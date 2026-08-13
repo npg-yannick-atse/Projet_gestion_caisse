@@ -122,6 +122,46 @@ describe('Clonage des droits — profils', () => {
   });
 });
 
+/**
+ * Mode AJOUTER : le remplaçant d'un absent doit continuer SON travail.
+ *
+ * Remplacer lui ferait perdre son rôle CAISSIER, ses caisses et ses natures —
+ * il ne pourrait plus encaisser de la journée. Les droits de l'absent doivent
+ * donc s'ajouter aux siens, pas s'y substituer.
+ */
+describe('Clonage des droits — mode AJOUTER', () => {
+  const enMode = (s: Parameters<typeof monter>[0]) => monter(s);
+
+  it('ne retire AUCUN rôle propre à la cible', async () => {
+    const { service, journal } = enMode({ roles: ['1'], cibleRoles: ['5'] });
+    await service.clonerDroits('S', 'C', '9', null, 'AJOUTER');
+    expect(journal).toContain('role+1'); // celui de l'absent arrive
+    expect(journal).not.toContain('role-5'); // le sien reste
+  });
+
+  it('réunit les deux périmètres au lieu d’écraser', async () => {
+    const { service, journal } = enMode({ divisions: ['1', '2'] });
+    // La cible en a déjà : le dépôt renvoie la même liste pour les deux, ce qui
+    // suffit à vérifier que l'union est faite et non un simple remplacement.
+    await service.clonerDroits('S', 'C', '9', null, 'AJOUTER');
+    const ligne = journal.find((e) => e.startsWith('div='))!;
+    expect(ligne).toBe('div=1,2');
+  });
+
+  it('n’efface pas les profils de la cible', async () => {
+    const { service, journal } = enMode({ profils: [{ profilId: '7' }] });
+    await service.clonerDroits('S', 'C', '9', null, 'AJOUTER');
+    expect(journal).not.toContain('profils-vides');
+  });
+
+  it('REMPLACER reste le comportement par défaut', async () => {
+    // Le mode est optionnel : un appel sans mode ne doit pas devenir additif.
+    const { service, journal } = enMode({ roles: [], cibleRoles: ['5'] });
+    await service.clonerDroits('S', 'C', '9', null);
+    expect(journal).toContain('role-5');
+  });
+});
+
 describe('Clonage des droits — garde-fou', () => {
   it('refuse de cloner quelqu’un sur lui-même', async () => {
     const { service } = monter({});

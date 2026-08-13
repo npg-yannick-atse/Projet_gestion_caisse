@@ -23,6 +23,7 @@ import {
   useSetUserCostCenters,
   useClonerDroits,
   type ResumeClonage,
+  type ModeClonage,
 } from '@/api/users';
 import { useProfils, useGenererProfilDepuisUtilisateur } from '@/api/profils';
 import { GenererDepuisModal } from '@/components/GenererDepuisModal';
@@ -271,6 +272,7 @@ function ClonageModal({
   const [recherche, setRecherche] = useState('');
   const [source, setSource] = useState<User | null>(null);
   const [resume, setResume] = useState<ResumeClonage | null>(null);
+  const [mode, setMode] = useState<ModeClonage>('REMPLACER');
 
   const candidats = useMemo(() => {
     const q = recherche.trim().toLowerCase();
@@ -311,11 +313,56 @@ function ClonageModal({
           ) : (
             <>
               <div className="space-y-2 p-[18px] pb-3">
-                <div className="rounded-[9px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[11px] text-[#92400E]">
-                  Le périmètre actuel de {cible.prenom} sera <strong>remplacé</strong>, pas complété :
-                  ses rôles, profils, divisions, natures et centres de coût deviendront exactement
-                  ceux de la personne choisie.
+                {/* Le mode est le vrai choix de cet écran : remplacer convient à
+                    une recrue, ajouter à un remplaçant qui doit continuer son
+                    propre travail. Se tromper coûte cher dans les deux sens. */}
+                <div className="space-y-1.5">
+                  <label className="flex cursor-pointer items-start gap-2 rounded-[9px] border border-[rgba(15,76,129,0.12)] px-3 py-2">
+                    <input
+                      type="radio"
+                      name="mode-clonage"
+                      checked={mode === 'REMPLACER'}
+                      onChange={() => setMode('REMPLACER')}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span className="text-[12px] text-[#0F172A]">
+                      <strong>Remplacer ses droits</strong>
+                      <span className="block text-[11px] text-[#64748B]">
+                        {cible.prenom} devient l'exact équivalent de la personne choisie. Ses propres
+                        rôles et périmètres sont retirés. Pour une recrue au même poste.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 rounded-[9px] border border-[rgba(15,76,129,0.12)] px-3 py-2">
+                    <input
+                      type="radio"
+                      name="mode-clonage"
+                      checked={mode === 'AJOUTER'}
+                      onChange={() => setMode('AJOUTER')}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span className="text-[12px] text-[#0F172A]">
+                      <strong>Ajouter à ses droits</strong>
+                      <span className="block text-[11px] text-[#64748B]">
+                        {cible.prenom} garde tout ce qu'il a et reçoit en plus les droits de l'autre.
+                        Pour un remplacement — il doit continuer son propre travail.
+                      </span>
+                    </span>
+                  </label>
                 </div>
+
+                {mode === 'AJOUTER' ? (
+                  <div className="rounded-[9px] border border-[#FDE68A] bg-[#FFFBEB] p-3 text-[11px] text-[#92400E]">
+                    Ces droits sont <strong>permanents</strong> : contrairement à un intérim, rien ne
+                    les retirera à une date donnée. Pensez à revenir les enlever au retour de l'absent.
+                  </div>
+                ) : (
+                  <div className="rounded-[9px] border border-[#FECDCA] bg-[#FEF3F2] p-3 text-[11px] text-[#7F1D1D]">
+                    Le périmètre actuel de {cible.prenom} sera <strong>effacé</strong> : ses rôles,
+                    profils, divisions, natures et centres de coût deviendront exactement ceux de la
+                    personne choisie.
+                  </div>
+                )}
                 <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2.5 py-1.5">
                   <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
                   <input
@@ -358,7 +405,8 @@ function ClonageModal({
                   type="button"
                   disabled={!source || cloner.isPending}
                   onClick={() =>
-                    source && cloner.mutate(source.id, { onSuccess: (r) => setResume(r) })
+                    source &&
+                    cloner.mutate({ sourceId: source.id, mode }, { onSuccess: (r) => setResume(r) })
                   }
                 >
                   {cloner.isPending ? 'Copie…' : 'Recopier ces droits'}

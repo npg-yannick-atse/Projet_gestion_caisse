@@ -21,7 +21,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignProfilDto } from './dto/profil.dto';
-import { AffectationEnMasseDto } from './dto/affectation-masse.dto';
+import { AffectationEnMasseDto, ClonageDroitsDto } from './dto/affectation-masse.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '../authorization.service';
@@ -229,6 +229,8 @@ export class UsersController {
   async clonerDroits(
     @Param('id') id: string,
     @Param('sourceId') sourceId: string,
+    // Corps absent = REMPLACER, le comportement d'origine.
+    @Body() body: ClonageDroitsDto | undefined,
     @CurrentUser() user: JwtPayload,
     @Ip() ip: string,
   ) {
@@ -239,7 +241,7 @@ export class UsersController {
         'Vous ne pouvez pas recopier des droits sur vous-même. Demandez à un autre administrateur.',
       );
     }
-    return this.usersService.clonerDroits(sourceId, id, user.sub, ip);
+    return this.usersService.clonerDroits(sourceId, id, user.sub, ip, body?.mode ?? 'REMPLACER');
   }
 
   @Put(':id/divisions')

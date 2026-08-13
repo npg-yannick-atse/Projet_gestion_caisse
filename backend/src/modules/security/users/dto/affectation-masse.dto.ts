@@ -1,4 +1,4 @@
-import { ArrayUnique, IsArray, IsNumberString, IsOptional } from 'class-validator';
+import { ArrayUnique, IsArray, IsIn, IsNumberString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
@@ -17,4 +17,18 @@ export class AffectationEnMasseDto {
   @ArrayUnique()
   @IsNumberString({}, { each: true })
   ids?: string[];
+}
+
+/**
+ * Mode de recopie des droits d'un utilisateur vers un autre.
+ *
+ * REMPLACER : la cible devient exactement la source — une recrue au même poste.
+ * AJOUTER   : les droits s'additionnent — un remplaçant qui doit continuer son
+ *             propre travail pendant qu'il couvre un absent.
+ */
+export class ClonageDroitsDto {
+  @ApiProperty({ required: false, enum: ['REMPLACER', 'AJOUTER'], default: 'REMPLACER' })
+  @IsOptional()
+  @IsIn(['REMPLACER', 'AJOUTER'])
+  mode?: 'REMPLACER' | 'AJOUTER';
 }

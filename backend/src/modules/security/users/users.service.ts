@@ -178,6 +178,17 @@ export class UsersService {
     cibleId: string,
     actorId: string,
     ip?: string | null,
+    /**
+     * REMPLACER — la cible devient exactement la source. Pour une recrue au
+     * même poste : c'est un clone, et les droits propres de la cible n'ont pas
+     * à survivre.
+     *
+     * AJOUTER — les droits de la source s'ajoutent aux siens, rien n'est
+     * retiré. C'est le mode d'un remplacement : le remplaçant doit continuer
+     * son propre travail. Remplacer lui ferait perdre son rôle CAISSIER, ses
+     * caisses et ses natures — il ne pourrait plus encaisser.
+     */
+    mode: 'REMPLACER' | 'AJOUTER' = 'REMPLACER',
   ): Promise<{
     roles: number;
     profils: number;
@@ -190,6 +201,7 @@ export class UsersService {
     }
     await this.findOne(sourceId);
     await this.findOne(cibleId);
+    const ajoute = mode === 'AJOUTER';
 
     // Rôles : on passe par assignRole/removeRole pour conserver la journalisation
     // des gains et pertes de permission, que l'audit exploite.
@@ -200,15 +212,21 @@ export class UsersService {
     for (const roleId of [...voulus].filter((id) => !actuels.has(id))) {
       await this.assignRole(cibleId, roleId, actorId, ip);
     }
-    for (const roleId of [...actuels].filter((id) => !voulus.has(id))) {
-      await this.removeRole(cibleId, roleId, actorId, ip);
+    if (!ajoute) {
+      for (const roleId of [...actuels].filter((id) => !voulus.has(id))) {
+        await this.removeRole(cibleId, roleId, actorId, ip);
+      }
     }
 
     // Profils : la période de validité suit. Un profil prêté jusqu'au 31 doit
     // l'être aussi chez la cible, sinon le clone hérite d'un droit permanent.
     const profilsSource = await this.userProfilRepo.find({ where: { userId: sourceId } });
-    await this.userProfilRepo.delete({ userId: cibleId });
-    for (const p of profilsSource) {
+    const profilsCible = ajoute
+      ? await this.userProfilRepo.find({ where: { userId: cibleId } })
+      : [];
+    const dejaLa = new Set(profilsCible.map((p) => String(p.profilId)));
+    if (!ajoute) await this.userProfilRepo.delete({ userId: cibleId });
+    for (const p of profilsSource.filter((p) => !dejaLa.has(String(p.profilId)))) {
       await this.userProfilRepo.save(
         this.userProfilRepo.create({
           userId: cibleId,
@@ -220,14 +238,36 @@ export class UsersService {
       );
     }
 
-    const divisions = (await this.userDivisionRepo.find({ where: { userId: sourceId } })).map((r) =>
-      String(r.divisionId),
+    // En mode AJOUTER, on réunit les deux périmètres ; en REMPLACER, celui de la
+    // source suffit — `setX` se charge de retirer le reste.
+    const reunir = async (
+      repo: { find: Function },
+      champ: string,
+      idsSource: string[],
+    ): Promise<string[]> => {
+      if (!ajoute) return idsSource;
+      const actuels: any[] = await repo.find({ where: { userId: cibleId } });
+      return [...new Set([...actuels.map((r) => String(r[champ])), ...idsSource])];
+    };
+
+    const divisions = await reunir(
+      this.userDivisionRepo,
+      'divisionId',
+      (await this.userDivisionRepo.find({ where: { userId: sourceId } })).map((r) => String(r.divisionId)),
     );
-    const natures = (await this.userNatureRepo.find({ where: { userId: sourceId } })).map((r) =>
-      String(r.natureOperationId),
+    const natures = await reunir(
+      this.userNatureRepo,
+      'natureOperationId',
+      (await this.userNatureRepo.find({ where: { userId: sourceId } })).map((r) =>
+        String(r.natureOperationId),
+      ),
     );
-    const costCenters = (await this.userCostCenterRepo.find({ where: { userId: sourceId } })).map(
-      (r) => String(r.costCenterId),
+    const costCenters = await reunir(
+      this.userCostCenterRepo,
+      'costCenterId',
+      (await this.userCostCenterRepo.find({ where: { userId: sourceId } })).map((r) =>
+        String(r.costCenterId),
+      ),
     );
     await this.setDivisions(cibleId, divisions, actorId);
     await this.setNaturesOperation(cibleId, natures, actorId);
