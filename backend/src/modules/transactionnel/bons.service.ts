@@ -1329,7 +1329,7 @@ export class BonsService {
     if (this.authz.isAdminCodes(codes) || codes.has('VALIDATEUR')) return;
     if (await this.authz.hasPermission(userId, 'BON_MODIFIER_SPEC')) return;
     throw new ForbiddenException(
-      'Action non autorisée (modifier un bon). Rôle VALIDATEUR ou permission BON_MODIFIER_SPEC requis.',
+      'Action non autorisée (modifier un bon). Permission BON_MODIFIER ou BON_MODIFIER_SPEC requise.',
     );
   }
 

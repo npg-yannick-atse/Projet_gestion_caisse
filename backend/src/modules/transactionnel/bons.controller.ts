@@ -23,17 +23,16 @@ import { CreateBonDto } from './dto/create-bon.dto';
 import { DecaisserBonDto } from './dto/decaisser-bon.dto';
 
 /**
- * Rôles qui ont accès à TOUS les bons (pas de restriction au demandeur).
- * Tout autre profil (DEMANDEUR pur) ne voit que ses propres bons, peu importe
- * le paramètre demandeurId fourni dans la query.
+ * Voir les bons de TOUS les demandeurs — sinon on ne voit que les siens, quel
+ * que soit le `demandeurId` passé dans l'URL.
+ *
+ * C'était une liste de CODES DE RÔLE écrite ici même. Un rôle créé depuis
+ * l'écran n'y figurait donc jamais : on pouvait lui donner BON_VALIDER sans
+ * qu'il voie un seul bon à valider — le droit sans la vue. La règle est
+ * devenue une permission (migration 0066), accordée aux mêmes rôles qu'avant,
+ * et désormais portable par n'importe quel rôle ou profil.
  */
-const ROLES_VOIENT_TOUS_LES_BONS = new Set([
-  'SUPER_ADMIN',
-  'ADMINISTRATEUR',
-  'VALIDATEUR',
-  'CAISSIER',
-  'GESTIONNAIRE_PORTEFEUILLE',
-]);
+const PERM_VOIR_TOUS_LES_BONS = 'BON_VOIR_TOUS';
 
 @ApiTags('Transactionnel / Bons')
 @ApiBearerAuth()
@@ -52,13 +51,22 @@ export class BonsController {
    * - Sinon (DEMANDEUR pur) → on force au sub du JWT, ce qui empêche un
    *   demandeur de consulter les bons de quelqu'un d'autre via un curl direct.
    */
+  /**
+   * Vrai si l'utilisateur voit les bons d'autrui. Les administrateurs passent
+   * toujours : leur contournement reste une identité, non une permission.
+   */
+  private async peutVoirTousLesBons(userId: string): Promise<boolean> {
+    if (await this.authz.isAdmin(userId)) return true;
+    return this.authz.hasPermission(userId, PERM_VOIR_TOUS_LES_BONS);
+  }
+
   private async resolveDemandeurFilter(
     user: JwtPayload,
     clientDemandeurId?: string,
   ): Promise<string | undefined> {
-    // Rôles effectifs (assignés + délégués par un intérim actif).
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    const privileged = Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c));
+    // `assertPermission` = contournement administrateur OU permission détenue ;
+    // `hasPermission` couvre rôles, profils, permissions individuelles et intérims.
+    const privileged = await this.peutVoirTousLesBons(user.sub);
     return privileged ? clientDemandeurId : user.sub;
   }
 
@@ -74,8 +82,7 @@ export class BonsController {
   ): Promise<string | undefined> {
     if (!clientValidateurId) return undefined;
     if (String(clientValidateurId) === String(user.sub)) return user.sub;
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    const privileged = Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c));
+    const privileged = await this.peutVoirTousLesBons(user.sub);
     return privileged ? clientValidateurId : user.sub;
   }
 
@@ -88,9 +95,8 @@ export class BonsController {
     const bon = await this.bonsService.findOne(id);
     // Son propre bon : toujours lisible.
     if (String(bon.demandeurId) === String(user.sub)) return bon;
-    // Rôle privilégié : voit tous les bons.
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    if (Array.from(codes).some((c) => ROLES_VOIENT_TOUS_LES_BONS.has(c))) return bon;
+    // Droit de tout voir : voit ce bon.
+    if (await this.peutVoirTousLesBons(user.sub)) return bon;
     // Droit métier accordé via un PROFIL (sans rôle privilégié) : quiconque peut
     // valider ou décaisser un bon doit pouvoir le lire pour agir dessus.
     const canByPermission =

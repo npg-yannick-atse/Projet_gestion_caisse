@@ -11,6 +11,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
   UseInterceptors,
@@ -20,6 +21,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AssignProfilDto } from './dto/profil.dto';
+import { AffectationEnMasseDto } from './dto/affectation-masse.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '../authorization.service';
@@ -214,6 +216,43 @@ export class UsersController {
   async getDivisions(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     await this.assertPeutVoirDroits(id, user, "consulter les divisions d'un utilisateur");
     return this.usersService.getDivisionAccess(id);
+  }
+
+  /* Affectation par ENSEMBLE : sert au « tout sélectionner », qui ferait sinon
+     autant de requêtes que d'éléments — et laisserait un état à moitié appliqué
+     si l'une d'elles échouait. */
+
+  @Put(':id/divisions')
+  @ApiOperation({ summary: 'Remplacer les divisions accessibles à un utilisateur' })
+  async setDivisions(
+    @Param('id') id: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'modifier les divisions accessibles');
+    return this.usersService.setDivisions(id, dto.ids ?? [], user.sub);
+  }
+
+  @Put(':id/natures-operation')
+  @ApiOperation({ summary: 'Remplacer les natures autorisées à un utilisateur' })
+  async setNaturesOperation(
+    @Param('id') id: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'modifier les natures autorisées');
+    return this.usersService.setNaturesOperation(id, dto.ids ?? [], user.sub);
+  }
+
+  @Put(':id/cost-centers')
+  @ApiOperation({ summary: 'Remplacer les centres de coût autorisés à un utilisateur' })
+  async setCostCenters(
+    @Param('id') id: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'modifier les centres de coût autorisés');
+    return this.usersService.setCostCenters(id, dto.ids ?? [], user.sub);
   }
 
   @Post(':id/divisions/:divisionId')

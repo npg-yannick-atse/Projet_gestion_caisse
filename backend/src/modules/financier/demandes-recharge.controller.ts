@@ -46,8 +46,11 @@ export class DemandesRechargeController {
     @Query('sortBy') sortBy?: string,
     @Query('sortDir') sortDir?: string,
   ) {
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    const peutToutVoir = this.authz.isAdminCodes(codes) || codes.has('CAISSIER');
+    // RECHARGE_VOIR_TOUTES remplace la lecture en dur du rôle CAISSIER
+    // (migration 0066). Les administrateurs passent par leur contournement.
+    const peutToutVoir =
+      (await this.authz.isAdmin(user.sub)) ||
+      (await this.authz.hasPermission(user.sub, 'RECHARGE_VOIR_TOUTES'));
     return this.service.findAll({
       statut: statut as DemandeRechargeStatut,
       demandeurId: peutToutVoir ? undefined : user.sub,
@@ -72,8 +75,11 @@ export class DemandesRechargeController {
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ) {
-    const codes = await this.authz.getUserRoleCodes(user.sub);
-    const peutToutVoir = this.authz.isAdminCodes(codes) || codes.has('CAISSIER');
+    // RECHARGE_VOIR_TOUTES remplace la lecture en dur du rôle CAISSIER
+    // (migration 0066). Les administrateurs passent par leur contournement.
+    const peutToutVoir =
+      (await this.authz.isAdmin(user.sub)) ||
+      (await this.authz.hasPermission(user.sub, 'RECHARGE_VOIR_TOUTES'));
     return this.service.statsParStatut({
       demandeurId: peutToutVoir ? undefined : user.sub,
       search,

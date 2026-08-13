@@ -114,6 +114,61 @@ export class UsersService {
     }
   }
 
+  /* ---------- Affectation par ENSEMBLE -------------------------------------
+     « Tout sélectionner » sur 182 natures déclenchait 182 requêtes une à une,
+     dont l'échec de la centième laissait un état à moitié appliqué. On envoie
+     la sélection complète, et le serveur calcule la différence : seuls les
+     changements réels touchent la base. */
+
+  private async remplacerAffectations<T extends Record<string, any>>(
+    repo: { find: Function; save: Function; delete: Function; create: Function },
+    userId: string,
+    champ: string,
+    idsVoulus: string[],
+    actorId: string,
+    extra: Partial<T> = {},
+  ): Promise<string[]> {
+    await this.findOne(userId);
+    const rows: T[] = await repo.find({ where: { userId } });
+    const avant = new Set(rows.map((r) => String(r[champ])));
+    const apres = new Set(idsVoulus.map(String));
+
+    for (const id of [...apres].filter((x) => !avant.has(x))) {
+      await repo.save(repo.create({ userId, [champ]: id, createdById: actorId, ...extra }));
+    }
+    for (const id of [...avant].filter((x) => !apres.has(x))) {
+      await repo.delete({ userId, [champ]: id });
+    }
+    return [...apres];
+  }
+
+  setDivisions(userId: string, divisionIds: string[], actorId: string): Promise<string[]> {
+    return this.remplacerAffectations(this.userDivisionRepo as any, userId, 'divisionId', divisionIds, actorId);
+  }
+
+  setNaturesOperation(userId: string, natureIds: string[], actorId: string): Promise<string[]> {
+    return this.remplacerAffectations(
+      this.userNatureRepo as any,
+      userId,
+      'natureOperationId',
+      natureIds,
+      actorId,
+    );
+  }
+
+  setCostCenters(userId: string, costCenterIds: string[], actorId: string): Promise<string[]> {
+    // `estPrincipal` reste faux : le centre principal se désigne ailleurs, et
+    // une sélection en masse ne doit pas décider qui il est.
+    return this.remplacerAffectations(
+      this.userCostCenterRepo as any,
+      userId,
+      'costCenterId',
+      costCenterIds,
+      actorId,
+      { estPrincipal: false } as any,
+    );
+  }
+
   /**
    * Profils attribués, enrichis de leur période de validité et de l'état qui en
    * découle. L'écran doit pouvoir distinguer « accordé pour toujours » de

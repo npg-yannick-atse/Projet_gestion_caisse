@@ -169,6 +169,39 @@ export function useUserProfils(userId: string | null) {
   });
 }
 
+/* Affectation par ENSEMBLE : « tout sélectionner » sur 182 natures ferait
+   sinon 182 requêtes, dont l'échec de la centième laisserait un état à moitié
+   appliqué. Une seule requête porte la sélection complète. */
+
+async function setPerimetre(userId: string, chemin: string, ids: string[]): Promise<string[]> {
+  const { data } = await api.put<string[]>(`/users/${userId}/${chemin}`, { ids });
+  return data;
+}
+
+export function useSetUserDivisions(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setPerimetre(userId, 'divisions', ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'divisions'] }),
+  });
+}
+
+export function useSetUserNaturesOperation(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setPerimetre(userId, 'natures-operation', ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'natures-operation'] }),
+  });
+}
+
+export function useSetUserCostCenters(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setPerimetre(userId, 'cost-centers', ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'cost-centers'] }),
+  });
+}
+
 export function useToggleUserProfil(userId: string) {
   const qc = useQueryClient();
   return useMutation({

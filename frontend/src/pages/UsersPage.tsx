@@ -18,6 +18,9 @@ import {
   useToggleUserCostCenter,
   useToggleUserNatureOperation,
   useMyPermissions,
+  useSetUserDivisions,
+  useSetUserNaturesOperation,
+  useSetUserCostCenters,
 } from '@/api/users';
 import { useProfils, useGenererProfilDepuisUtilisateur } from '@/api/profils';
 import { GenererDepuisModal } from '@/components/GenererDepuisModal';
@@ -191,6 +194,61 @@ function TabBtn({
   );
 }
 
+/**
+ * « Tout cocher / Tout décocher » pour un périmètre.
+ *
+ * L'action porte sur ce qui est VISIBLE, pas sur le catalogue entier : quand
+ * une recherche est active, cocher tout doit cocher ce qu'on voit — sinon le
+ * bouton ferait silencieusement bien plus que ce qu'il montre.
+ *
+ * Une seule requête porte la sélection complète : la faire élément par élément
+ * sur 182 natures multiplierait les allers-retours et laisserait un état à
+ * moitié appliqué au premier échec.
+ */
+function SelectionEnMasse({
+  visibles,
+  selection,
+  enCours,
+  onAppliquer,
+  desactive,
+}: {
+  visibles: string[];
+  selection: Set<string>;
+  enCours: boolean;
+  onAppliquer: (ids: string[]) => void;
+  desactive?: boolean;
+}) {
+  const visiblesCoches = visibles.filter((id) => selection.has(id)).length;
+  const toutCoche = visibles.length > 0 && visiblesCoches === visibles.length;
+
+  const cocherTout = () => onAppliquer([...new Set([...selection, ...visibles])]);
+  const decocherTout = () => onAppliquer([...selection].filter((id) => !visibles.includes(id)));
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+      <button
+        type="button"
+        disabled={desactive || enCours || visibles.length === 0 || toutCoche}
+        onClick={cocherTout}
+        className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-40"
+      >
+        Tout cocher ({visibles.length})
+      </button>
+      <button
+        type="button"
+        disabled={desactive || enCours || visiblesCoches === 0}
+        onClick={decocherTout}
+        className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 font-medium text-[#475569] transition hover:bg-[#F1F5F9] disabled:opacity-40"
+      >
+        Tout décocher
+      </button>
+      <span className="text-[#94A3B8]">
+        {enCours ? 'Enregistrement…' : `${selection.size} sélectionné${selection.size > 1 ? 's' : ''}`}
+      </span>
+    </div>
+  );
+}
+
 function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void }) {
   const { data: roles } = useRoles();
   const { data: userRoles, isLoading } = useUserAssignedRoles(user.id);
@@ -200,6 +258,9 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userProfils } = useUserProfils(user.id);
   const toggleProfil = useToggleUserProfil(user.id);
   const [genererProfil, setGenererProfil] = useState(false);
+  const setDivisions = useSetUserDivisions(user.id);
+  const setNatures = useSetUserNaturesOperation(user.id);
+  const setCostCenters = useSetUserCostCenters(user.id);
   const genererDepuisUtilisateur = useGenererProfilDepuisUtilisateur();
   const { data: permissionsUtilisateur } = useMyPermissions(user.id);
   const setEcheance = useSetProfilEcheance(user.id);
@@ -566,6 +627,14 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                 <span className="shrink-0 text-[10px] text-[#94A3B8]">{divisionsParPays.length}</span>
               </div>
 
+              <SelectionEnMasse
+                visibles={divisionsParPays.map((d) => String(d.division.id))}
+                selection={divisionAccess}
+                enCours={setDivisions.isPending}
+                desactive={isSelf}
+                onAppliquer={(ids) => setDivisions.mutate(ids)}
+              />
+
               {/* Une ligne par division, le PAYS porté par l'étiquette.
                   Grouper par pays produisait un en-tête par pays pour une seule
                   division en dessous — 71 titres, 71 cases isolées.
@@ -616,6 +685,15 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                 Un utilisateur peut déjà imputer tous les centres rattachés à sa direction :
                 inutile de les cocher ici, ils ne s'y affichent pas.
               </p>
+
+              <SelectionEnMasse
+                visibles={(allCostCenters ?? []).map((cc) => String(cc.id))}
+                selection={costCenterAccess}
+                enCours={setCostCenters.isPending}
+                desactive={isSelf}
+                onAppliquer={(ids) => setCostCenters.mutate(ids)}
+              />
+
               <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
                 {(allCostCenters ?? []).map((cc) => {
                   const has = costCenterAccess.has(cc.id);
@@ -662,6 +740,14 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                   {naturesAffichees.length}
                 </span>
               </div>
+
+              <SelectionEnMasse
+                visibles={naturesAffichees.map((n) => String(n.id))}
+                selection={natureAccess}
+                enCours={setNatures.isPending}
+                desactive={isSelf}
+                onAppliquer={(ids) => setNatures.mutate(ids)}
+              />
 
               {/* Hauteur bornée : la liste complète poussait le reste du panneau
                   hors de l'écran et masquait les cases déjà cochées. */}
