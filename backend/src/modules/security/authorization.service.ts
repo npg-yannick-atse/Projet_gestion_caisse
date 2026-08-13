@@ -12,6 +12,9 @@ import { Interim } from './entities/interim.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
 import { UserNatureOperation } from './entities/user-nature-operation.entity';
+import { ProfilCostCenter } from './entities/profil-cost-center.entity';
+import { ProfilNatureOperation } from './entities/profil-nature-operation.entity';
+import { ProfilDivisionAccess } from './entities/profil-division-access.entity';
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMINISTRATEUR'];
 
@@ -367,6 +370,40 @@ export class AuthorizationService {
   }
 
   /**
+   * Identifiants des profils attribués à l'utilisateur.
+   *
+   * Un profil porte désormais des PÉRIMÈTRES en plus de ses permissions
+   * (migration 0067) : centres de coût, natures d'opération et divisions
+   * s'ajoutent à ceux accordés en propre. C'est ce qui permet de transmettre
+   * les droits d'une personne à une autre par un seul objet.
+   */
+  private async getProfilIds(userId: string): Promise<string[]> {
+    const liens = await this.dataSource
+      .getRepository(UserProfil)
+      .find({ where: { userId: userId as any } });
+    return liens.map((l) => String(l.profilId));
+  }
+
+  /** Cibles d'un périmètre portées par les profils de l'utilisateur. */
+  private async viaProfils<T extends { profilId: string }>(
+    userId: string,
+    entite: new () => T,
+    champ: keyof T,
+  ): Promise<string[]> {
+    const profilIds = await this.getProfilIds(userId);
+    if (profilIds.length === 0) return [];
+    const rows = await this.dataSource
+      .getRepository(entite)
+      .find({ where: { profilId: In(profilIds) as any } });
+    return rows.map((r) => String(r[champ]));
+  }
+
+  /** Centres de coût portés par les profils de l'utilisateur. */
+  async getCostCentersViaProfils(userId: string): Promise<string[]> {
+    return this.viaProfils(userId, ProfilCostCenter, 'costCenterId');
+  }
+
+  /**
    * Divisions (régions de pays) autorisées pour l'utilisateur.
    * null = toutes (admin). Set (même vide) = liste stricte (aucun repli "tout voir"),
    * car l'accès aux restitutions par division doit être explicitement accordé.
@@ -376,7 +413,8 @@ export class AuthorizationService {
     const rows = await this.dataSource
       .getRepository(UserDivisionAccess)
       .find({ where: { userId: userId as any } });
-    return new Set(rows.map((r) => String(r.divisionId)));
+    const parProfil = await this.viaProfils(userId, ProfilDivisionAccess, 'divisionId');
+    return new Set([...rows.map((r) => String(r.divisionId)), ...parProfil]);
   }
 
   /**
@@ -414,7 +452,8 @@ export class AuthorizationService {
     const rows = await this.dataSource
       .getRepository(UserNatureOperation)
       .find({ where: { userId: userId as any } });
-    return new Set(rows.map((r) => String(r.natureOperationId)));
+    const parProfil = await this.viaProfils(userId, ProfilNatureOperation, 'natureOperationId');
+    return new Set([...rows.map((r) => String(r.natureOperationId)), ...parProfil]);
   }
 
   /** Vérifie que l'utilisateur a le droit d'utiliser cette nature (sinon Forbidden). */

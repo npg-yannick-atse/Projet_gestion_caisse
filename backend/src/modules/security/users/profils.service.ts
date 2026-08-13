@@ -7,6 +7,12 @@ import { ProfilPermission } from '../entities/profil-permission.entity';
 import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { User } from '../entities/user.entity';
+import { UserCostCenter } from '../entities/user-cost-center.entity';
+import { UserNatureOperation } from '../entities/user-nature-operation.entity';
+import { UserDivisionAccess } from '../entities/user-division-access.entity';
+import { ProfilCostCenter } from '../entities/profil-cost-center.entity';
+import { ProfilNatureOperation } from '../entities/profil-nature-operation.entity';
+import { ProfilDivisionAccess } from '../entities/profil-division-access.entity';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { AuditPermissionService } from '../audit-permission.service';
 
@@ -167,6 +173,41 @@ export class ProfilsService {
     for (const permission of permissions) {
       await this.assignPermissionToProfil(String(profil.id), String(permission.id), actorId);
     }
+
+    /**
+     * Les PÉRIMÈTRES suivent aussi (migration 0067) : centres de coût, natures
+     * d'opération et divisions. Sans eux, le profil donnait le droit d'agir
+     * sans dire sur quoi — un demandeur cloné pouvait créer un bon en théorie,
+     * et se voyait refuser chaque nature d'opération en pratique.
+     *
+     * Ce qui NE suit pas, faute de sens : les rôles (leur code déclenche des
+     * règles écrites en dur) et les accès aux caisses (un coffre se confie à
+     * une personne nommée, pas à un paquet de droits).
+     */
+    const m = this.profilRepo.manager;
+    const copier = async <S extends object, C extends object>(
+      source: new () => S,
+      cible: new () => C,
+      champ: string,
+    ) => {
+      const lignes = await m.getRepository(source).find({ where: { userId } as never });
+      for (const ligne of lignes) {
+        const valeur = (ligne as Record<string, unknown>)[champ];
+        await m.getRepository(cible).save(
+          m.getRepository(cible).create({
+            profilId: String(profil.id),
+            [champ]: String(valeur),
+            createdById: actorId,
+          } as never),
+        );
+      }
+      return lignes.length;
+    };
+
+    await copier(UserCostCenter, ProfilCostCenter, 'costCenterId');
+    await copier(UserNatureOperation, ProfilNatureOperation, 'natureOperationId');
+    await copier(UserDivisionAccess, ProfilDivisionAccess, 'divisionId');
+
     return profil;
   }
 

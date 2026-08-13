@@ -599,6 +599,9 @@ export class BonsService {
         .getRepository(UserCostCenter)
         .find({ where: { userId: userId as any } });
       for (const a of assignedCcs) ccs.add(String(a.costCenterId));
+      // Centres portés par ses PROFILS (migration 0067) : un profil transmet
+      // désormais des périmètres, pas seulement des permissions.
+      for (const id of await this.authz.getCostCentersViaProfils(userId)) ccs.add(id);
       if (user?.costCenterId) ccs.add(String(user.costCenterId));
 
       return {

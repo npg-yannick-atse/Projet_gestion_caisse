@@ -17,7 +17,22 @@ function monter(opts: { codes?: string[]; utilisateur?: any } = {}) {
   const utilisateur =
     opts.utilisateur === undefined ? { id: '5', prenom: 'Awa', nom: 'Kone' } : opts.utilisateur;
 
-  service.profilRepo = { manager: { getRepository: () => ({ findOne: async () => utilisateur }) } };
+  /**
+   * Le gestionnaire sert à DEUX usages : retrouver l'utilisateur, et recopier
+   * ses périmètres (centres de coût, natures, divisions — migration 0067).
+   * `find` rend une liste vide : ces tests-là portent sur les permissions, les
+   * périmètres ont leur propre suite.
+   */
+  service.profilRepo = {
+    manager: {
+      getRepository: () => ({
+        findOne: async () => utilisateur,
+        find: async () => [],
+        create: (x: unknown) => x,
+        save: async (x: unknown) => x,
+      }),
+    },
+  };
   service.permissionRepo = {
     find: async () => (opts.codes ?? []).map((code, i) => ({ id: String(i + 1), code })),
   };
