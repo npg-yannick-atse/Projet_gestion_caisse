@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Permission, Profil, ProfilCategorie } from '@/types/api';
+import type { Permission, Profil } from '@/types/api';
 
 export interface CreateProfilPayload {
   code: string;
   libelle: string;
   description?: string;
-  categorie: ProfilCategorie;
   estActif?: boolean;
 }
 

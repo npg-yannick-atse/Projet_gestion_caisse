@@ -429,7 +429,6 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
                     />
                     <span className="flex-1 text-sm">
                       <span className="font-medium text-[#0F172A]">{profil.libelle}</span>{' '}
-                      <span className="text-[10px] text-[#94A3B8]">({profil.categorie})</span>
                     </span>
                   </label>
                 );

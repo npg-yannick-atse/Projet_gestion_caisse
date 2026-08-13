@@ -3,15 +3,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  BadgeCheck,
-  Banknote,
   KeyRound,
   Pencil,
   Plus,
-  Repeat,
   Trash2,
   User as UserIcon,
-  type LucideIcon,
 } from 'lucide-react';
 import {
   useProfils,
@@ -22,7 +18,7 @@ import {
   useDeleteProfil,
 } from '@/api/profils';
 import { usePermissions } from '@/api/roles';
-import type { Permission, Profil, ProfilCategorie } from '@/types/api';
+import type { Permission, Profil } from '@/types/api';
 import { apiErrorMessage, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,32 +30,22 @@ import { useClientSort } from '@/hooks/useClientSort';
 import { RoleGuard } from '@/components/RoleGuard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 
-const CATEGORIES: ProfilCategorie[] = ['VALIDATEUR', 'DEMANDEUR', 'CAISSIER', 'INTERIM'];
-
-const CATEGORIE_BADGE: Record<ProfilCategorie, { cls: string; icon: LucideIcon }> = {
-  VALIDATEUR: { cls: 'bg-[#FFFBEB] text-[#78350F]', icon: BadgeCheck },
-  CAISSIER: { cls: 'bg-[#ECFDF5] text-[#065F46]', icon: Banknote },
-  DEMANDEUR: { cls: 'bg-[#F8FAFC] text-[#475569]', icon: UserIcon },
-  INTERIM: { cls: 'bg-[#F5F3FF] text-[#6D28D9]', icon: Repeat },
-};
-
-const selectClass =
-  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
-
 const schema = z.object({
   code: z.string().trim().min(1, 'Requis'),
   libelle: z.string().trim().min(1, 'Requis'),
-  categorie: z.enum(['VALIDATEUR', 'DEMANDEUR', 'CAISSIER', 'INTERIM']),
   description: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
+/**
+ * Un profil ne porte plus de catégorie : elle ne servait qu'à teinter cette
+ * pastille et ne décidait de rien. Toutes les pastilles se ressemblent donc,
+ * ce qui est honnête — rien ne distingue deux profils que leurs permissions.
+ */
 function ProfilBadge({ profil }: { profil: Profil }) {
-  const b = CATEGORIE_BADGE[profil.categorie] ?? { cls: 'bg-[#F8FAFC] text-[#475569]', icon: UserIcon };
-  const Icon = b.icon;
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold', b.cls)}>
-      <Icon className="h-3.5 w-3.5" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F8FAFC] px-3 py-1 text-[11px] font-semibold text-[#475569]">
+      <UserIcon className="h-3.5 w-3.5" />
       {profil.libelle}
     </span>
   );
@@ -84,17 +70,15 @@ function ProfilForm({ profil, onDone }: { profil: Profil | null; onDone: () => v
       ? {
           code: profil.code,
           libelle: profil.libelle,
-          categorie: profil.categorie,
           description: profil.description ?? '',
         }
-      : { code: '', libelle: '', categorie: 'DEMANDEUR', description: '' },
+      : { code: '', libelle: '', description: '' },
   });
 
   const onSubmit = handleSubmit((values) => {
     const payload = {
       code: values.code,
       libelle: values.libelle,
-      categorie: values.categorie,
       description: values.description || undefined,
     };
     const onSuccess = () => {
@@ -121,16 +105,6 @@ function ProfilForm({ profil, onDone }: { profil: Profil | null; onDone: () => v
           <Label htmlFor="libelle">Libellé</Label>
           <Input id="libelle" {...register('libelle')} />
           {errors.libelle && <p className="text-sm text-destructive">{errors.libelle.message}</p>}
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="categorie">Catégorie</Label>
-          <select id="categorie" className={selectClass} {...register('categorie')}>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="description">Description (optionnel)</Label>
@@ -169,7 +143,6 @@ function ProfilRow({
       <td className="px-4 py-3">
         <ProfilBadge profil={profil} />
       </td>
-      <td className="px-4 py-3 text-[11px] text-[#64748B]">{profil.categorie}</td>
       <td className="px-4 py-3 text-center text-xs tabular-nums text-[#0F172A]">{perms?.length ?? '—'}</td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1.5">
@@ -261,7 +234,7 @@ function PermissionEditor({ profil }: { profil: Profil }) {
   );
 }
 
-const PROFIL_SORT_COLUMNS = ['libelle', 'categorie'] as const;
+const PROFIL_SORT_COLUMNS = ['libelle'] as const;
 type ProfilSortCol = (typeof PROFIL_SORT_COLUMNS)[number];
 
 function ProfilsPageInner() {
@@ -270,7 +243,6 @@ function ProfilsPageInner() {
   const sort = useTableSort<ProfilSortCol>('/profils', PROFIL_SORT_COLUMNS);
   const profils = useClientSort(profilsBruts, sort.state, {
     libelle: (p) => p.libelle,
-    categorie: (p) => p.categorie,
   });
   const remove = useDeleteProfil();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -309,7 +281,6 @@ function ProfilsPageInner() {
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Profil</SortableHeader>
-                <SortableHeader column="categorie" state={sort.state} onSort={sort.setSort}>Catégorie</SortableHeader>
                 <th className="px-4 py-2.5 text-center font-semibold">Permissions</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>

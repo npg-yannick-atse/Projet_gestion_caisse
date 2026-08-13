@@ -1,8 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsNotEmpty, MaxLength, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNotEmpty, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { ProfilCategorie } from '../../entities/profil.entity';
-
-export const PROFIL_CATEGORIES = ['VALIDATEUR', 'DEMANDEUR', 'CAISSIER', 'INTERIM'] as const;
 
 export class CreateProfilDto {
   @ApiProperty()
@@ -21,11 +18,6 @@ export class CreateProfilDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiProperty({ enum: [...PROFIL_CATEGORIES] })
-  @IsNotEmpty()
-  @IsIn(PROFIL_CATEGORIES)
-  categorie!: ProfilCategorie;
 
   @ApiProperty({ default: true })
   @IsOptional()
@@ -50,11 +42,6 @@ export class UpdateProfilDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiProperty({ required: false, enum: [...PROFIL_CATEGORIES] })
-  @IsOptional()
-  @IsIn(PROFIL_CATEGORIES)
-  categorie?: ProfilCategorie;
 
   @ApiProperty({ required: false })
   @IsOptional()

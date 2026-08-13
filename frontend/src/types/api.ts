@@ -131,14 +131,11 @@ export interface CreateInterimPayload {
   commentaire?: string;
 }
 
-export type ProfilCategorie = 'VALIDATEUR' | 'DEMANDEUR' | 'CAISSIER' | 'INTERIM';
-
 export interface Profil {
   id: string;
   code: string;
   libelle: string;
   description?: string | null;
-  categorie: ProfilCategorie;
   estActif: boolean;
 }
 
