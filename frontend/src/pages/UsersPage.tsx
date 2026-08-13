@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Building2, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Building2, Copy, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
   type StatutUtilisateur,
@@ -17,8 +17,10 @@ import {
   useUserCostCenters,
   useToggleUserCostCenter,
   useToggleUserNatureOperation,
+  useMyPermissions,
 } from '@/api/users';
-import { useProfils } from '@/api/profils';
+import { useProfils, useGenererProfilDepuisUtilisateur } from '@/api/profils';
+import { GenererDepuisModal } from '@/components/GenererDepuisModal';
 import { useDirections } from '@/api/directions';
 import { usePays, useDivisions, useNaturesOperation, useCostCenters } from '@/api/referentiel';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -197,6 +199,9 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: profils } = useProfils();
   const { data: userProfils } = useUserProfils(user.id);
   const toggleProfil = useToggleUserProfil(user.id);
+  const [genererProfil, setGenererProfil] = useState(false);
+  const genererDepuisUtilisateur = useGenererProfilDepuisUtilisateur();
+  const { data: permissionsUtilisateur } = useMyPermissions(user.id);
   const setEcheance = useSetProfilEcheance(user.id);
   const assignedProfils = useMemo(() => new Set((userProfils ?? []).map((p) => p.id)), [userProfils]);
   // Accès division (restitutions)
@@ -290,6 +295,23 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
       aria-modal="true"
       onClick={onClose}
     >
+      {genererProfil && (
+        <GenererDepuisModal
+          titre="Générer un profil depuis cet utilisateur"
+          sourceLibelle={`${user.prenom} ${user.nom}`}
+          nbPermissions={permissionsUtilisateur?.length ?? 0}
+          avertissement="Seules les PERMISSIONS sont recopiées, et uniquement les siennes : ce qu'il exerce au titre d'un intérim est temporaire et n'est pas repris. Ni les rôles, ni les périmètres — direction, caisses, portefeuilles, centres de coût, natures et divisions restent attachés à la personne."
+          pending={genererDepuisUtilisateur.isPending}
+          error={genererDepuisUtilisateur.error}
+          onValider={(code, libelle) =>
+            genererDepuisUtilisateur.mutate(
+              { userId: user.id, code, libelle },
+              { onSuccess: () => setGenererProfil(false) },
+            )
+          }
+          onClose={() => setGenererProfil(false)}
+        />
+      )}
       <div
         className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[14px] border border-[rgba(15,76,129,0.1)] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.24)]"
         onClick={(e) => e.stopPropagation()}
@@ -443,9 +465,21 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           {/* -------- Profils -------- */}
           {tab === 'profils' && (
             <div className="space-y-1">
-              <p className="mb-2 text-[11px] text-[#94A3B8]">
-                Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
-              </p>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <p className="flex-1 text-[11px] text-[#94A3B8]">
+                  Paquets de permissions additionnels — ils s'ajoutent aux permissions des rôles.
+                </p>
+                {/* Troisième sens de génération : rôle → profil et profil → rôle
+                    existaient, pas utilisateur → profil. C'est pourtant le geste
+                    courant : « donne-lui les mêmes accès que X ». */}
+                <button
+                  type="button"
+                  onClick={() => setGenererProfil(true)}
+                  className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Générer un profil depuis ses droits
+                </button>
+              </div>
 
               {profils?.map((profil) => {
                 const attribue = (userProfils ?? []).find((p) => p.id === profil.id);
