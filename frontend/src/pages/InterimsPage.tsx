@@ -119,9 +119,16 @@ function CreateInterimForm({
   };
 
   return (
-    <Panel>
-      <PanelHeader title="Nouvel intérim" />
-      <form onSubmit={submit} className="grid gap-4 p-[18px] sm:grid-cols-2">
+    /* Hauteur bornée et défilement sur le SEUL formulaire : le titre reste
+       visible, et sur un portable les boutons du bas restent atteignables.
+       Sans cela, la carte dépassait l'écran — et comme la modale centre son
+       contenu, c'est le HAUT qui se retrouvait coupé, hors d'atteinte du
+       défilement. */
+    <Panel className="flex max-h-[88vh] flex-col">
+      <div className="shrink-0">
+        <PanelHeader title="Nouvel intérim" />
+      </div>
+      <form onSubmit={submit} className="grid flex-1 gap-4 overflow-y-auto p-[18px] sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Initiateur (absent)</label>
           {peutDeclarerPourAutrui ? (
