@@ -17,6 +17,13 @@ import { useClientSort } from '@/hooks/useClientSort';
 const selectClass =
   'h-10 w-full rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none transition focus:border-[#1A6DB5]';
 const inputClass = selectClass;
+
+// Date + heure sur une même ligne. On REMPLACE `w-full` au lieu d'ajouter une
+// seconde largeur : deux classes de largeur concurrentes se départagent par
+// l'ordre de la feuille Tailwind, et `w-full` l'emporte — l'heure débordait
+// alors du cadre. `min-w-0` autorise la date à rétrécir dans le flex.
+const jourClass = inputClass.replace('w-full', 'min-w-0 flex-1');
+const heureClass = inputClass.replace('w-full', 'w-[7.5rem] shrink-0');
 const labelClass = 'text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]';
 
 const INTERIM_SORT_COLUMNS = ['initiateur', 'remplacant', 'delegue', 'debut', 'statut'] as const;
@@ -262,14 +269,14 @@ function CreateInterimForm({
               id="int-jour-debut"
               type="date"
               aria-label="Jour de début"
-              className={`${inputClass} flex-1`}
+              className={jourClass}
               value={jourDebut}
               onChange={(e) => setJourDebut(e.target.value)}
             />
             <input
               type="time"
               aria-label="Heure de début"
-              className={`${inputClass} w-28 shrink-0`}
+              className={heureClass}
               value={heureDebut}
               onChange={(e) => setHeureDebut(e.target.value)}
             />
@@ -282,14 +289,14 @@ function CreateInterimForm({
               id="int-jour-fin"
               type="date"
               aria-label="Jour de fin"
-              className={`${inputClass} flex-1`}
+              className={jourClass}
               value={jourFin}
               onChange={(e) => setJourFin(e.target.value)}
             />
             <input
               type="time"
               aria-label="Heure de fin"
-              className={`${inputClass} w-28 shrink-0`}
+              className={heureClass}
               value={heureFin}
               onChange={(e) => setHeureFin(e.target.value)}
             />
