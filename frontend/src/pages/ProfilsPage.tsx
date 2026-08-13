@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   User as UserIcon,
+  Search,
 } from 'lucide-react';
 import {
   useProfils,
@@ -17,8 +18,12 @@ import {
   useCreateProfil,
   useUpdateProfil,
   useDeleteProfil,
+  usePerimetreProfil,
+  useSetPerimetreProfil,
+  type PerimetreProfil,
 } from '@/api/profils';
 import { usePermissions } from '@/api/roles';
+import { useCostCenters, useDivisions, useNaturesOperation } from '@/api/referentiel';
 import type { Permission, Profil } from '@/types/api';
 import { apiErrorMessage, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -204,6 +209,120 @@ function PermissionRow({ permission, profilId, assigned }: { permission: Permiss
   );
 }
 
+/**
+ * Un périmètre porté par le profil : divisions, natures ou centres de coût.
+ *
+ * Même mécanique que sur la fiche utilisateur — cases à cocher, recherche, et
+ * un « tout cocher » qui n'agit que sur ce qui est visible. L'enregistrement
+ * porte la sélection complète, en une requête.
+ */
+function PerimetreEditor({
+  profil,
+  quoi,
+  titre,
+  aide,
+  elements,
+}: {
+  profil: Profil;
+  quoi: PerimetreProfil;
+  titre: string;
+  aide: string;
+  elements: Array<{ id: string; code?: string | null; libelle: string }> | undefined;
+}) {
+  const { data: choisis } = usePerimetreProfil(profil.id, quoi);
+  const enregistrer = useSetPerimetreProfil(profil.id, quoi);
+  const [recherche, setRecherche] = useState('');
+
+  const selection = useMemo(() => new Set((choisis ?? []).map(String)), [choisis]);
+  const visibles = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return (elements ?? []).filter(
+      (e) => !q || e.libelle.toLowerCase().includes(q) || (e.code ?? '').toLowerCase().includes(q),
+    );
+  }, [elements, recherche]);
+
+  const appliquer = (ids: string[]) => enregistrer.mutate(ids);
+  const idsVisibles = visibles.map((e) => String(e.id));
+  const visiblesCoches = idsVisibles.filter((id) => selection.has(id)).length;
+
+  return (
+    <Panel>
+      <PanelHeader title={`${titre} — ${profil.libelle}`} badge={`${selection.size}`} />
+      <div className="space-y-2 p-[18px]">
+        <p className="text-[11px] text-[#94A3B8]">{aide}</p>
+
+        <div className="flex items-center gap-2 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-[#64748B]" />
+          <input
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="Rechercher…"
+            className="flex-1 bg-transparent text-xs text-[#0F172A] outline-none"
+          />
+          <span className="shrink-0 text-[10px] text-[#94A3B8]">{visibles.length}</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <button
+            type="button"
+            disabled={enregistrer.isPending || idsVisibles.length === 0 || visiblesCoches === idsVisibles.length}
+            onClick={() => appliquer([...new Set([...selection, ...idsVisibles])])}
+            className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-40"
+          >
+            Tout cocher ({idsVisibles.length})
+          </button>
+          <button
+            type="button"
+            disabled={enregistrer.isPending || visiblesCoches === 0}
+            onClick={() => appliquer([...selection].filter((id) => !idsVisibles.includes(id)))}
+            className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 font-medium text-[#475569] transition hover:bg-[#F1F5F9] disabled:opacity-40"
+          >
+            Tout décocher
+          </button>
+          <span className="text-[#94A3B8]">
+            {enregistrer.isPending ? 'Enregistrement…' : `${selection.size} sélectionné(s)`}
+          </span>
+        </div>
+
+        <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
+          {visibles.map((e) => {
+            const coche = selection.has(String(e.id));
+            return (
+              <label
+                key={e.id}
+                className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
+              >
+                <input
+                  type="checkbox"
+                  checked={coche}
+                  disabled={enregistrer.isPending}
+                  onChange={() =>
+                    appliquer(
+                      coche
+                        ? [...selection].filter((id) => id !== String(e.id))
+                        : [...selection, String(e.id)],
+                    )
+                  }
+                  className="h-4 w-4"
+                />
+                <span className="truncate text-xs">
+                  {e.code && <span className="mr-1.5 font-mono text-[#64748B]">{e.code}</span>}
+                  {e.libelle}
+                </span>
+              </label>
+            );
+          })}
+          {visibles.length === 0 && (
+            <p className="col-span-2 py-6 text-center text-sm text-[#64748B]">
+              {recherche ? 'Aucun résultat.' : 'Rien à rattacher.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function PermissionEditor({ profil }: { profil: Profil }) {
   const { data: permissions } = usePermissions();
   const profilPerms = useProfilPermissions(profil.id);
@@ -281,6 +400,10 @@ function ProfilsPageInner() {
   const [form, setForm] = useState<{ profil: Profil | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Profil | null>(null);
   const selected = profils?.find((p) => p.id === selectedId) ?? null;
+  const [volet, setVolet] = useState<'permissions' | 'cost-centers' | 'divisions' | 'natures-operation'>('permissions');
+  const { data: costCenters } = useCostCenters();
+  const { data: divisions } = useDivisions();
+  const { data: natures } = useNaturesOperation();
 
   return (
     <div className="flex flex-col gap-4">
@@ -342,7 +465,63 @@ function ProfilsPageInner() {
       </Panel>
 
       {selected ? (
-        <PermissionEditor profil={selected} />
+        <>
+          {/* Un profil ne porte plus seulement des permissions : il transmet
+              aussi des périmètres (migration 0067). Quatre volets pour quatre
+              natures de contenu, plutôt qu'un panneau qui mélangerait tout. */}
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ['permissions', 'Permissions'],
+                ['cost-centers', 'Centres de coût'],
+                ['divisions', 'Divisions'],
+                ['natures-operation', 'Natures'],
+              ] as const
+            ).map(([cle, libelle]) => (
+              <button
+                key={cle}
+                type="button"
+                onClick={() => setVolet(cle)}
+                className={
+                  volet === cle
+                    ? 'inline-flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-xs font-medium text-white'
+                    : 'inline-flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#F1F5F9]'
+                }
+              >
+                {libelle}
+              </button>
+            ))}
+          </div>
+
+          {volet === 'permissions' && <PermissionEditor profil={selected} />}
+          {volet === 'cost-centers' && (
+            <PerimetreEditor
+              profil={selected}
+              quoi="cost-centers"
+              titre="Centres de coût"
+              aide="Ces centres de coût s'ajoutent à ceux de la direction de chaque personne qui reçoit ce profil."
+              elements={(costCenters ?? []).map((c) => ({ id: c.id, code: c.code, libelle: c.libelle }))}
+            />
+          )}
+          {volet === 'divisions' && (
+            <PerimetreEditor
+              profil={selected}
+              quoi="divisions"
+              titre="Divisions"
+              aide="Autorise les restitutions client sur ces divisions, pour quiconque reçoit ce profil."
+              elements={(divisions ?? []).map((d) => ({ id: d.id, code: d.code, libelle: d.libelle }))}
+            />
+          )}
+          {volet === 'natures-operation' && (
+            <PerimetreEditor
+              profil={selected}
+              quoi="natures-operation"
+              titre="Natures"
+              aide="Natures utilisables à la création d'un bon par quiconque reçoit ce profil."
+              elements={(natures ?? []).map((n) => ({ id: n.id, code: n.code, libelle: n.libelle }))}
+            />
+          )}
+        </>
       ) : (
         <p className="px-1 text-xs text-[#64748B]">
           Icône <KeyRound className="inline h-3 w-3" /> = permissions · <Pencil className="inline h-3 w-3" /> = modifier ·{' '}

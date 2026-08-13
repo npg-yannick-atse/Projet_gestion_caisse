@@ -211,6 +211,73 @@ export class ProfilsService {
     return profil;
   }
 
+  /* ======================================================================
+     Périmètres portés par le PROFIL (migration 0067).
+
+     Les trois tables ont la même forme — `profil_id` + une cible — d'où un
+     traitement générique plutôt que trois copies. Comme ailleurs, l'écran
+     envoie la SÉLECTION COMPLÈTE et le service calcule la différence : les
+     liens inchangés ne sont pas réécrits, pour que `created_at` garde son sens.
+     ====================================================================== */
+
+  /** Le nom de la table et de la colonne cible, par périmètre. */
+  private perimetreProfil(quoi: 'cost-centers' | 'divisions' | 'natures-operation'): {
+    table: string;
+    colonne: string;
+  } {
+    switch (quoi) {
+      case 'cost-centers':
+        return { table: 'sec_profil_cost_center', colonne: 'cost_center_id' };
+      case 'divisions':
+        return { table: 'sec_profil_division_access', colonne: 'division_id' };
+      case 'natures-operation':
+        return { table: 'sec_profil_nature_operation', colonne: 'nature_operation_id' };
+    }
+  }
+
+  async getPerimetreProfil(
+    profilId: string,
+    quoi: 'cost-centers' | 'divisions' | 'natures-operation',
+  ): Promise<string[]> {
+    await this.findProfil(profilId);
+    const { table, colonne } = this.perimetreProfil(quoi);
+    const rows: Array<{ id: string }> = await this.profilRepo.manager.query(
+      `SELECT ${colonne} AS id FROM dbo.${table} WHERE profil_id = @0`,
+      [profilId],
+    );
+    return rows.map((r) => String(r.id));
+  }
+
+  async setPerimetreProfil(
+    profilId: string,
+    quoi: 'cost-centers' | 'divisions' | 'natures-operation',
+    idsVoulus: string[],
+    actorId: string,
+  ): Promise<string[]> {
+    await this.findProfil(profilId);
+    const { table, colonne } = this.perimetreProfil(quoi);
+    const manager = this.profilRepo.manager;
+
+    const avant = new Set(await this.getPerimetreProfil(profilId, quoi));
+    const apres = new Set(idsVoulus.map(String));
+
+    for (const id of [...apres].filter((x) => !avant.has(x))) {
+      await manager.query(
+        `INSERT INTO dbo.${table} (profil_id, ${colonne}, created_by_id) VALUES (@0, @1, @2)`,
+        [profilId, id, actorId],
+      );
+    }
+    const aRetirer = [...avant].filter((x) => !apres.has(x));
+    if (aRetirer.length > 0) {
+      const ph = aRetirer.map((_, i) => `@${i + 1}`).join(', ');
+      await manager.query(
+        `DELETE FROM dbo.${table} WHERE profil_id = @0 AND ${colonne} IN (${ph})`,
+        [profilId, ...aRetirer],
+      );
+    }
+    return [...apres];
+  }
+
   async getProfilPermissions(profilId: string): Promise<Permission[]> {
     await this.findProfil(profilId);
     const links = await this.profilPermissionRepo.find({

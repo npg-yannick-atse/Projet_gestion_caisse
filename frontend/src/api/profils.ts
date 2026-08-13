@@ -99,6 +99,42 @@ export function useDeleteProfil() {
   });
 }
 
+/* ---------- Périmètres portés par le PROFIL (migration 0067) ---------------
+   Un profil transmet désormais divisions, natures et centres de coût, pas
+   seulement des permissions. On envoie la sélection COMPLÈTE, comme partout. */
+
+export type PerimetreProfil = 'cost-centers' | 'divisions' | 'natures-operation';
+
+export async function getPerimetreProfil(profilId: string, quoi: PerimetreProfil): Promise<string[]> {
+  const { data } = await api.get<string[]>(`/profils/${profilId}/${quoi}`);
+  return data;
+}
+
+export async function setPerimetreProfil(
+  profilId: string,
+  quoi: PerimetreProfil,
+  ids: string[],
+): Promise<string[]> {
+  const { data } = await api.put<string[]>(`/profils/${profilId}/${quoi}`, { ids });
+  return data;
+}
+
+export function usePerimetreProfil(profilId: string | null, quoi: PerimetreProfil) {
+  return useQuery({
+    queryKey: ['profil', profilId, quoi],
+    queryFn: () => getPerimetreProfil(profilId!, quoi),
+    enabled: !!profilId,
+  });
+}
+
+export function useSetPerimetreProfil(profilId: string, quoi: PerimetreProfil) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setPerimetreProfil(profilId, quoi, ids),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['profil', profilId, quoi] }),
+  });
+}
+
 export function useProfilPermissions(profilId: string | null) {
   return useQuery({
     queryKey: ['profil', profilId, 'permissions'],

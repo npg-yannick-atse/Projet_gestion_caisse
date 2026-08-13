@@ -9,12 +9,14 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProfilsService } from './profils.service';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { GenerationDto } from './dto/generation.dto';
+import { AffectationEnMasseDto } from './dto/affectation-masse.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '../authorization.service';
@@ -105,6 +107,63 @@ export class ProfilsController {
       user.sub,
       this.authz,
     );
+  }
+
+  /* ---- Périmètres portés par le profil (migration 0067) -------------------
+     Trois paires lecture / écriture. L'écriture reçoit la sélection COMPLÈTE :
+     un aller-retour par case laisserait la base et l'écran en désaccord si l'un
+     d'eux échouait. La lecture reste ouverte, comme celle des permissions —
+     l'écran de création de bon en dépend. */
+
+  @Get(':profilId/cost-centers')
+  @ApiOperation({ summary: 'Centres de coût portés par un profil' })
+  getProfilCostCenters(@Param('profilId') profilId: string) {
+    return this.profilsService.getPerimetreProfil(profilId, 'cost-centers');
+  }
+
+  @Put(':profilId/cost-centers')
+  @ApiOperation({ summary: 'Choisir les centres de coût portés par un profil' })
+  async setProfilCostCenters(
+    @Param('profilId') profilId: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'modifier les centres de coût d’un profil');
+    return this.profilsService.setPerimetreProfil(profilId, 'cost-centers', dto.ids ?? [], user.sub);
+  }
+
+  @Get(':profilId/divisions')
+  @ApiOperation({ summary: 'Divisions portées par un profil' })
+  getProfilDivisions(@Param('profilId') profilId: string) {
+    return this.profilsService.getPerimetreProfil(profilId, 'divisions');
+  }
+
+  @Put(':profilId/divisions')
+  @ApiOperation({ summary: 'Choisir les divisions portées par un profil' })
+  async setProfilDivisions(
+    @Param('profilId') profilId: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'modifier les divisions d’un profil');
+    return this.profilsService.setPerimetreProfil(profilId, 'divisions', dto.ids ?? [], user.sub);
+  }
+
+  @Get(':profilId/natures-operation')
+  @ApiOperation({ summary: 'Natures portées par un profil' })
+  getProfilNatures(@Param('profilId') profilId: string) {
+    return this.profilsService.getPerimetreProfil(profilId, 'natures-operation');
+  }
+
+  @Put(':profilId/natures-operation')
+  @ApiOperation({ summary: 'Choisir les natures portées par un profil' })
+  async setProfilNatures(
+    @Param('profilId') profilId: string,
+    @Body() dto: AffectationEnMasseDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'PROFIL_GERER', 'modifier les natures d’un profil');
+    return this.profilsService.setPerimetreProfil(profilId, 'natures-operation', dto.ids ?? [], user.sub);
   }
 
   @Get(':profilId/permissions')

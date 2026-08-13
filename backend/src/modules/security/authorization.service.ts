@@ -378,9 +378,19 @@ export class AuthorizationService {
    * les droits d'une personne à une autre par un seul objet.
    */
   private async getProfilIds(userId: string): Promise<string[]> {
+    // Seulement les profils VALIDES aujourd'hui : les permissions d'un profil
+    // expiré sont déjà écartées, ses périmètres doivent l'être aussi. Sans ce
+    // filtre, un profil prêté jusqu'au 31 continuerait d'ouvrir ses divisions
+    // le 1er — et l'incohérence serait invisible, puisque les boutons
+    // disparaîtraient pendant que les données resteraient accessibles.
+    const maintenant = new Date();
     const liens = await this.dataSource
       .getRepository(UserProfil)
-      .find({ where: { userId: userId as any } });
+      .createQueryBuilder('up')
+      .where('up.user_id = :userId', { userId })
+      .andWhere('(up.date_debut IS NULL OR up.date_debut <= :maintenant)', { maintenant })
+      .andWhere('(up.date_fin IS NULL OR up.date_fin >= :maintenant)')
+      .getMany();
     return liens.map((l) => String(l.profilId));
   }
 
