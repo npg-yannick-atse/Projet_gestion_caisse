@@ -312,8 +312,8 @@ function ProfilsPageInner() {
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Profil</SortableHeader>
-                <th className="px-4 py-2.5 text-center font-semibold">Permissions</th>
-                <th className="px-4 py-2.5">
+                <th className="w-32 px-4 py-2.5 text-center font-semibold">Permissions</th>
+                <th className="w-28 px-4 py-2.5 text-right">
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
@@ -331,7 +331,7 @@ function ProfilsPageInner() {
               ))}
               {profils.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-[#64748B]">
+                  <td colSpan={3} className="px-4 py-8 text-center text-sm text-[#64748B]">
                     Aucun profil. Cliquez sur « Nouveau profil » pour créer un paquet de permissions réutilisable.
                   </td>
                 </tr>

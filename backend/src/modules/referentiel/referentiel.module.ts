@@ -5,6 +5,7 @@ import { PlanComptable } from './entities/plan-comptable.entity';
 import { CostCenter } from './entities/cost-center.entity';
 import { NatureOperation } from './entities/nature-operation.entity';
 import { NatureComptable } from './entities/nature-comptable.entity';
+import { NatureComptableCostCenter } from './entities/nature-comptable-cost-center.entity';
 import { Partenaire } from './entities/partenaire.entity';
 import { PartenaireNatureComptable } from './entities/partenaire-nature-comptable.entity';
 import { Site } from './entities/site.entity';
@@ -31,6 +32,7 @@ import { ParametresController } from './parametres.controller';
       CostCenter,
       NatureOperation,
       NatureComptable,
+      NatureComptableCostCenter,
       Partenaire,
       PartenaireNatureComptable,
       Site,

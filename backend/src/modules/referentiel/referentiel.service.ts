@@ -406,6 +406,117 @@ export class ReferentielService {
     );
   }
 
+  /* ======================================================================
+     Liaison nature comptable ↔ centre de coût (migration 0065).
+     Relation MULTIPLE et symétrique : une nature sert à plusieurs services, un
+     service emploie plusieurs natures. Aucun des deux côtés n'est propriétaire.
+     ====================================================================== */
+
+  /** Centres de coût liés à une nature comptable. Tri en base. */
+  async costCentersDeNature(natureId: string): Promise<CostCenter[]> {
+    await this.findNatureComptable(natureId);
+    return this.costCenterRepo
+      .createQueryBuilder('cc')
+      .innerJoin(
+        'ref_nature_comptable_cost_center',
+        'l',
+        'l.cost_center_id = cc.id AND l.nature_comptable_id = :natureId',
+        { natureId },
+      )
+      .where('cc.deletedAt IS NULL')
+      .orderBy('cc.code', 'ASC')
+      .getMany();
+  }
+
+  /** Natures comptables liées à un centre de coût. Le sens inverse, même table. */
+  async naturesDeCostCenter(costCenterId: string): Promise<NatureComptable[]> {
+    await this.findCostCenter(costCenterId);
+    return this.natureComptableRepo
+      .createQueryBuilder('n')
+      .innerJoin(
+        'ref_nature_comptable_cost_center',
+        'l',
+        'l.nature_comptable_id = n.id AND l.cost_center_id = :costCenterId',
+        { costCenterId },
+      )
+      .where('n.deletedAt IS NULL')
+      .orderBy('n.libelle', 'ASC')
+      .getMany();
+  }
+
+  /**
+   * Remplace l'ensemble des liens d'un côté par celui fourni.
+   *
+   * On raisonne par ENSEMBLE plutôt que par ajout / retrait unitaire : l'écran
+   * présente des cases à cocher, et envoyer la sélection complète évite qu'un
+   * clic perdu laisse la base et l'écran en désaccord. Les liens inchangés ne
+   * sont pas réécrits, pour que `created_at` garde son sens.
+   */
+  private async remplacerLiens(
+    colonneFixe: 'nature_comptable_id' | 'cost_center_id',
+    idFixe: string,
+    idsVoulus: string[],
+    userId: string,
+  ): Promise<void> {
+    const colonneVariable =
+      colonneFixe === 'nature_comptable_id' ? 'cost_center_id' : 'nature_comptable_id';
+    const manager = this.natureComptableRepo.manager;
+
+    const existants: Array<{ id: string }> = await manager.query(
+      `SELECT ${colonneVariable} AS id FROM dbo.ref_nature_comptable_cost_center WHERE ${colonneFixe} = @0`,
+      [idFixe],
+    );
+    const avant = new Set(existants.map((r) => String(r.id)));
+    const apres = new Set(idsVoulus.map(String));
+
+    const aAjouter = [...apres].filter((id) => !avant.has(id));
+    const aRetirer = [...avant].filter((id) => !apres.has(id));
+
+    for (const id of aAjouter) {
+      await manager.query(
+        `INSERT INTO dbo.ref_nature_comptable_cost_center (${colonneFixe}, ${colonneVariable}, created_by_id)
+         VALUES (@0, @1, @2)`,
+        [idFixe, id, userId],
+      );
+    }
+    if (aRetirer.length > 0) {
+      const ph = aRetirer.map((_, i) => `@${i + 1}`).join(', ');
+      await manager.query(
+        `DELETE FROM dbo.ref_nature_comptable_cost_center
+         WHERE ${colonneFixe} = @0 AND ${colonneVariable} IN (${ph})`,
+        [idFixe, ...aRetirer],
+      );
+    }
+  }
+
+  /** Depuis la nature : choisir ses centres de coût. */
+  async lierNatureAuxCostCenters(
+    natureId: string,
+    costCenterIds: string[],
+    userId: string,
+  ): Promise<CostCenter[]> {
+    await this.findNatureComptable(natureId);
+    await this.remplacerLiens('nature_comptable_id', natureId, costCenterIds, userId);
+    return this.costCentersDeNature(natureId);
+  }
+
+  /** Depuis le centre de coût : choisir ses natures comptables. */
+  async lierCostCenterAuxNatures(
+    costCenterId: string,
+    natureIds: string[],
+    userId: string,
+  ): Promise<NatureComptable[]> {
+    await this.findCostCenter(costCenterId);
+    await this.remplacerLiens('cost_center_id', costCenterId, natureIds, userId);
+    return this.naturesDeCostCenter(costCenterId);
+  }
+
+  private async findNatureComptable(id: string): Promise<NatureComptable> {
+    const n = await this.natureComptableRepo.findOne({ where: { id } });
+    if (!n) throw new NotFoundException(`Nature comptable ${id} introuvable`);
+    return n;
+  }
+
   listPlanComptable(
     opts: {
       search?: string;

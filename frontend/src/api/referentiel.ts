@@ -169,6 +169,74 @@ export function useNaturesComptable(filters: RefFilters = {}) {
   });
 }
 
+/* ---------- Liaison nature comptable ↔ centre de coût (migration 0065) -------
+   Relation multiple et symétrique : la même table se lit et s'écrit des deux
+   côtés. On envoie toujours la SÉLECTION COMPLÈTE, jamais un ajout isolé. */
+
+export async function getCostCentersDeNature(natureId: string): Promise<CostCenter[]> {
+  const { data } = await api.get<CostCenter[]>(`/natures-comptable/${natureId}/cost-centers`);
+  return data;
+}
+
+export async function setCostCentersDeNature(natureId: string, costCenterIds: string[]): Promise<CostCenter[]> {
+  const { data } = await api.put<CostCenter[]>(`/natures-comptable/${natureId}/cost-centers`, { costCenterIds });
+  return data;
+}
+
+export async function getNaturesDeCostCenter(costCenterId: string): Promise<NatureComptable[]> {
+  const { data } = await api.get<NatureComptable[]>(`/cost-centers/${costCenterId}/natures-comptable`);
+  return data;
+}
+
+export async function setNaturesDeCostCenter(
+  costCenterId: string,
+  natureComptableIds: string[],
+): Promise<NatureComptable[]> {
+  const { data } = await api.put<NatureComptable[]>(`/cost-centers/${costCenterId}/natures-comptable`, {
+    natureComptableIds,
+  });
+  return data;
+}
+
+export function useCostCentersDeNature(natureId: string | null) {
+  return useQuery({
+    queryKey: ['nature-comptable', natureId, 'cost-centers'],
+    queryFn: () => getCostCentersDeNature(natureId!),
+    enabled: !!natureId,
+  });
+}
+
+export function useNaturesDeCostCenter(costCenterId: string | null) {
+  return useQuery({
+    queryKey: ['cost-center', costCenterId, 'natures-comptable'],
+    queryFn: () => getNaturesDeCostCenter(costCenterId!),
+    enabled: !!costCenterId,
+  });
+}
+
+export function useSetCostCentersDeNature(natureId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setCostCentersDeNature(natureId, ids),
+    // Les deux sens lisent la même table : modifier l'un périme l'autre.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['nature-comptable', natureId, 'cost-centers'] });
+      qc.invalidateQueries({ queryKey: ['cost-center'] });
+    },
+  });
+}
+
+export function useSetNaturesDeCostCenter(costCenterId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => setNaturesDeCostCenter(costCenterId, ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cost-center', costCenterId, 'natures-comptable'] });
+      qc.invalidateQueries({ queryKey: ['nature-comptable'] });
+    },
+  });
+}
+
 // ---------- Pays / Division ----------
 
 export async function listPays(filters: RefFilters = {}): Promise<Pays[]> {

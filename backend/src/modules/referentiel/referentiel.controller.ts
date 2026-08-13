@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ReferentielService } from './referentiel.service';
 import { TypePartenaire } from './entities/partenaire.entity';
@@ -10,6 +10,7 @@ import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
 import { UpdateNatureOperationDto } from './dto/update-nature-operation.dto';
 import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
 import { CreatePaysDto, CreateDivisionDto } from './dto/pays.dto';
+import { LierCostCentersDto, LierNaturesDto } from './dto/lier-nature-cost-center.dto';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '@modules/auth/decorators/current-user.decorator';
 import { AuthorizationService } from '@modules/security/authorization.service';
@@ -189,6 +190,53 @@ export class ReferentielController {
       sortDir: sortDir === 'desc' ? 'desc' : sortDir === 'asc' ? 'asc' : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  /* ---- Liaison nature comptable ↔ centre de coût (migration 0065) ----------
+     La même relation se lit et s'écrit des deux côtés : depuis une nature on
+     choisit ses centres de coût, depuis un centre de coût on choisit ses
+     natures. La lecture est ouverte à tous ; l'écriture exige NATURE_CC_LIER. */
+
+  @Get('natures-comptable/:id/cost-centers')
+  @ApiOperation({ summary: 'Centres de coût liés à une nature comptable' })
+  costCentersDeNature(@Param('id') id: string) {
+    return this.referentiel.costCentersDeNature(id);
+  }
+
+  @Put('natures-comptable/:id/cost-centers')
+  @ApiOperation({ summary: 'Choisir les centres de coût d’une nature comptable' })
+  async lierNatureAuxCostCenters(
+    @Param('id') id: string,
+    @Body() dto: LierCostCentersDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'NATURE_CC_LIER',
+      'lier une nature comptable à des centres de coût',
+    );
+    return this.referentiel.lierNatureAuxCostCenters(id, dto.costCenterIds ?? [], user.sub);
+  }
+
+  @Get('cost-centers/:id/natures-comptable')
+  @ApiOperation({ summary: 'Natures comptables liées à un centre de coût' })
+  naturesDeCostCenter(@Param('id') id: string) {
+    return this.referentiel.naturesDeCostCenter(id);
+  }
+
+  @Put('cost-centers/:id/natures-comptable')
+  @ApiOperation({ summary: 'Choisir les natures comptables d’un centre de coût' })
+  async lierCostCenterAuxNatures(
+    @Param('id') id: string,
+    @Body() dto: LierNaturesDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermissionStrict(
+      user.sub,
+      'NATURE_CC_LIER',
+      'lier un centre de coût à des natures comptables',
+    );
+    return this.referentiel.lierCostCenterAuxNatures(id, dto.natureComptableIds ?? [], user.sub);
   }
 
   @Get('plan-comptable/stats')

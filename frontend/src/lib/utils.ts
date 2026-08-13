@@ -75,3 +75,14 @@ export function inputNumeroClientProps(onValue: (v: string) => void) {
     },
   };
 }
+
+/**
+ * « CODE — Libellé », sauf quand les deux sont identiques.
+ *
+ * Les divisions importées de SAP n'ont pas de nom : leur libellé EST leur code.
+ * Les afficher naïvement donnait « SS11 — SS11 ». Vaut aussi pour les
+ * directions et les centres de coût, chargés dans les mêmes conditions.
+ */
+export function libelleDivision(objet: { code: string; libelle: string }): string {
+  return objet.code === objet.libelle ? objet.code : `${objet.code} — ${objet.libelle}`;
+}

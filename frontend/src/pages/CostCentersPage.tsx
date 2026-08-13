@@ -2,13 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Link2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import {
   useCostCenters,
   useCreateCostCenter,
   useUpdateCostCenter,
   useDeleteCostCenter,
+  useNaturesComptable,
+  useNaturesDeCostCenter,
+  useSetNaturesDeCostCenter,
 } from '@/api/referentiel';
+import { useMyPermissions } from '@/api/users';
+import { useAuthStore } from '@/stores/auth.store';
+import { LiaisonModal } from '@/components/LiaisonModal';
 import { useDirections } from '@/api/directions';
 import { apiErrorMessage, formatMontant } from '@/lib/utils';
 import type { CostCenter } from '@/types/api';
@@ -143,6 +149,28 @@ function CostCenterForm({ costCenter, onDone }: { costCenter?: CostCenter; onDon
   );
 }
 
+/** Le sens inverse de la même liaison : quelles natures pour ce centre de coût. */
+function NaturesDuCentre({ centre, onFermer }: { centre: CostCenter; onFermer: () => void }) {
+  // Les 599 natures d'un coup : la modale a sa propre recherche, et un
+  // aller-retour serveur à chaque frappe serait plus coûteux que le chargement.
+  const { data: toutes } = useNaturesComptable({ limit: 1000 });
+  const { data: liees } = useNaturesDeCostCenter(centre.id);
+  const enregistrer = useSetNaturesDeCostCenter(centre.id);
+
+  return (
+    <LiaisonModal
+      titre={`Natures comptables — ${centre.code}`}
+      sousTitre="Un centre de coût emploie plusieurs natures. La même liaison se retrouve depuis l’écran Plan comptable."
+      elements={toutes?.map((n) => ({ id: n.id, code: n.codeComptableSap, libelle: n.libelle }))}
+      dejaLies={liees?.map((n) => ({ id: n.id, code: n.codeComptableSap, libelle: n.libelle }))}
+      enCours={enregistrer.isPending}
+      erreur={enregistrer.isError ? enregistrer.error : undefined}
+      onEnregistrer={(ids) => enregistrer.mutate(ids, { onSuccess: onFermer })}
+      onFermer={onFermer}
+    />
+  );
+}
+
 export function CostCentersPage() {
   const sort = useTableSort<CcSortCol>('/cost-centers', CC_SORT_COLUMNS, { by: 'libelle', dir: 'asc' });
   const [search, setSearch] = useState('');
@@ -162,6 +190,10 @@ export function CostCentersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<CostCenter | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CostCenter | null>(null);
+  const [liaison, setLiaison] = useState<CostCenter | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const { data: perms } = useMyPermissions(user?.id ?? null);
+  const peutLier = new Set(perms ?? []).has('NATURE_CC_LIER');
 
   const openCreate = () => {
     setEditing(null);
@@ -190,6 +222,7 @@ export function CostCentersPage() {
           </div>
         </div>
       )}
+      {liaison && <NaturesDuCentre centre={liaison} onFermer={() => setLiaison(null)} />}
 
       <Panel>
         <PanelHeader title="Centres de coût" badge={`${costCenters?.length ?? 0}`}>
@@ -250,6 +283,16 @@ export function CostCentersPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {peutLier && (
+                        <button
+                          type="button"
+                          onClick={() => setLiaison(c)}
+                          title="Rattacher des natures comptables à ce centre de coût"
+                          className="inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 text-[10px] font-medium text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
+                        >
+                          <Link2 className="h-3 w-3" /> Natures
+                        </button>
+                      )}
                       <button
                         type="button"
                         aria-label="Modifier"

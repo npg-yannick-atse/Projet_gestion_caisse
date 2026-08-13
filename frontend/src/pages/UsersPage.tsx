@@ -37,7 +37,7 @@ const SORT_LABELS: Record<UserSortCol, string> = {
 import { useRoles } from '@/api/roles';
 import { useLdapUsers } from '@/api/ldap';
 import { useAuthStore } from '@/stores/auth.store';
-import { apiErrorMessage } from '@/lib/utils';
+import { apiErrorMessage, libelleDivision } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { LdapUser, User } from '@/types/api';
 import { Panel, PanelHeader } from '@/components/ui/panel';
@@ -205,6 +205,17 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userDivisions } = useUserDivisions(user.id);
   const toggleDivision = useToggleUserDivision(user.id);
   const divisionAccess = useMemo(() => new Set(userDivisions ?? []), [userDivisions]);
+  /**
+   * Divisions à plat, chacune portant le nom de son pays, triées par pays.
+   * L'ordre vient d'ici et non de la base : les deux listes arrivent séparément
+   * et c'est leur APPARIEMENT qui doit être ordonné, pas chacune de son côté.
+   */
+  const divisionsParPays = useMemo(() => {
+    const nomParPays = new Map((pays ?? []).map((p) => [String(p.id), p.libelle]));
+    return (allDivisions ?? [])
+      .map((division) => ({ division, pays: nomParPays.get(String(division.paysId)) ?? '—' }))
+      .sort((a, b) => a.pays.localeCompare(b.pays, 'fr'));
+  }, [allDivisions, pays]);
   // Natures d'opération autorisées (création de bons)
   const { data: userNatures } = useUserNaturesOperation(user.id);
   const toggleNature = useToggleUserNatureOperation(user.id);
@@ -496,39 +507,33 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
               <p className="mb-1 text-[11px] text-[#94A3B8]">
                 Autorise l'utilisateur à créer des restitutions client sur les divisions cochées.
               </p>
-              {(pays ?? []).map((p) => {
-                const divs = (allDivisions ?? []).filter((d) => d.paysId === p.id);
-                if (divs.length === 0) return null;
-                return (
-                  <div key={p.id}>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.6px] text-[#94A3B8]">
-                      {p.libelle}
-                    </div>
-                    <div className="mt-0.5 grid grid-cols-2 gap-1">
-                      {divs.map((d) => {
-                        const has = divisionAccess.has(d.id);
-                        return (
-                          <label
-                            key={d.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={has}
-                              disabled={toggleDivision.isPending}
-                              onChange={() => toggleDivision.mutate({ divisionId: d.id, has })}
-                              className="h-4 w-4"
-                            />
-                            <span className="text-xs text-[#0F172A]">
-                              {d.code} — {d.libelle}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+              {/* Une ligne par division, le PAYS porté par l'étiquette.
+                  Grouper par pays produisait un en-tête par pays pour une seule
+                  division en dessous — 71 titres, 71 cases isolées, et une
+                  grille à deux colonnes remplie à moitié. */}
+              <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
+                {divisionsParPays.map(({ division, pays: nomPays }) => {
+                  const has = divisionAccess.has(division.id);
+                  return (
+                    <label
+                      key={division.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={has}
+                        disabled={toggleDivision.isPending}
+                        onChange={() => toggleDivision.mutate({ divisionId: division.id, has })}
+                        className="h-4 w-4"
+                      />
+                      <span className="truncate text-xs text-[#0F172A]" title={nomPays}>
+                        {nomPays}
+                        <span className="ml-1.5 text-[#94A3B8]">{libelleDivision(division)}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
               {(allDivisions ?? []).length === 0 && (
                 <p className="text-sm text-[#64748B]">Aucune division. Créez-en depuis « Pays &amp; Divisions ».</p>
               )}
