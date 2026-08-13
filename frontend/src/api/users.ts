@@ -199,6 +199,37 @@ export function useToggleUserDivision(userId: string) {
   });
 }
 
+// ---------- Centres de coût autorisés (imputation des bons) ----------
+
+/**
+ * Centres accordés EN PROPRE. Le périmètre réel y ajoute ceux de la direction
+ * de l'utilisateur et son centre principal : cette liste dit ce qu'on lui a
+ * donné en plus, pas tout ce qu'il peut imputer.
+ */
+export async function listUserCostCenters(userId: string): Promise<string[]> {
+  const { data } = await api.get<string[]>(`/users/${userId}/cost-centers`);
+  return data;
+}
+
+export function useUserCostCenters(userId: string | null) {
+  return useQuery({
+    queryKey: ['user', userId, 'cost-centers'],
+    queryFn: () => listUserCostCenters(userId!),
+    enabled: !!userId,
+  });
+}
+
+export function useToggleUserCostCenter(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ costCenterId, has }: { costCenterId: string; has: boolean }) =>
+      has
+        ? api.delete(`/users/${userId}/cost-centers/${costCenterId}`)
+        : api.post(`/users/${userId}/cost-centers/${costCenterId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user', userId, 'cost-centers'] }),
+  });
+}
+
 // ---------- Natures d'opération autorisées (création de bons) ----------
 
 export async function listUserNaturesOperation(userId: string): Promise<string[]> {

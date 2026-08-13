@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, BadgeCheck, Building2, Globe, Plus, Search, Settings2, ShieldCheck, Tags, Trash2, UserPlus, X, type LucideIcon } from 'lucide-react';
 import {
   useUsers,
   type StatutUtilisateur,
@@ -13,11 +13,13 @@ import {
   useUserDivisions,
   useToggleUserDivision,
   useUserNaturesOperation,
+  useUserCostCenters,
+  useToggleUserCostCenter,
   useToggleUserNatureOperation,
 } from '@/api/users';
 import { useProfils } from '@/api/profils';
 import { useDirections } from '@/api/directions';
-import { usePays, useDivisions, useNaturesOperation } from '@/api/referentiel';
+import { usePays, useDivisions, useNaturesOperation, useCostCenters } from '@/api/referentiel';
 import { useTableSort } from '@/hooks/useTableSort';
 import type { SortDir } from '@/components/SortableHeader';
 
@@ -146,7 +148,7 @@ function LdapPicker({ existingMatricules }: { existingMatricules: Set<string> })
   );
 }
 
-type EditorTab = 'general' | 'roles' | 'profils' | 'divisions' | 'natures';
+type EditorTab = 'general' | 'roles' | 'profils' | 'divisions' | 'natures' | 'cost-centers';
 
 function TabBtn({
   active,
@@ -205,6 +207,12 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
   const { data: userNatures } = useUserNaturesOperation(user.id);
   const toggleNature = useToggleUserNatureOperation(user.id);
   const natureAccess = useMemo(() => new Set(userNatures ?? []), [userNatures]);
+  // Centres de coût accordés EN PROPRE — ceux de la direction s'y ajoutent
+  // automatiquement et n'apparaissent donc pas cochés ici.
+  const { data: allCostCenters } = useCostCenters();
+  const { data: userCostCenters } = useUserCostCenters(user.id);
+  const toggleCostCenter = useToggleUserCostCenter(user.id);
+  const costCenterAccess = useMemo(() => new Set(userCostCenters ?? []), [userCostCenters]);
 
   /**
    * Le référentiel compte ~181 natures : sans recherche, il fallait parcourir
@@ -290,6 +298,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           <TabBtn active={tab === 'profils'} onClick={() => setTab('profils')} icon={BadgeCheck} label="Profils" count={assignedProfils.size} />
           <TabBtn active={tab === 'divisions'} onClick={() => setTab('divisions')} icon={Globe} label="Divisions" count={divisionAccess.size} />
           <TabBtn active={tab === 'natures'} onClick={() => setTab('natures')} icon={Tags} label="Natures" count={natureAccess.size} />
+          <TabBtn active={tab === 'cost-centers'} onClick={() => setTab('cost-centers')} icon={Building2} label="Centres de coût" count={costCenterAccess.size} />
         </div>
 
         {/* Verrou anti-lockout (toujours visible s'il s'agit de soi) */}
@@ -487,6 +496,40 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           )}
 
           {/* -------- Natures d'opération autorisées (création de bons) -------- */}
+          {/* -------- Centres de coût accordés en propre -------- */}
+          {tab === 'cost-centers' && (
+            <div className="space-y-2">
+              <p className="mb-1 text-[11px] text-[#94A3B8]">
+                Centres de coût accordés <strong>en plus</strong> de ceux de sa direction.
+                Un utilisateur peut déjà imputer tous les centres rattachés à sa direction :
+                inutile de les cocher ici, ils ne s'y affichent pas.
+              </p>
+              <div className="grid max-h-[320px] grid-cols-2 gap-1 overflow-y-auto">
+                {(allCostCenters ?? []).map((cc) => {
+                  const has = costCenterAccess.has(cc.id);
+                  return (
+                    <label
+                      key={cc.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-[7px] px-2 py-1 hover:bg-[#F8FAFC]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={has}
+                        disabled={toggleCostCenter.isPending}
+                        onChange={() => toggleCostCenter.mutate({ costCenterId: cc.id, has })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-xs text-[#0F172A]">{cc.libelle}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {(allCostCenters ?? []).length === 0 && (
+                <p className="text-xs text-[#64748B]">Aucun centre de coût dans le référentiel.</p>
+              )}
+            </div>
+          )}
+
           {tab === 'natures' && (
             <div className="space-y-2">
               <p className="mb-1 text-[11px] text-[#94A3B8]">

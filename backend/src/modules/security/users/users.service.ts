@@ -10,6 +10,7 @@ import { Profil } from '../entities/profil.entity';
 import { UserProfil } from '../entities/user-profil.entity';
 import { UserDivisionAccess } from '../entities/user-division-access.entity';
 import { UserNatureOperation } from '../entities/user-nature-operation.entity';
+import { UserCostCenter } from '../entities/user-cost-center.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuditPermissionService } from '../audit-permission.service';
@@ -33,6 +34,8 @@ export class UsersService {
     private readonly userDivisionRepo: Repository<UserDivisionAccess>,
     @InjectRepository(UserNatureOperation)
     private readonly userNatureRepo: Repository<UserNatureOperation>,
+    @InjectRepository(UserCostCenter)
+    private readonly userCostCenterRepo: Repository<UserCostCenter>,
     private readonly auditPerm: AuditPermissionService,
   ) {}
 
@@ -79,6 +82,35 @@ export class UsersService {
     const result = await this.userNatureRepo.delete({ userId, natureOperationId });
     if (result.affected === 0) {
       throw new NotFoundException('Nature autorisée introuvable');
+    }
+  }
+
+  /**
+   * Centres de coût autorisés EN PROPRE.
+   *
+   * Le périmètre effectif y ajoute ceux de la direction de l'utilisateur et son
+   * centre principal : cette liste ne dit donc pas tout ce qu'il peut imputer,
+   * seulement ce qu'on lui a accordé EN PLUS. L'écran le précise.
+   */
+  async getCostCenterAccess(userId: string): Promise<string[]> {
+    await this.findOne(userId);
+    const rows = await this.userCostCenterRepo.find({ where: { userId } });
+    return rows.map((r) => String(r.costCenterId));
+  }
+
+  async assignCostCenter(userId: string, costCenterId: string, actorId: string): Promise<void> {
+    await this.findOne(userId);
+    const existing = await this.userCostCenterRepo.findOne({ where: { userId, costCenterId } });
+    if (existing) return;
+    await this.userCostCenterRepo.save(
+      this.userCostCenterRepo.create({ userId, costCenterId, estPrincipal: false, createdById: actorId }),
+    );
+  }
+
+  async removeCostCenter(userId: string, costCenterId: string): Promise<void> {
+    const result = await this.userCostCenterRepo.delete({ userId, costCenterId });
+    if (result.affected === 0) {
+      throw new NotFoundException('Centre de coût autorisé introuvable');
     }
   }
 

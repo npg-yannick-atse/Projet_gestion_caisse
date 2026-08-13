@@ -233,6 +233,45 @@ export class UsersController {
     await this.usersService.removeDivision(id, divisionId);
   }
 
+  // ---------- Centres de coût autorisés (imputation des bons) ----------
+
+  /**
+   * Ces trois routes manquaient : `sec_user_cost_center` était LUE par le
+   * périmètre de création de bon, mais rien ne l'écrivait. Autoriser un centre
+   * de coût à quelqu'un supposait donc de passer par sa direction — tout ou
+   * rien — ou d'écrire en base à la main.
+   */
+  @Get(':id/cost-centers')
+  @ApiOperation({ summary: "Lister les centres de coût autorisés en propre à l'utilisateur" })
+  async getCostCenters(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    await this.assertPeutVoirDroits(id, user, "consulter les centres de coût d'un utilisateur");
+    return this.usersService.getCostCenterAccess(id);
+  }
+
+  @Post(':id/cost-centers/:costCenterId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Autoriser un centre de coût' })
+  async assignCostCenter(
+    @Param('id') id: string,
+    @Param('costCenterId') costCenterId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'autoriser un centre de coût');
+    await this.usersService.assignCostCenter(id, costCenterId, user.sub);
+  }
+
+  @Delete(':id/cost-centers/:costCenterId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Retirer un centre de coût autorisé' })
+  async removeCostCenter(
+    @Param('id') id: string,
+    @Param('costCenterId') costCenterId: string,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    await this.authz.assertPermission(user.sub, 'ADMIN_USER', 'retirer un centre de coût autorisé');
+    await this.usersService.removeCostCenter(id, costCenterId);
+  }
+
   // ---------- Natures d'opération autorisées (création de bons) ----------
 
   @Get(':id/natures-operation')
