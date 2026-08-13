@@ -45,9 +45,12 @@ export function DateTimePicker({
   className?: string;
 }) {
   const [ouvert, setOuvert] = useState(false);
-  // Le panneau s'ouvre vers le haut quand il n'y a pas la place en dessous :
-  // dans une modale, il sortait du cadre et recouvrait les champs suivants.
+  // Le panneau se recale sur l'espace disponible : vers le haut s'il manque de
+  // place en dessous, aligné à droite s'il en manque à droite. Sans ça, sur la
+  // borne de FIN — en colonne de droite — la colonne des minutes sortait de
+  // l'écran, et sur les deux bornes il recouvrait les champs du dessous.
   const [versLeHaut, setVersLeHaut] = useState(false);
+  const [versLaGauche, setVersLaGauche] = useState(false);
   const conteneur = useRef<HTMLDivElement>(null);
   const colonneHeures = useRef<HTMLDivElement>(null);
   const colonneMinutes = useRef<HTMLDivElement>(null);
@@ -140,8 +143,9 @@ export function DateTimePicker({
         aria-expanded={ouvert}
         onClick={() => {
           const rect = conteneur.current?.getBoundingClientRect();
-          // 320 px : hauteur du panneau. En dessous de ce reste, on bascule.
-          setVersLeHaut(!!rect && window.innerHeight - rect.bottom < 320 && rect.top > 320);
+          // Encombrement du panneau : ~300 px de haut, ~400 px de large.
+          setVersLeHaut(!!rect && window.innerHeight - rect.bottom < 300 && rect.top > 300);
+          setVersLaGauche(!!rect && window.innerWidth - rect.left < 400);
           setOuvert((o) => !o);
         }}
         className={
@@ -156,9 +160,9 @@ export function DateTimePicker({
       {ouvert && (
         <div
           role="dialog"
-          className={`absolute left-0 z-50 flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)] ${
+          className={`absolute z-50 flex gap-3 rounded-[12px] border border-[rgba(15,76,129,0.12)] bg-white p-3 shadow-[0_12px_32px_rgba(15,23,42,0.16)] ${
             versLeHaut ? 'bottom-full mb-1' : 'top-full mt-1'
-          }`}
+          } ${versLaGauche ? 'right-0' : 'left-0'}`}
         >
           {/* ---- Calendrier ---- */}
           <div className="w-[15rem]">
