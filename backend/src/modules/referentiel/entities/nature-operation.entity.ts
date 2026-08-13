@@ -30,6 +30,9 @@ export class NatureOperation extends AuditableEntity {
   natureComptable?: NatureComptable | null;
 
   @ApiProperty({ default: true })
+  /** Centres de coût auxquels cette nature est rattachée. NON PERSISTÉ : compté à la lecture. */
+  nbCostCenters?: number;
+
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;
 }

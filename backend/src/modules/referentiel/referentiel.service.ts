@@ -251,11 +251,50 @@ export class ReferentielService {
     return qb.getMany();
   }
 
-  listCostCenters(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {}): Promise<CostCenter[]> {
-    return this.applyRefList(
+  async listCostCenters(
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc' } = {},
+  ): Promise<CostCenter[]> {
+    const liste: CostCenter[] = await this.applyRefList(
       this.costCenterRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true }),
       'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
     );
+    return this.compterLiaisons(liste, 'cost_center_id', 'nbNatures');
+  }
+
+  /**
+   * Combien de natures d'opération sont rattachées à chaque centre — et
+   * réciproquement.
+   *
+   * Sans ce nombre, les deux écrans n'offraient qu'un bouton « Natures » qui
+   * ouvrait une fenêtre : rien ne disait, en parcourant la liste, lesquels
+   * étaient déjà liés. Il fallait ouvrir chaque ligne pour le découvrir.
+   *
+   * UNE requête pour toute la liste, groupée en base — pas une par ligne : le
+   * référentiel des natures en compte 182.
+   */
+  private async compterLiaisons<T extends { id: string }>(
+    liste: T[],
+    colonne: 'cost_center_id' | 'nature_operation_id',
+    champ: 'nbNatures' | 'nbCostCenters',
+  ): Promise<T[]> {
+    if (liste.length === 0) return liste;
+    const ids = liste.map((x) => Number(x.id)).filter((n) => Number.isFinite(n));
+    if (ids.length === 0) return liste;
+    try {
+      const rows: Array<{ id: number; n: number }> = await this.costCenterRepo.manager.query(
+        `SELECT ${colonne} AS id, COUNT(*) AS n
+           FROM dbo.ref_nature_operation_cost_center
+          WHERE ${colonne} IN (${ids.join(',')})
+          GROUP BY ${colonne}`,
+      );
+      const parId = new Map(rows.map((r) => [String(r.id), Number(r.n)]));
+      for (const x of liste) {
+        (x as Record<string, unknown>)[champ] = parId.get(String(x.id)) ?? 0;
+      }
+    } catch {
+      // Une table absente ne doit pas priver l'écran de sa liste.
+    }
+    return liste;
   }
 
   async findCostCenter(id: string): Promise<CostCenter> {
@@ -344,12 +383,17 @@ export class ReferentielService {
     return this.typeBonRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
   }
 
-  listNaturesOperation(opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {}): Promise<NatureOperation[]> {
+  async listNaturesOperation(
+    opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
+  ): Promise<NatureOperation[]> {
     const qb = this.natureOperationRepo
       .createQueryBuilder('x')
       .leftJoinAndSelect('x.natureComptable', 'nc')
       .where('x.estActif = :a', { a: true });
-    return this.applyRefList(qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle');
+    const liste: NatureOperation[] = await this.applyRefList(
+      qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+    );
+    return this.compterLiaisons(liste, 'nature_operation_id', 'nbCostCenters');
   }
 
   async findNatureOperation(id: string): Promise<NatureOperation> {

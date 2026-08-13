@@ -22,6 +22,9 @@ export class CostCenter extends AuditableEntity {
   budgetMensuel?: string | null;
 
   @ApiProperty({ default: true })
+  /** Natures d'opération rattachées à ce centre. NON PERSISTÉ : compté à la lecture. */
+  nbNatures?: number;
+
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;
 }

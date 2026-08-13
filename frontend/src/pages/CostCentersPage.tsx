@@ -291,6 +291,17 @@ export function CostCentersPage() {
                           className="inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-1 text-[10px] font-medium text-[#475569] transition-colors hover:bg-[#EFF6FF] hover:text-[#1A6DB5]"
                         >
                           <Link2 className="h-3 w-3" /> Natures
+                          {/* Le nombre ferme la question « est-ce lié ? » sans
+                              avoir à ouvrir la fenêtre, ligne après ligne. */}
+                          <span
+                            className={
+                              c.nbNatures
+                                ? 'ml-0.5 rounded-full bg-[#EFF6FF] px-1.5 font-semibold text-[#0C447C]'
+                                : 'ml-0.5 text-[#CBD5E1]'
+                            }
+                          >
+                            {c.nbNatures ?? 0}
+                          </span>
                         </button>
                       )}
                       <button

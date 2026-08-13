@@ -462,6 +462,8 @@ export interface CostCenter {
   directionId?: string | null;
   budgetMensuel?: string | null;
   estActif: boolean;
+  /** Natures d'opération rattachées — compté par le serveur. */
+  nbNatures?: number;
 }
 
 export interface TypeBon {
@@ -511,6 +513,8 @@ export interface NatureOperation {
   natureComptableId?: string | null;
   natureComptable?: { id: string; libelle: string; codeComptableSap?: string | null } | null;
   estActif: boolean;
+  /** Centres de coût rattachés — compté par le serveur. */
+  nbCostCenters?: number;
 }
 
 export interface SousBonInput {
