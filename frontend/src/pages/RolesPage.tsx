@@ -138,7 +138,7 @@ function PermissionEditor({ role, onClose }: { role: Role; onClose: () => void }
         titre="Générer un profil depuis ce rôle"
         sourceLibelle={role.libelle}
         nbPermissions={assignedIds.size}
-        avertissement="Seules les permissions sont copiées. Ce qu'un rôle décide par son code — voir les bons de tous, contourner les contrôles en administrateur, modifier un bon — ne se transmet jamais à un profil."
+        avertissement="Le profil reçoit les permissions du rôle ET le rôle lui-même : son porteur en obtiendra donc le statut, contournement administrateur compris si le rôle en donne un. Pour un profil de permissions seules, décochez le rôle ensuite dans son volet Rôles."
         pending={generer.isPending}
         error={generer.error}
         onValider={(code, libelle) =>

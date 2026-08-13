@@ -368,7 +368,7 @@ function UserRolesEditor({ user, onClose }: { user: User; onClose: () => void })
           titre="Générer un profil depuis cet utilisateur"
           sourceLibelle={`${user.prenom} ${user.nom}`}
           nbPermissions={permissionsUtilisateur?.length ?? 0}
-          avertissement="Le profil embarque ses permissions, ses centres de coût, ses natures comptables et ses divisions. Ne suivent PAS : ses rôles — dont le code ouvre la visibilité et le contournement administrateur — ses accès aux caisses, sa direction, et ce qu'il exerce au titre d'un intérim, qui est temporaire."
+          avertissement="Le profil embarque ses permissions, SES RÔLES, ses centres de coût, ses natures comptables et ses divisions — son porteur obtiendra donc le même statut, contournement administrateur compris. Ne suivent PAS : ses accès aux caisses, sa direction, et ce qu'il exerce au titre d'un intérim, qui est temporaire."
           pending={genererDepuisUtilisateur.isPending}
           error={genererDepuisUtilisateur.error}
           onValider={(code, libelle) =>

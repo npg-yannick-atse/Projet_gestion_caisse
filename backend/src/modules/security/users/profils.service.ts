@@ -79,16 +79,19 @@ export class ProfilsService {
   /**
    * Crée un profil portant les mêmes permissions qu'un rôle.
    *
-   * Sert à partir d'un socle connu — « comme un caissier, mais sans le rôle » —
-   * puis à l'ajuster. C'est un point de départ, pas un lien : le profil ne suit
-   * PAS le rôle. Ajouter une permission au rôle ensuite ne la donne pas au
-   * profil, et c'est voulu : deux objets qui se ressemblent au départ n'ont pas
-   * à évoluer ensemble sans qu'on l'ait décidé.
+   * Sert à partir d'un socle connu puis à l'ajuster. C'est un point de départ,
+   * pas un lien : le profil ne suit PAS le rôle. Ajouter une permission au rôle
+   * ensuite ne la donne pas au profil, et c'est voulu — deux objets qui se
+   * ressemblent au départ n'ont pas à évoluer ensemble sans qu'on l'ait décidé.
    *
-   * Ce que la copie NE transporte PAS : tout ce que le rôle décide par son CODE
-   * — la visibilité sur les bons d'autrui, le contournement administrateur, le
-   * droit de modifier un bon. Ces règles-là lisent le code du rôle en dur ;
-   * aucun profil ne peut les obtenir.
+   * Depuis la migration 0068, le RÔLE LUI-MÊME est attaché au profil, en plus
+   * de ses permissions. Sans cela, un profil « généré depuis CAISSIER » donnait
+   * les gestes d'un caissier mais pas son statut : son porteur restait bloqué
+   * au verrou d'entrée, et tout ce que le rôle décide par son code — voir les
+   * bons d'autrui, contourner les contrôles — lui échappait.
+   *
+   * Pour un profil de permissions SEULES, il suffit de décocher le rôle dans le
+   * volet Rôles : le choix reste ouvert, il n'est simplement plus imposé.
    */
   async genererDepuisRole(
     roleId: string,
@@ -112,6 +115,13 @@ export class ProfilsService {
     for (const lien of liens) {
       await this.assignPermissionToProfil(String(profil.id), String(lien.permissionId), actorId);
     }
+
+    // Le rôle lui-même, pas seulement ses permissions (migration 0068).
+    await this.profilRepo.manager.query(
+      `IF NOT EXISTS (SELECT 1 FROM dbo.sec_profil_role WHERE profil_id=@0 AND role_id=@1)
+       INSERT INTO dbo.sec_profil_role (profil_id, role_id, created_by_id) VALUES (@0, @1, @2)`,
+      [String(profil.id), String(roleId), actorId],
+    );
     return profil;
   }
 

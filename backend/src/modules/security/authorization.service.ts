@@ -436,7 +436,16 @@ export class AuthorizationService {
    * prêté jusqu'au 31 ne doit pas laisser son rôle actif le 1er.
    */
   private async rolesViaProfils(userId: string): Promise<string[]> {
-    const profilIds = await this.getProfilIds(userId);
+    // Ses profils PROPRES, plus ceux qu'un intérim actif lui prête. Sans les
+    // seconds, déléguer un profil transmettait ses permissions mais pas ses
+    // rôles : le remplaçant restait bloqué au verrou d'entrée — exactement le
+    // symptôme constaté en test.
+    const propres = await this.getProfilIds(userId);
+    const pretes = (await this.getActiveInterims(userId))
+      .map((i) => i.profilTransfereId)
+      .filter((id): id is string => !!id)
+      .map(String);
+    const profilIds = [...new Set([...propres, ...pretes])];
     if (profilIds.length === 0) return [];
     const rows = await this.dataSource
       .getRepository(ProfilRole)
