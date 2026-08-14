@@ -426,6 +426,17 @@ function ProfilsPageInner() {
   const [pendingDelete, setPendingDelete] = useState<Profil | null>(null);
   const selected = profils?.find((p) => p.id === selectedId) ?? null;
   const [volet, setVolet] = useState<'permissions' | 'roles' | 'cost-centers' | 'divisions' | 'natures-operation'>('permissions');
+
+  // Comptes affichés sur les onglets. Le profil sélectionné peut être nul :
+  // les hooks restent appelés (règle des hooks) mais ne requêtent pas.
+  const idSel = selected?.id ?? null;
+  const comptes = {
+    permissions: useProfilPermissions(idSel).data?.length ?? 0,
+    roles: usePerimetreProfil(idSel, 'roles').data?.length ?? 0,
+    costCenters: usePerimetreProfil(idSel, 'cost-centers').data?.length ?? 0,
+    divisions: usePerimetreProfil(idSel, 'divisions').data?.length ?? 0,
+    natures: usePerimetreProfil(idSel, 'natures-operation').data?.length ?? 0,
+  };
   const { data: costCenters } = useCostCenters();
   const { data: divisions } = useDivisions();
   const { data: natures } = useNaturesOperation();
@@ -528,15 +539,19 @@ function ProfilsPageInner() {
               bordure, et le voile sombre de la modale transparaissait au
               travers jusqu'à rendre leur texte illisible. */}
           <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-[rgba(15,76,129,0.08)] bg-white px-4 py-2.5">
+            {/* Chaque onglet porte son compte. Un volet vide ne peut pas être
+                masqué — on ne pourrait plus le remplir — mais rien n'obligeait
+                à cliquer pour découvrir qu'il n'y a rien : un profil généré
+                depuis un rôle n'a aucun périmètre, sa source n'en a pas. */}
             {(
               [
-                ['permissions', 'Permissions'],
-                ['roles', 'Rôles'],
-                ['cost-centers', 'Centres de coût'],
-                ['divisions', 'Divisions'],
-                ['natures-operation', 'Natures'],
+                ['permissions', 'Permissions', comptes.permissions],
+                ['roles', 'Rôles', comptes.roles],
+                ['cost-centers', 'Centres de coût', comptes.costCenters],
+                ['divisions', 'Divisions', comptes.divisions],
+                ['natures-operation', 'Natures', comptes.natures],
               ] as const
-            ).map(([cle, libelle]) => (
+            ).map(([cle, libelle, compte]) => (
               <button
                 key={cle}
                 type="button"
@@ -548,6 +563,17 @@ function ProfilsPageInner() {
                 }
               >
                 {libelle}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                    volet === cle
+                      ? 'bg-white/20 text-white'
+                      : compte
+                        ? 'bg-[#EFF6FF] text-[#0F4C81]'
+                        : 'bg-[#F1F5F9] text-[#CBD5E1]'
+                  }`}
+                >
+                  {compte}
+                </span>
               </button>
             ))}
           </div>
