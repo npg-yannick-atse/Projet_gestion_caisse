@@ -12,12 +12,12 @@ import { ProfilPermission } from './entities/profil-permission.entity';
 import { UserCaisseAccess } from './entities/user-caisse-access.entity';
 import { UserCostCenter } from './entities/user-cost-center.entity';
 import { ProfilCostCenter } from './entities/profil-cost-center.entity';
-import { ProfilNatureOperation } from './entities/profil-nature-operation.entity';
+import { ProfilNatureComptable } from './entities/profil-nature-comptable.entity';
 import { ProfilDivisionAccess } from './entities/profil-division-access.entity';
 import { ProfilRole } from './entities/profil-role.entity';
 import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
-import { UserNatureOperation } from './entities/user-nature-operation.entity';
+import { UserNatureComptable } from './entities/user-nature-comptable.entity';
 import { Interim } from './entities/interim.entity';
 import { ChangementPermission } from '@modules/audit/entities/changement-permission.entity';
 import { AuditPermissionService } from './audit-permission.service';
@@ -50,12 +50,12 @@ import { AuthorizationService } from './authorization.service';
       UserCaisseAccess,
       UserCostCenter,
       ProfilCostCenter,
-      ProfilNatureOperation,
+      ProfilNatureComptable,
       ProfilDivisionAccess,
       ProfilRole,
       UserPermissionExtra,
       UserDivisionAccess,
-      UserNatureOperation,
+      UserNatureComptable,
       Interim,
       ChangementPermission,
     ]),

@@ -2,12 +2,12 @@ import { ProfilsService } from './profils.service';
 
 /**
  * Un profil porte désormais des PÉRIMÈTRES (migration 0067) : centres de coût,
- * natures d'opération et divisions, en plus de ses permissions.
+ * natures comptables et divisions, en plus de ses permissions.
  *
  * C'est ce qui rend un profil suffisant pour transmettre les droits d'une
  * personne à une autre. Sans les périmètres, le profil donnait le droit d'agir
  * sans dire sur quoi : un demandeur cloné pouvait créer un bon en théorie, et
- * se voyait refuser chaque nature d'opération en pratique.
+ * se voyait refuser chaque nature comptable en pratique.
  */
 
 /** Ce que la copie a écrit, table par table. */
@@ -23,9 +23,9 @@ function service(perimetres: {
 
   const contenu: Record<string, Array<Record<string, unknown>>> = {
     UserCostCenter: (perimetres.costCenters ?? []).map((id) => ({ userId: '5', costCenterId: id })),
-    UserNatureOperation: (perimetres.natures ?? []).map((id) => ({
+    UserNatureComptable: (perimetres.natures ?? []).map((id) => ({
       userId: '5',
-      natureOperationId: id,
+      natureComptableId: id,
     })),
     UserDivisionAccess: (perimetres.divisions ?? []).map((id) => ({ userId: '5', divisionId: id })),
   };
@@ -62,11 +62,11 @@ describe('Périmètres recopiés dans le profil', () => {
     expect(lignes.map((l) => l.ligne.costCenterId)).toEqual(['7', '8']);
   });
 
-  it('recopie les natures d’opération', async () => {
+  it('recopie les natures comptables', async () => {
     const s = service({ natures: ['12'] });
     await generer(s);
-    const lignes = s.ecrits.filter((e) => e.table === 'ProfilNatureOperation');
-    expect(lignes.map((l) => l.ligne.natureOperationId)).toEqual(['12']);
+    const lignes = s.ecrits.filter((e) => e.table === 'ProfilNatureComptable');
+    expect(lignes.map((l) => l.ligne.natureComptableId)).toEqual(['12']);
   });
 
   it('recopie les divisions', async () => {
@@ -95,7 +95,7 @@ describe('Périmètres recopiés dans le profil', () => {
     const s = service({ costCenters: ['7'], natures: ['12'], divisions: ['3'] });
     await generer(s);
     expect(new Set(s.ecrits.map((e) => e.table))).toEqual(
-      new Set(['ProfilCostCenter', 'ProfilNatureOperation', 'ProfilDivisionAccess']),
+      new Set(['ProfilCostCenter', 'ProfilNatureComptable', 'ProfilDivisionAccess']),
     );
   });
 });

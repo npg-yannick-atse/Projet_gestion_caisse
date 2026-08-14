@@ -346,13 +346,13 @@ export class UsersController {
   @ApiOperation({ summary: "Lister les natures d'opération autorisées pour l'utilisateur" })
   async getNatureOperations(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     await this.assertPeutVoirDroits(id, user, "consulter les natures d'opération d'un utilisateur");
-    return this.usersService.getNatureOperationAccess(id);
+    return this.usersService.getNatureComptableAccess(id);
   }
 
   @Post(':id/natures-operation/:natureId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Autoriser une nature d'opération" })
-  async assignNatureOperation(
+  async assignNatureComptable(
     @Param('id') id: string,
     @Param('natureId') natureId: string,
     @CurrentUser() user: JwtPayload,
@@ -362,13 +362,13 @@ export class UsersController {
       'ADMIN_USER',
       "autoriser une nature d'opération",
     );
-    await this.usersService.assignNatureOperation(id, natureId, user.sub);
+    await this.usersService.assignNatureComptable(id, natureId, user.sub);
   }
 
   @Delete(':id/natures-operation/:natureId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Retirer une nature d'opération autorisée" })
-  async removeNatureOperation(
+  async removeNatureComptable(
     @Param('id') id: string,
     @Param('natureId') natureId: string,
     @CurrentUser() user: JwtPayload,
@@ -378,6 +378,6 @@ export class UsersController {
       'ADMIN_USER',
       "retirer une nature d'opération autorisée",
     );
-    await this.usersService.removeNatureOperation(id, natureId);
+    await this.usersService.removeNatureComptable(id, natureId);
   }
 }

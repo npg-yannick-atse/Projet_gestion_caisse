@@ -11,9 +11,9 @@ import { UserPermissionExtra } from './entities/user-permission-extra.entity';
 import { Interim } from './entities/interim.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
 import { UserDivisionAccess } from './entities/user-division-access.entity';
-import { UserNatureOperation } from './entities/user-nature-operation.entity';
+import { UserNatureComptable } from './entities/user-nature-comptable.entity';
 import { ProfilCostCenter } from './entities/profil-cost-center.entity';
-import { ProfilNatureOperation } from './entities/profil-nature-operation.entity';
+import { ProfilNatureComptable } from './entities/profil-nature-comptable.entity';
 import { ProfilDivisionAccess } from './entities/profil-division-access.entity';
 import { ProfilRole } from './entities/profil-role.entity';
 
@@ -514,22 +514,22 @@ export class AuthorizationService {
    * null = administrateur (aucune restriction). Sinon un Set, éventuellement
    * VIDE : sans attribution, l'utilisateur ne peut utiliser aucune nature.
    */
-  async getNatureOperationPerimeter(userId: string): Promise<Set<string> | null> {
+  async getNatureComptablePerimeter(userId: string): Promise<Set<string> | null> {
     // Volontairement AUCUN bypass admin : le périmètre des natures d'opération
     // s'applique à TOUS, y compris SUPER_ADMIN / ADMINISTRATEUR / DAF. Un
     // utilisateur sans nature affectée (ensemble vide) ne peut en utiliser aucune.
     const rows = await this.dataSource
-      .getRepository(UserNatureOperation)
+      .getRepository(UserNatureComptable)
       .find({ where: { userId: userId as any } });
-    const parProfil = await this.viaProfils(userId, ProfilNatureOperation, 'natureOperationId');
-    return new Set([...rows.map((r) => String(r.natureOperationId)), ...parProfil]);
+    const parProfil = await this.viaProfils(userId, ProfilNatureComptable, 'natureComptableId');
+    return new Set([...rows.map((r) => String(r.natureComptableId)), ...parProfil]);
   }
 
   /** Vérifie que l'utilisateur a le droit d'utiliser cette nature (sinon Forbidden). */
-  async assertNatureInPerimeter(userId: string, natureOperationId: string): Promise<void> {
-    const perim = await this.getNatureOperationPerimeter(userId);
+  async assertNatureInPerimeter(userId: string, natureComptableId: string): Promise<void> {
+    const perim = await this.getNatureComptablePerimeter(userId);
     if (perim === null) return; // admin : accès total
-    if (!perim.has(String(natureOperationId))) {
+    if (!perim.has(String(natureComptableId))) {
       throw new ForbiddenException("Cette nature comptable ne vous est pas autorisée.");
     }
   }

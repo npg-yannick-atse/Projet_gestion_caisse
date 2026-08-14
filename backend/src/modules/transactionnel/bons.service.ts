@@ -24,7 +24,7 @@ import { User } from '@modules/security/entities/user.entity';
 import { UserCostCenter } from '@modules/security/entities/user-cost-center.entity';
 import { AuthorizationService } from '@modules/security/authorization.service';
 import { CostCenter } from '@modules/referentiel/entities/cost-center.entity';
-import { NatureOperation } from '@modules/referentiel/entities/nature-operation.entity';
+import { NatureComptable } from '@modules/referentiel/entities/nature-comptable.entity';
 import { TypeBon } from '@modules/referentiel/entities/type-bon.entity';
 import { Caisse } from '@modules/financier/entities/caisse.entity';
 import { Portefeuille } from '@modules/financier/entities/portefeuille.entity';
@@ -40,7 +40,6 @@ interface CreateBonInput {
     numeroBl: string;
     codeManutention: string;
     costCenterId: string;
-    natureOperationId?: string | null;
     natureComptableId?: string | null;
     caisseId: string;
     portefeuilleId: string;
@@ -174,10 +173,10 @@ export class BonsService {
     // des couples contradictoires (la nature RECHARGE, du 22100-DSI, enregistrée
     // sur 22100 puis sur 1-DBTSI — cf. BON-0027 et BON-0028). L'écran verrouille
     // désormais le centre de coût ; ce contrôle ferme la porte côté API.
-    const natureIds = [...new Set(input.soubons.map((sb) => String(sb.natureOperationId)).filter(Boolean))];
+    const natureIds = [...new Set(input.soubons.map((sb) => String(sb.natureComptableId)).filter(Boolean))];
     if (natureIds.length > 0) {
       const natures = await this.dataSource
-        .getRepository(NatureOperation)
+        .getRepository(NatureComptable)
         .find({ where: { id: In(natureIds) as any } });
       // Une nature peut désormais être rattachée à PLUSIEURS centres de coût
       // (migration 0066) : « imposer » devient « restreindre ». Le centre du
@@ -199,13 +198,13 @@ export class BonsService {
 
       for (let i = 0; i < input.soubons.length; i++) {
         const sb = input.soubons[i];
-        const autorises = ccParNature.get(String(sb.natureOperationId));
+        const autorises = ccParNature.get(String(sb.natureComptableId));
         // Aucune liaison = nature non rattachée : on n'impose rien, comme avant
         // pour une nature sans centre de coût.
         if (!autorises || autorises.size === 0) continue;
         if (!autorises.has(String(sb.costCenterId))) {
-          const nature = natures.find((n) => String(n.id) === String(sb.natureOperationId));
-          const nom = nature?.code ?? sb.natureOperationId;
+          const nature = natures.find((n) => String(n.id) === String(sb.natureComptableId));
+          const nom = nature?.codeComptableSap ?? nature?.libelle ?? sb.natureComptableId;
           throw new BadRequestException(
             autorises.size === 1
               ? `Sous-bon ${i + 1} : la nature « ${nom} » impose son centre de coût. ` +
@@ -289,10 +288,10 @@ export class BonsService {
     // (sec_user_nature_operation). Le périmètre s'applique à TOUS, administrateurs et
     // super admin compris (aucun bypass) : sans nature attribuée, la création est bloquée.
     for (const sb of input.soubons) {
-      if (!sb.natureOperationId) {
+      if (!sb.natureComptableId) {
         throw new BadRequestException("La nature comptable est requise pour chaque sous-bon.");
       }
-      await this.authz.assertNatureInPerimeter(currentUserId, String(sb.natureOperationId));
+      await this.authz.assertNatureInPerimeter(currentUserId, String(sb.natureComptableId));
     }
 
     /**
@@ -356,7 +355,6 @@ export class BonsService {
             numeroBl: sbData.numeroBl ?? '',
             codeManutention: sbData.codeManutention,
             costCenterId: sbData.costCenterId as any,
-            natureOperationId: sbData.natureOperationId ? (sbData.natureOperationId as any) : null,
             natureComptableId: sbData.natureComptableId ? (sbData.natureComptableId as any) : null,
             caisseId: sbData.caisseId as any,
             portefeuilleId: sbData.portefeuilleId as any,
@@ -671,7 +669,7 @@ export class BonsService {
     costCenters: CostCenter[];
     caisses: Caisse[];
     portefeuilles: Portefeuille[];
-    naturesOperation: NatureOperation[];
+    naturesOperation: NatureComptable[];
     hasMultiCc: boolean;
     isAdmin: boolean;
   }> {
@@ -680,7 +678,7 @@ export class BonsService {
     const ccRepo = this.dataSource.getRepository(CostCenter);
     const caisseRepo = this.dataSource.getRepository(Caisse);
     const ptfRepo = this.dataSource.getRepository(Portefeuille);
-    const natureRepo = this.dataSource.getRepository(NatureOperation);
+    const natureRepo = this.dataSource.getRepository(NatureComptable);
 
     const costCenters = perimeter.allowedCcIds
       ? await ccRepo.find({ where: { id: In([...perimeter.allowedCcIds]) as any, estActif: true }, order: { libelle: 'ASC' } })
@@ -696,8 +694,8 @@ export class BonsService {
 
     // Natures d'opération autorisées : admin = toutes ; non-admin = liste blanche
     // (éventuellement vide → aucune, donc le formulaire ne propose rien).
-    const naturePerim = await this.authz.getNatureOperationPerimeter(userId);
-    let naturesOperation: NatureOperation[];
+    const naturePerim = await this.authz.getNatureComptablePerimeter(userId);
+    let naturesOperation: NatureComptable[];
     if (naturePerim === null) {
       naturesOperation = await natureRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
     } else if (naturePerim.size === 0) {

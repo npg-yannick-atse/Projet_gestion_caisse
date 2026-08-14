@@ -3,7 +3,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SecurityModule } from '@modules/security/security.module';
 import { PlanComptable } from './entities/plan-comptable.entity';
 import { CostCenter } from './entities/cost-center.entity';
-import { NatureOperation } from './entities/nature-operation.entity';
 import { NatureComptable } from './entities/nature-comptable.entity';
 import { NatureComptableCostCenter } from './entities/nature-comptable-cost-center.entity';
 import { Partenaire } from './entities/partenaire.entity';
@@ -30,7 +29,7 @@ import { ParametresController } from './parametres.controller';
     TypeOrmModule.forFeature([
       PlanComptable,
       CostCenter,
-      NatureOperation,
+      NatureComptable,
       NatureComptable,
       NatureComptableCostCenter,
       Partenaire,

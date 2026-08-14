@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { Partenaire, TypePartenaire } from './entities/partenaire.entity';
 import { CostCenter } from './entities/cost-center.entity';
 import { TypeBon } from './entities/type-bon.entity';
-import { NatureOperation } from './entities/nature-operation.entity';
 import { NatureComptable } from './entities/nature-comptable.entity';
 import { PlanComptable } from './entities/plan-comptable.entity';
 import { Site } from './entities/site.entity';
@@ -16,8 +15,6 @@ import { CreatePartenaireDto } from './dto/create-partenaire.dto';
 import { UpdatePartenaireDto } from './dto/update-partenaire.dto';
 import { CreateCostCenterDto } from './dto/create-cost-center.dto';
 import { UpdateCostCenterDto } from './dto/update-cost-center.dto';
-import { CreateNatureOperationDto } from './dto/create-nature-operation.dto';
-import { UpdateNatureOperationDto } from './dto/update-nature-operation.dto';
 import { CreatePlanComptableDto } from './dto/create-plan-comptable.dto';
 
 @Injectable()
@@ -29,8 +26,8 @@ export class ReferentielService {
     private readonly costCenterRepo: Repository<CostCenter>,
     @InjectRepository(TypeBon)
     private readonly typeBonRepo: Repository<TypeBon>,
-    @InjectRepository(NatureOperation)
-    private readonly natureOperationRepo: Repository<NatureOperation>,
+    @InjectRepository(NatureComptable)
+    private readonly natureOperationRepo: Repository<NatureComptable>,
     @InjectRepository(NatureComptable)
     private readonly natureComptableRepo: Repository<NatureComptable>,
     @InjectRepository(PlanComptable)
@@ -274,7 +271,7 @@ export class ReferentielService {
    */
   private async compterLiaisons<T extends { id: string }>(
     liste: T[],
-    colonne: 'cost_center_id' | 'nature_operation_id',
+    colonne: 'cost_center_id' | 'nature_comptable_id',
     champ: 'nbNatures' | 'nbCostCenters',
   ): Promise<T[]> {
     if (liste.length === 0) return liste;
@@ -283,7 +280,7 @@ export class ReferentielService {
     try {
       const rows: Array<{ id: number; n: number }> = await this.costCenterRepo.manager.query(
         `SELECT ${colonne} AS id, COUNT(*) AS n
-           FROM dbo.ref_nature_operation_cost_center
+           FROM dbo.ref_nature_comptable_cost_center
           WHERE ${colonne} IN (${ids.join(',')})
           GROUP BY ${colonne}`,
       );
@@ -383,33 +380,36 @@ export class ReferentielService {
     return this.typeBonRepo.find({ where: { estActif: true }, order: { libelle: 'ASC' } });
   }
 
+  /**
+   * Natures comptables utilisables sur un bon.
+   *
+   * Le plan comptable en compte 599, dont 180 servent aux bons : le drapeau
+   * `utilisable_bon` remplace l'ancienne table `ref_nature_operation`, qui
+   * n'était que la liste de ces 180 (migration 0070).
+   */
   async listNaturesOperation(
     opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
-  ): Promise<NatureOperation[]> {
-    const qb = this.natureOperationRepo
+  ): Promise<NatureComptable[]> {
+    const qb = this.natureComptableRepo
       .createQueryBuilder('x')
-      .leftJoinAndSelect('x.natureComptable', 'nc')
-      .where('x.estActif = :a', { a: true });
-    const liste: NatureOperation[] = await this.applyRefList(
-      qb, 'x', opts, ['code', 'libelle'], { code: 'code', libelle: 'libelle' }, 'libelle',
+      .where('x.estActif = :a', { a: true })
+      .andWhere('x.utilisableBon = 1');
+    const liste: NatureComptable[] = await this.applyRefList(
+      qb, 'x', opts, ['codeComptableSap', 'libelle'],
+      { code: 'codeComptableSap', libelle: 'libelle' }, 'libelle',
     );
-    return this.compterLiaisons(liste, 'nature_operation_id', 'nbCostCenters');
+    return this.compterLiaisons(liste, 'nature_comptable_id', 'nbCostCenters');
   }
 
-  async findNatureOperation(id: string): Promise<NatureOperation> {
-    const n = await this.natureOperationRepo.findOne({ where: { id } });
-    if (!n) throw new NotFoundException(`Nature d'opération ${id} introuvable`);
-    return n;
-  }
 
-  async createNatureOperation(dto: CreateNatureOperationDto, userId: string): Promise<NatureOperation> {
-    // On inclut les lignes soft-deleted : la contrainte UNIQUE en base les compte aussi.
-    const existing = await this.natureOperationRepo.findOne({
-      where: { code: dto.code },
+  async createNatureComptable(dto: any, userId: string): Promise<NatureComptable> {
+    const code = String(dto.code ?? dto.codeComptableSap ?? '').trim();
+    const existing = await this.natureComptableRepo.findOne({
+      where: { codeComptableSap: code },
       withDeleted: true,
     });
     if (existing && !existing.deletedAt) {
-      throw new ConflictException(`Une nature comptable avec le code ${dto.code} existe déjà`);
+      throw new ConflictException(`Une nature comptable avec le code ${code} existe déjà`);
     }
     if (existing) {
       // Réactivation d'une nature précédemment désactivée (même code).
@@ -419,51 +419,56 @@ export class ReferentielService {
       existing.libelle = dto.libelle;
       existing.costCenterId = dto.costCenterId ?? null;
       existing.planComptableId = dto.planComptableId ?? null;
-      existing.natureComptableId = dto.natureComptableId ?? null;
-      return this.natureOperationRepo.save(existing);
+      existing.utilisableBon = true;
+      return this.natureComptableRepo.save(existing);
     }
-    const n = this.natureOperationRepo.create({
-      code: dto.code,
-      libelle: dto.libelle,
-      costCenterId: dto.costCenterId ?? null,
-      planComptableId: dto.planComptableId ?? null,
-      natureComptableId: dto.natureComptableId ?? null,
-      estActif: true,
-      createdById: userId as any,
-    });
-    return this.natureOperationRepo.save(n);
+    return this.natureComptableRepo.save(
+      this.natureComptableRepo.create({
+        codeComptableSap: code,
+        libelle: dto.libelle,
+        costCenterId: dto.costCenterId ?? null,
+        planComptableId: dto.planComptableId ?? null,
+        // Créée à la main depuis l'écran des natures : elle sert donc aux bons.
+        utilisableBon: true,
+        estActif: true,
+        createdById: userId as any,
+      }),
+    );
   }
 
-  async updateNatureOperation(
-    id: string,
-    dto: UpdateNatureOperationDto,
-    userId: string,
-  ): Promise<NatureOperation> {
-    const n = await this.findNatureOperation(id);
-    if (dto.code && dto.code !== n.code) {
-      const dup = await this.natureOperationRepo.findOne({
-        where: { code: dto.code },
+  async updateNatureComptable(id: string, dto: any, userId: string): Promise<NatureComptable> {
+    const n = await this.findNatureComptable(id);
+    const code = dto.code ?? dto.codeComptableSap;
+    if (code && code !== n.codeComptableSap) {
+      const dup = await this.natureComptableRepo.findOne({
+        where: { codeComptableSap: code },
         withDeleted: true,
       });
       if (dup && String(dup.id) !== String(n.id)) {
-        throw new ConflictException(`Une nature comptable avec le code ${dto.code} existe déjà`);
+        throw new ConflictException(`Une nature comptable avec le code ${code} existe déjà`);
       }
-      n.code = dto.code;
+      n.codeComptableSap = code;
     }
     if (dto.libelle !== undefined) n.libelle = dto.libelle;
     if (dto.costCenterId !== undefined) n.costCenterId = dto.costCenterId || null;
     if (dto.planComptableId !== undefined) n.planComptableId = dto.planComptableId || null;
-    if (dto.natureComptableId !== undefined) n.natureComptableId = dto.natureComptableId || null;
+    if (dto.utilisableBon !== undefined) n.utilisableBon = !!dto.utilisableBon;
     n.updatedById = userId as any;
-    return this.natureOperationRepo.save(n);
+    return this.natureComptableRepo.save(n);
   }
 
-  async deleteNatureOperation(id: string, userId: string): Promise<void> {
-    const n = await this.findNatureOperation(id);
+  async deleteNatureComptable(id: string, userId: string): Promise<void> {
+    const n = await this.findNatureComptable(id);
     n.estActif = false;
     n.deletedAt = new Date();
     n.deletedById = userId as any;
-    await this.natureOperationRepo.save(n);
+    await this.natureComptableRepo.save(n);
+  }
+
+  async findNatureComptable(id: string): Promise<NatureComptable> {
+    const n = await this.natureComptableRepo.findOne({ where: { id } });
+    if (!n) throw new NotFoundException(`Nature comptable ${id} introuvable`);
+    return n;
   }
 
   listNaturesComptable(
@@ -572,22 +577,22 @@ export class ReferentielService {
    * par ligne ferait 182 appels pour un écran. On les rapatrie d'un coup et
    * l'écran les regroupe.
    */
-  async liaisonsNatureOperationCostCenter(): Promise<
-    Array<{ natureOperationId: string; costCenterId: string }>
+  async liaisonsNatureComptableCostCenter(): Promise<
+    Array<{ natureComptableId: string; costCenterId: string }>
   > {
-    const rows: Array<{ natureOperationId: string; costCenterId: string }> =
+    const rows: Array<{ natureComptableId: string; costCenterId: string }> =
       await this.natureOperationRepo.manager.query(
-        `SELECT l.nature_operation_id AS natureOperationId, l.cost_center_id AS costCenterId
+        `SELECT l.nature_operation_id AS natureComptableId, l.cost_center_id AS costCenterId
          FROM dbo.ref_nature_operation_cost_center l`,
       );
     return rows.map((r) => ({
-      natureOperationId: String(r.natureOperationId),
+      natureComptableId: String(r.natureComptableId),
       costCenterId: String(r.costCenterId),
     }));
   }
 
-  async costCentersDeNatureOperation(natureId: string): Promise<CostCenter[]> {
-    await this.findNatureOperation(natureId);
+  async costCentersDeNatureComptable(natureId: string): Promise<CostCenter[]> {
+    await this.findNatureComptable(natureId);
     return this.costCenterRepo
       .createQueryBuilder('cc')
       .innerJoin(
@@ -601,7 +606,7 @@ export class ReferentielService {
       .getMany();
   }
 
-  async naturesOperationDeCostCenter(costCenterId: string): Promise<NatureOperation[]> {
+  async naturesOperationDeCostCenter(costCenterId: string): Promise<NatureComptable[]> {
     await this.findCostCenter(costCenterId);
     return this.natureOperationRepo
       .createQueryBuilder('n')
@@ -616,12 +621,12 @@ export class ReferentielService {
       .getMany();
   }
 
-  async lierNatureOperationAuxCostCenters(
+  async lierNatureComptableAuxCostCenters(
     natureId: string,
     costCenterIds: string[],
     userId: string,
   ): Promise<CostCenter[]> {
-    await this.findNatureOperation(natureId);
+    await this.findNatureComptable(natureId);
     await this.remplacerLiens(
       'nature_operation_id',
       natureId,
@@ -630,14 +635,14 @@ export class ReferentielService {
       'ref_nature_operation_cost_center',
       'nature_operation_id',
     );
-    return this.costCentersDeNatureOperation(natureId);
+    return this.costCentersDeNatureComptable(natureId);
   }
 
   async lierCostCenterAuxNaturesOperation(
     costCenterId: string,
     natureIds: string[],
     userId: string,
-  ): Promise<NatureOperation[]> {
+  ): Promise<NatureComptable[]> {
     await this.findCostCenter(costCenterId);
     await this.remplacerLiens(
       'cost_center_id',
@@ -673,11 +678,6 @@ export class ReferentielService {
     return this.naturesDeCostCenter(costCenterId);
   }
 
-  private async findNatureComptable(id: string): Promise<NatureComptable> {
-    const n = await this.natureComptableRepo.findOne({ where: { id } });
-    if (!n) throw new NotFoundException(`Nature comptable ${id} introuvable`);
-    return n;
-  }
 
   listPlanComptable(
     opts: {

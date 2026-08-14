@@ -9,7 +9,7 @@ import { UserRole } from '../entities/user-role.entity';
 import { Profil } from '../entities/profil.entity';
 import { UserProfil } from '../entities/user-profil.entity';
 import { UserDivisionAccess } from '../entities/user-division-access.entity';
-import { UserNatureOperation } from '../entities/user-nature-operation.entity';
+import { UserNatureComptable } from '../entities/user-nature-comptable.entity';
 import { UserCostCenter } from '../entities/user-cost-center.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -32,8 +32,8 @@ export class UsersService {
     private readonly profilRepo: Repository<Profil>,
     @InjectRepository(UserDivisionAccess)
     private readonly userDivisionRepo: Repository<UserDivisionAccess>,
-    @InjectRepository(UserNatureOperation)
-    private readonly userNatureRepo: Repository<UserNatureOperation>,
+    @InjectRepository(UserNatureComptable)
+    private readonly userNatureRepo: Repository<UserNatureComptable>,
     @InjectRepository(UserCostCenter)
     private readonly userCostCenterRepo: Repository<UserCostCenter>,
     private readonly auditPerm: AuditPermissionService,
@@ -63,23 +63,23 @@ export class UsersService {
   }
 
   // ---------- Natures d'opération autorisées (création de bons) ----------
-  async getNatureOperationAccess(userId: string): Promise<string[]> {
+  async getNatureComptableAccess(userId: string): Promise<string[]> {
     await this.findOne(userId);
     const rows = await this.userNatureRepo.find({ where: { userId } });
-    return rows.map((r) => String(r.natureOperationId));
+    return rows.map((r) => String(r.natureComptableId));
   }
 
-  async assignNatureOperation(userId: string, natureOperationId: string, actorId: string): Promise<void> {
+  async assignNatureComptable(userId: string, natureComptableId: string, actorId: string): Promise<void> {
     await this.findOne(userId);
-    const existing = await this.userNatureRepo.findOne({ where: { userId, natureOperationId } });
+    const existing = await this.userNatureRepo.findOne({ where: { userId, natureComptableId } });
     if (existing) return;
     await this.userNatureRepo.save(
-      this.userNatureRepo.create({ userId, natureOperationId, createdById: actorId }),
+      this.userNatureRepo.create({ userId, natureComptableId, createdById: actorId }),
     );
   }
 
-  async removeNatureOperation(userId: string, natureOperationId: string): Promise<void> {
-    const result = await this.userNatureRepo.delete({ userId, natureOperationId });
+  async removeNatureComptable(userId: string, natureComptableId: string): Promise<void> {
+    const result = await this.userNatureRepo.delete({ userId, natureComptableId });
     if (result.affected === 0) {
       throw new NotFoundException('Nature autorisée introuvable');
     }
@@ -150,7 +150,7 @@ export class UsersService {
     return this.remplacerAffectations(
       this.userNatureRepo as any,
       userId,
-      'natureOperationId',
+      'natureComptableId',
       natureIds,
       actorId,
     );
@@ -257,9 +257,9 @@ export class UsersService {
     );
     const natures = await reunir(
       this.userNatureRepo,
-      'natureOperationId',
+      'natureComptableId',
       (await this.userNatureRepo.find({ where: { userId: sourceId } })).map((r) =>
-        String(r.natureOperationId),
+        String(r.natureComptableId),
       ),
     );
     const costCenters = await reunir(

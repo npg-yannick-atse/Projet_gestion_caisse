@@ -8,11 +8,11 @@ import { Role } from '../entities/role.entity';
 import { RolePermission } from '../entities/role-permission.entity';
 import { User } from '../entities/user.entity';
 import { UserCostCenter } from '../entities/user-cost-center.entity';
-import { UserNatureOperation } from '../entities/user-nature-operation.entity';
+import { UserNatureComptable } from '../entities/user-nature-comptable.entity';
 import { UserDivisionAccess } from '../entities/user-division-access.entity';
 import { UserRole } from '../entities/user-role.entity';
 import { ProfilCostCenter } from '../entities/profil-cost-center.entity';
-import { ProfilNatureOperation } from '../entities/profil-nature-operation.entity';
+import { ProfilNatureComptable } from '../entities/profil-nature-comptable.entity';
 import { ProfilDivisionAccess } from '../entities/profil-division-access.entity';
 import { CreateProfilDto, UpdateProfilDto } from './dto/profil.dto';
 import { AuditPermissionService } from '../audit-permission.service';
@@ -235,7 +235,7 @@ export class ProfilsService {
     };
 
     await copier(UserCostCenter, ProfilCostCenter, 'costCenterId');
-    await copier(UserNatureOperation, ProfilNatureOperation, 'natureOperationId');
+    await copier(UserNatureComptable, ProfilNatureComptable, 'natureComptableId');
     await copier(UserDivisionAccess, ProfilDivisionAccess, 'divisionId');
 
     return profil;

@@ -22,7 +22,35 @@ export class NatureComptable extends AuditableEntity {
   @Column({ name: 'code_comptable_sap', type: 'nvarchar', length: 50, nullable: true })
   codeComptableSap?: string | null;
 
+  /**
+   * Le code d'une nature comptable EST son compte SAP.
+   *
+   * Exposé sous ce nom parce que tous les écrans — web et mobile — affichent
+   * « code — libellé » depuis que ces natures s'appelaient « natures
+   * d'opération » (migration 0070). Renommer le champ côté client aurait touché
+   * une quinzaine de fichiers pour la même valeur.
+   */
+  @ApiProperty({ required: false, description: 'Alias de codeComptableSap' })
+  get code(): string {
+    return this.codeComptableSap ?? '';
+  }
+
+  /**
+   * Utilisable comme imputation d'un sous-bon.
+   *
+   * Le plan comptable en compte 599 ; 180 seulement servent aux bons. Ce
+   * drapeau remplace la table `ref_nature_operation`, qui n'était que la liste
+   * de ces 180 (migration 0070). Sans lui, un demandeur choisirait parmi tout
+   * le plan comptable.
+   */
+  @ApiProperty({ default: false })
+  @Column({ name: 'utilisable_bon', type: 'bit', default: false })
+  utilisableBon!: boolean;
+
   @ApiProperty({ default: true })
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;
+
+  /** Centres de coût rattachés — compté par le serveur, non persisté. */
+  nbCostCenters?: number;
 }

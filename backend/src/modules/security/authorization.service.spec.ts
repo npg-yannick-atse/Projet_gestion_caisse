@@ -167,25 +167,25 @@ describe('AuthorizationService — permissions effectives (3 canaux)', () => {
   });
 });
 
-describe('AuthorizationService — périmètre des natures d’opération', () => {
+describe('AuthorizationService — périmètre des natures comptables', () => {
   it("N'accorde AUCUN bypass admin : la liste blanche s'applique à tous", async () => {
     // Choix assumé du métier : même un SUPER_ADMIN sans nature affectée ne peut en
     // utiliser aucune. Si ce test casse, c'est que le bypass a été réintroduit.
-    const svc = build({ UserNatureOperation: { find: [] } });
+    const svc = build({ UserNatureComptable: { find: [] } });
     jest.spyOn(svc, 'isAdmin').mockResolvedValue(true);
-    const perim = await svc.getNatureOperationPerimeter('1');
+    const perim = await svc.getNatureComptablePerimeter('1');
     expect(perim).not.toBeNull();
     expect(perim!.size).toBe(0);
     await expect(svc.assertNatureInPerimeter('1', '42')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('autorise une nature explicitement affectée', async () => {
-    const svc = build({ UserNatureOperation: { find: [{ natureOperationId: '42' }] } });
+    const svc = build({ UserNatureComptable: { find: [{ natureComptableId: '42' }] } });
     await expect(svc.assertNatureInPerimeter('1', '42')).resolves.toBeUndefined();
   });
 
   it('refuse une nature non affectée', async () => {
-    const svc = build({ UserNatureOperation: { find: [{ natureOperationId: '42' }] } });
+    const svc = build({ UserNatureComptable: { find: [{ natureComptableId: '42' }] } });
     await expect(svc.assertNatureInPerimeter('1', '99')).rejects.toThrow(/nature/i);
   });
 });

@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { BonsService } from './bons.service';
 
 /**
- * Une nature d'opération RESTREINT le centre de coût du sous-bon.
+ * Une nature comptable RESTREINT le centre de coût du sous-bon.
  *
  * Les deux champs se choisissaient séparément dans le formulaire, d'où des
  * couples contradictoires : la nature RECHARGE, rattachée au 22100-DSI, a été
@@ -15,7 +15,7 @@ import { BonsService } from './bons.service';
  * le seul choix possible, et le message reste celui de l'imposition.
  */
 function monter(
-  natures: Array<{ id: string; code: string }>,
+  natures: Array<{ id: string; codeComptableSap: string }>,
   liens: Array<{ natureId: string; costCenterId: string }>,
 ) {
   const service = Object.create(BonsService.prototype) as BonsService;
@@ -24,7 +24,7 @@ function monter(
     enforceBonPerimeter: jest.fn(async () => undefined),
     dataSource: {
       getRepository: (e: any) =>
-        e?.name === 'NatureOperation'
+        e?.name === 'NatureComptable'
           ? { find: async () => natures }
           : { findOne: async () => null }, // TypeBon : pas de restitution client
       query: async (sql: string) =>
@@ -35,10 +35,10 @@ function monter(
 }
 
 const NATURES = [
-  { id: '10', code: 'RECHARGE' },
-  { id: '11', code: '62121000' },
-  { id: '12', code: 'LIBRE' },
-  { id: '13', code: 'CARBURANT' },
+  { id: '10', codeComptableSap: 'RECHARGE' },
+  { id: '11', codeComptableSap: '62121000' },
+  { id: '12', codeComptableSap: 'LIBRE' },
+  { id: '13', codeComptableSap: 'CARBURANT' },
 ];
 
 /** RECHARGE → 3 ; 62121000 → 7 ; LIBRE → aucun ; CARBURANT → 3 et 7. */
@@ -49,10 +49,10 @@ const LIENS = [
   { natureId: '13', costCenterId: '7' },
 ];
 
-const sousBon = (natureOperationId: string, costCenterId: string) => ({
+const sousBon = (natureComptableId: string, costCenterId: string) => ({
   libelle: 'Test',
   montant: '1000',
-  natureOperationId,
+  natureComptableId,
   costCenterId,
   caisseId: '1',
   portefeuilleId: '2',

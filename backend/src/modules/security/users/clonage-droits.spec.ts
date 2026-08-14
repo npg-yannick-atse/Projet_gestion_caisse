@@ -48,7 +48,7 @@ function monter(source: {
     find: async () => (source.divisions ?? []).map((divisionId) => ({ divisionId })),
   };
   service.userNatureRepo = {
-    find: async () => (source.natures ?? []).map((natureOperationId) => ({ natureOperationId })),
+    find: async () => (source.natures ?? []).map((natureComptableId) => ({ natureComptableId })),
   };
   service.userCostCenterRepo = {
     find: async () => (source.costCenters ?? []).map((costCenterId) => ({ costCenterId })),

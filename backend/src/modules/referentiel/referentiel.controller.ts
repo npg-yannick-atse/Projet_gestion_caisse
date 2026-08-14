@@ -146,7 +146,7 @@ export class ReferentielController {
       'NATURE_OPERATION_GERER',
       "créer une nature d'opération",
     );
-    return this.referentiel.createNatureOperation(dto, user.sub);
+    return this.referentiel.createNatureComptable(dto, user.sub);
   }
 
   @Patch('natures-operation/:id')
@@ -161,7 +161,7 @@ export class ReferentielController {
       'NATURE_OPERATION_GERER',
       "modifier une nature d'opération",
     );
-    return this.referentiel.updateNatureOperation(id, dto, user.sub);
+    return this.referentiel.updateNatureComptable(id, dto, user.sub);
   }
 
   @Delete('natures-operation/:id')
@@ -173,7 +173,7 @@ export class ReferentielController {
       'NATURE_OPERATION_GERER',
       "supprimer une nature d'opération",
     );
-    await this.referentiel.deleteNatureOperation(id, user.sub);
+    await this.referentiel.deleteNatureComptable(id, user.sub);
   }
 
   @Get('natures-comptable')
@@ -249,13 +249,13 @@ export class ReferentielController {
   @Get('natures-operation/liaisons-cost-centers')
   @ApiOperation({ summary: 'Tous les couples nature ↔ centre de coût (une requête)' })
   liaisonsNatureOperationCostCenter() {
-    return this.referentiel.liaisonsNatureOperationCostCenter();
+    return this.referentiel.liaisonsNatureComptableCostCenter();
   }
 
   @Get('natures-operation/:id/cost-centers')
   @ApiOperation({ summary: 'Centres de coût liés à une nature d’opération' })
   costCentersDeNatureOperation(@Param('id') id: string) {
-    return this.referentiel.costCentersDeNatureOperation(id);
+    return this.referentiel.costCentersDeNatureComptable(id);
   }
 
   @Put('natures-operation/:id/cost-centers')
@@ -270,13 +270,13 @@ export class ReferentielController {
       'NATURE_CC_LIER',
       'lier une nature à des centres de coût',
     );
-    return this.referentiel.lierNatureOperationAuxCostCenters(id, dto.costCenterIds ?? [], user.sub);
+    return this.referentiel.lierNatureComptableAuxCostCenters(id, dto.costCenterIds ?? [], user.sub);
   }
 
   @Get('cost-centers/:id/natures-operation')
   @ApiOperation({ summary: 'Natures d’opération liées à un centre de coût' })
   naturesOperationDeCostCenter(@Param('id') id: string) {
-    return this.referentiel.naturesOperationDeCostCenter(id);
+    return this.referentiel.naturesDeCostCenter(id);
   }
 
   @Put('cost-centers/:id/natures-operation')
@@ -291,7 +291,7 @@ export class ReferentielController {
       'NATURE_CC_LIER',
       'lier un centre de coût à des natures',
     );
-    return this.referentiel.lierCostCenterAuxNaturesOperation(
+    return this.referentiel.lierCostCenterAuxNatures(
       id,
       dto.natureOperationIds ?? [],
       user.sub,
