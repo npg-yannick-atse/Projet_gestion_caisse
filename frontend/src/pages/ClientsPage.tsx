@@ -101,7 +101,7 @@ function ClientsPageInner() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher (code, raison sociale, n° client)…"
+            placeholder="Rechercher (code, nom du client)…"
             className="w-80 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
           />
           <label className="ml-auto flex items-center gap-1.5 text-[11px] text-[#64748B]">
@@ -135,7 +135,7 @@ function ClientsPageInner() {
                   Code client
                 </SortableHeader>
                 <SortableHeader column="raisonSociale" state={sort.state} onSort={sort.setSort}>
-                  Raison sociale
+                  Nom client
                 </SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Pays</th>
                 <th className="px-4 py-2.5 font-semibold">Code pays</th>
