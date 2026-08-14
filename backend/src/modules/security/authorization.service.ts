@@ -362,8 +362,12 @@ export class AuthorizationService {
    * Portefeuilles autorisés (possédés / direction / gestionnaire). `null` = tous
    * (admin uniquement) ; ensemble VIDE = aucun (sémantique stricte, plus de filet).
    */
-  async getPortefeuillePerimeter(userId: string): Promise<Set<string> | null> {
-    if (await this.isAdmin(userId)) return null;
+  /**
+   * Portefeuilles d'une personne, par ses seules attaches : possédés, ceux de
+   * sa direction, ceux qu'elle gère. Ne consulte AUCUN intérim — c'est ce qui
+   * empêche une chaîne de remplacements de boucler sur elle-même.
+   */
+  private async portefeuillesPropres(userId: string): Promise<string[]> {
     const user = await this.dataSource.getRepository(User).findOne({ where: { id: userId } });
     const ptfRepo = this.dataSource.getRepository(Portefeuille);
     const set = new Set<string>();
@@ -382,6 +386,32 @@ export class AuthorizationService {
 
     const managed = await ptfRepo.find({ where: { gestionnaireId: userId as any } });
     for (const p of managed) set.add(String(p.id));
+
+    return [...set];
+  }
+
+  async getPortefeuillePerimeter(userId: string): Promise<Set<string> | null> {
+    if (await this.isAdmin(userId)) return null;
+    const set = new Set(await this.portefeuillesPropres(userId));
+
+    /**
+     * Les portefeuilles des personnes qu'on REMPLACE s'y ajoutent.
+     *
+     * Un intérim transmettait rôles, permissions et — via un profil — les
+     * périmètres du profil. Mais pas les portefeuilles de l'absent, qui tiennent
+     * à sa direction et à ce qu'il gère. Le remplaçant recevait donc le droit
+     * d'initier un transfert ou de payer un salaire, sans voir un seul compte
+     * d'où le faire : les écrans paraissaient vides plutôt que refusés.
+     *
+     * L'héritage s'éteint seul à l'échéance, comme le reste de l'intérim.
+     */
+    try {
+      for (const i of await this.getActiveInterims(userId)) {
+        for (const id of await this.portefeuillesPropres(String(i.initiateurId))) set.add(id);
+      }
+    } catch (e) {
+      console.warn('[authz] portefeuilles hérités d’un intérim échoués :', (e as Error).message);
+    }
 
     // SÉMANTIQUE STRICTE (comme la caisse) : un non-admin sans portefeuille possédé /
     // de sa direction / géré obtient un ensemble VIDE (= aucun portefeuille), pas de filet.

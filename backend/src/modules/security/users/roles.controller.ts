@@ -76,16 +76,6 @@ export class RolesController {
   }
 
   // Permissions
-  @Post('generer-depuis-profil/:profilId')
-  @ApiOperation({ summary: "Créer un rôle portant les permissions d'un profil" })
-  async genererDepuisProfil(
-    @Param('profilId') profilId: string,
-    @Body() dto: GenerationDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    await this.authz.assertPermission(user.sub, 'ADMIN_ROLE', 'générer un rôle depuis un profil');
-    return this.rolesService.genererDepuisProfil(profilId, dto.code, dto.libelle, user.sub);
-  }
 
   @Post('permissions')
   @ApiOperation({ summary: 'Créer une permission' })

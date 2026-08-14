@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  Copy,
   KeyRound,
   Pencil,
   Plus,
@@ -36,8 +35,6 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { useClientSort } from '@/hooks/useClientSort';
 import { RoleGuard } from '@/components/RoleGuard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { GenererDepuisModal } from '@/components/GenererDepuisModal';
-import { useGenererRoleDepuisProfil } from '@/api/roles';
 
 const schema = z.object({
   code: z.string().trim().min(1, 'Requis'),
@@ -363,36 +360,15 @@ function PermissionEditor({ profil }: { profil: Profil }) {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [permissions]);
 
-  const [genererRole, setGenererRole] = useState(false);
-  const generer = useGenererRoleDepuisProfil();
-
   return (
     <>
-    {genererRole && (
-      <GenererDepuisModal
-        titre="Générer un rôle depuis ce profil"
-        sourceLibelle={profil.libelle}
-        nbPermissions={assignedIds.size}
-        avertissement="Le rôle créé porte un code inédit : il n'ouvre AUCUN des pouvoirs que les sept rôles d'origine tiennent de leur code — voir les bons de tous, contourner les contrôles en administrateur, modifier un bon. C'est un paquet de permissions qui a la forme d'un rôle."
-        pending={generer.isPending}
-        error={generer.error}
-        onValider={(code, libelle) =>
-          generer.mutate({ profilId: profil.id, code, libelle }, { onSuccess: () => setGenererRole(false) })
-        }
-        onClose={() => setGenererRole(false)}
-      />
-    )}
+    {/* « Générer un rôle depuis ce profil » a été retiré : le profil porte
+        désormais rôles, périmètres et validité, un rôle n'en porte aucun. La
+        copie appauvrissait donc systématiquement, sans le dire. Le sens
+        inverse — générer un profil depuis un rôle — couvre le besoin réel de
+        partir d'un socle connu. */}
     <Panel>
-      <PanelHeader title={`Permissions — ${profil.libelle}`} badge={`${assignedIds.size}`}>
-        {/* Symétrique du bouton de l'écran des rôles. */}
-        <button
-          type="button"
-          onClick={() => setGenererRole(true)}
-          className="ml-auto flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.12)] bg-white px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
-        >
-          <Copy className="h-3.5 w-3.5" /> Générer un rôle
-        </button>
-      </PanelHeader>
+      <PanelHeader title={`Permissions — ${profil.libelle}`} badge={`${assignedIds.size}`} />
       <div className="grid gap-5 p-[18px] sm:grid-cols-2">
         {byModule.map(([module, perms]) => (
           <div key={module} className="space-y-1">
