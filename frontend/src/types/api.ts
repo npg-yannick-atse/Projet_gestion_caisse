@@ -504,14 +504,24 @@ export interface Division {
 
 export type FrequenceRecurrence = 'MENSUEL' | 'TRIMESTRIEL' | 'SEMESTRIEL' | 'ANNUEL';
 
+/**
+ * Nature comptable utilisable sur un bon.
+ *
+ * Le nom du type reste `NatureOperation` : les routes et les hooks le portent
+ * encore, et le renommer toucherait une quinzaine de fichiers pour la même
+ * valeur. Le CONCEPT, lui, a disparu (migration 0070) — une nature EST un
+ * compte du plan comptable, son `code` est son compte PCGG.
+ */
 export interface NatureOperation {
   id: string;
+  /** Compte PCGG (SAP). Le serveur l'expose aussi sous `codeComptableSap`. */
   code: string;
+  codeComptableSap?: string | null;
   libelle: string;
   costCenterId?: string | null;
   planComptableId?: string | null;
-  natureComptableId?: string | null;
-  natureComptable?: { id: string; libelle: string; codeComptableSap?: string | null } | null;
+  /** Réservée aux bons : 180 comptes sur les 599 du plan. */
+  utilisableBon?: boolean;
   estActif: boolean;
   /** Centres de coût rattachés — compté par le serveur. */
   nbCostCenters?: number;

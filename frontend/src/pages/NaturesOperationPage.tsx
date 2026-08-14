@@ -42,7 +42,6 @@ const schema = z.object({
   libelle: z.string().trim().min(1, 'Requis'),
   costCenterId: z.string().optional(),
   planComptableId: z.string().optional(),
-  natureComptableId: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -63,7 +62,6 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
       libelle: editing?.libelle ?? '',
       costCenterId: editing?.costCenterId ?? '',
       planComptableId: editing?.planComptableId ?? '',
-      natureComptableId: editing?.natureComptableId ?? '',
     },
   });
 
@@ -76,7 +74,6 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
       libelle: values.libelle,
       costCenterId: values.costCenterId || undefined,
       planComptableId: values.planComptableId || undefined,
-      natureComptableId: values.natureComptableId || undefined,
     };
     const opts = { onSuccess: () => onDone() };
     if (editing) update.mutate({ id: editing.id, payload }, opts);

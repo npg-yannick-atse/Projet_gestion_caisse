@@ -131,9 +131,9 @@ export function BonCreatePage() {
   const fetchNatures = (q: string): Promise<SelectOption[]> =>
     listNaturesOperation({ search: q || undefined, limit: 30 }).then((ns) =>
       ns.map((n) => {
-        const num = n.natureComptable?.codeComptableSap ?? '';
-        const extra = num && num !== n.code ? `  ·  ${num}` : '';
-        return { value: String(n.id), label: `${n.code} — ${n.libelle}${extra}`, data: n };
+        // Le code d'une nature comptable EST son compte PCGG : plus rien à
+        // accoler, la liste afficherait deux fois la même chose.
+        return { value: String(n.id), label: `${n.code} — ${n.libelle}`, data: n };
       }),
     );
 
@@ -780,10 +780,10 @@ export function BonCreatePage() {
                         ...m,
                         [v]: {
                           label: `${n.code} — ${n.libelle}`,
-                          compteNum: n.natureComptable?.codeComptableSap ?? undefined,
-                          compteFull: n.natureComptable?.codeComptableSap
-                            ? `${n.natureComptable.codeComptableSap} — ${n.natureComptable.libelle}`
-                            : undefined,
+                          // Depuis la fusion des référentiels (migration 0070),
+                          // le compte PCGG est celui de la nature elle-même.
+                          compteNum: n.codeComptableSap ?? n.code ?? undefined,
+                          compteFull: n.code ? `${n.code} — ${n.libelle}` : undefined,
                           costCenterId: n.costCenterId ? String(n.costCenterId) : undefined,
                         },
                       }));
@@ -798,10 +798,12 @@ export function BonCreatePage() {
                   if (!nid) return null;
                   return (
                     <p className="text-[11px] text-muted-foreground">
-                      {nm?.compteFull ? (
-                        <>Compte PCGG : <span className="font-mono text-[#0F172A]">{nm.compteFull}</span></>
+                      {nm?.compteNum ? (
+                        <>Compte PCGG : <span className="font-mono text-[#0F172A]">{nm.compteNum}</span></>
                       ) : (
-                        <span className="text-[#B45309]">Aucun compte PCGG rattaché à cette nature.</span>
+                        <span className="text-[#B45309]">
+                          Cette nature n'a pas de compte PCGG : l'écriture ne pourra pas partir vers SAP.
+                        </span>
                       )}
                     </p>
                   );
