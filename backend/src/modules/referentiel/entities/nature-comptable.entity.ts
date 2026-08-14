@@ -1,4 +1,4 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, AfterLoad } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
 
@@ -29,10 +29,17 @@ export class NatureComptable extends AuditableEntity {
    * « code — libellé » depuis que ces natures s'appelaient « natures
    * d'opération » (migration 0070). Renommer le champ côté client aurait touché
    * une quinzaine de fichiers pour la même valeur.
+   *
+   * C'est une PROPRIÉTÉ remplie après chargement, et non un accesseur : un
+   * getter vit sur le prototype, `JSON.stringify` ne le sérialise donc pas et
+   * la colonne arrivait VIDE à l'écran.
    */
-  @ApiProperty({ required: false, description: 'Alias de codeComptableSap' })
-  get code(): string {
-    return this.codeComptableSap ?? '';
+  @ApiProperty({ required: false, description: 'Compte SAP, exposé sous le nom « code »' })
+  code?: string;
+
+  @AfterLoad()
+  exposerCode(): void {
+    this.code = this.codeComptableSap ?? '';
   }
 
   /**

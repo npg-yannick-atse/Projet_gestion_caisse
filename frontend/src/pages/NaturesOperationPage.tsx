@@ -11,7 +11,6 @@ import {
   useDeleteNatureOperation,
   useCostCenters,
   usePlanComptable,
-  useNaturesComptable,
   useLiaisonsNatureCostCenter,
   useCostCentersDeNatureOperation,
   useSetCostCentersDeNatureOperation,
@@ -53,7 +52,6 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
   const update = useUpdateNatureOperation();
   const { data: costCenters } = useCostCenters();
   const { data: planComptable } = usePlanComptable();
-  const { data: naturesComptable } = useNaturesComptable();
   const {
     register,
     handleSubmit,
@@ -110,20 +108,10 @@ function NatureForm({ editing, onDone }: { editing: NatureOperation | null; onDo
             ))}
           </select>
         </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="natureComptableId">Compte comptable PCGG (SAP)</Label>
-          <select id="natureComptableId" className={selectClass} {...register('natureComptableId')}>
-            <option value="">— Aucun —</option>
-            {(naturesComptable ?? []).map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.codeComptableSap ? `${n.codeComptableSap} — ` : ''}{n.libelle}
-              </option>
-            ))}
-          </select>
-          <p className="text-[11px] text-[#94A3B8]">
-            Le compte du plan PCGG sur lequel s'impute cette nature (utilisé pour l'envoi comptable SAP).
-          </p>
-        </div>
+        {/* Le sélecteur « compte PCGG » a disparu : depuis la fusion des deux
+            référentiels (migration 0070), la nature EST le compte. Elle ne peut
+            plus se rattacher à un autre — elle se désignerait elle-même. Le
+            champ « Code » ci-dessus porte ce compte. */}
         <div className="hidden">
           {/* Ancien « compte du plan interne » conservé mais masqué (déprécié au profit du compte PCGG). */}
           <select {...register('planComptableId')}>
@@ -188,10 +176,6 @@ function NaturesOperationPageInner() {
   });
   const remove = useDeleteNatureOperation();
   const sync = useSyncComptesSap();
-  const { data: naturesComptable } = useNaturesComptable();
-  const compteById = new Map(
-    (naturesComptable ?? []).map((n) => [String(n.id), n.codeComptableSap ? `${n.codeComptableSap} — ${n.libelle}` : n.libelle]),
-  );
   // Le centre de coût d'une nature n'est plus une simple valeur par défaut : il
   // s'impose au bon et y verrouille le champ. Le voir dans la liste permet de
   // repérer d'un coup d'œil les natures qui n'en portent pas.
@@ -311,10 +295,9 @@ function NaturesOperationPageInner() {
           <table className="w-full text-xs">
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
-                <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Code</SortableHeader>
+                <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>Compte PCGG (SAP)</SortableHeader>
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Libellé</SortableHeader>
                 <th className="px-4 py-2.5 font-semibold">Centre de coût</th>
-                <th className="px-4 py-2.5 font-semibold">Compte PCGG</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -323,14 +306,14 @@ function NaturesOperationPageInner() {
             <tbody>
               {natures && natures.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
                     Aucune nature comptable. Créez-en une pour pouvoir créer des bons.
                   </td>
                 </tr>
               )}
               {pagedNatures.map((n) => (
                 <tr key={n.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
-                  <td className="px-4 py-3 font-medium">{n.code}</td>
+                  <td className="px-4 py-3 font-mono font-medium">{n.code || <span className="text-[#B45309]">sans compte</span>}</td>
                   <td className="px-4 py-3">{n.libelle}</td>
                   {/* Une nature peut être rattachée à PLUSIEURS centres de coût
                       (migration 0066). On les nomme tant qu'ils tiennent, puis
@@ -348,13 +331,6 @@ function NaturesOperationPageInner() {
                         );
                       return <span className="text-[11px]">{ccs.length} centres de coût</span>;
                     })()}
-                  </td>
-                  <td className="px-4 py-3 text-[#64748B]">
-                    {n.natureComptableId ? (
-                      <span className="font-mono text-[11px]">{compteById.get(String(n.natureComptableId)) ?? '—'}</span>
-                    ) : (
-                      <span className="text-[11px] text-[#B45309]">non rattaché</span>
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
