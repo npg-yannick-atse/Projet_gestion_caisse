@@ -26,6 +26,10 @@ export default function AppLayout() {
         {/* Portefeuilles : ouverts depuis l'onglet Compte */}
         <Stack.Screen name="portefeuilles/index" options={{ title: 'Mes portefeuilles' }} />
         <Stack.Screen name="portefeuilles/[id]" options={{ title: 'Portefeuille' }} />
+        {/* Demandes ouvertes depuis l'onglet Compte */}
+        <Stack.Screen name="demandes/recharge" options={{ title: 'Demande de recharge' }} />
+        <Stack.Screen name="demandes/transfert" options={{ title: 'Demande de transfert' }} />
+        <Stack.Screen name="demandes/interim" options={{ title: 'Déclarer un intérim' }} />
       </Stack>
       <Toaster />
     </View>

@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -42,7 +42,11 @@ export default function CompteScreen() {
   // c'est la barre d'onglets qui borde le bas. Garder `bottom` ajoutait la zone
   // d'accueil de l'iPhone une seconde fois, au-dessus de la barre.
   return (
-    <SafeAreaView style={styles.container} edges={[]}>
+    /* Défilement : avec les quatre raccourcis, la carte d'identité et les
+       informations, le bouton de déconnexion sortait de l'écran sur un
+       téléphone de petite taille — et rien ne permettait d'y accéder. */
+    <SafeAreaView style={styles.page} edges={[]}>
+      <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
@@ -76,6 +80,36 @@ export default function CompteScreen() {
         <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
       </Pressable>
 
+      {/* Les trois demandes que l'on formule depuis le terrain : on est en
+          déplacement, on a besoin d'argent, ou l'on part et il faut confier son
+          travail. Elles n'existaient que sur le web. */}
+      <Pressable style={styles.action} onPress={() => router.push('/demandes/recharge')}>
+        <Ionicons name="add-circle-outline" size={18} color="#0F4C81" />
+        <View style={styles.actionTexte}>
+          <Text style={styles.actionTitre}>Demander une recharge</Text>
+          <Text style={styles.actionSous}>Réapprovisionner mon portefeuille</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+      </Pressable>
+
+      <Pressable style={styles.action} onPress={() => router.push('/demandes/transfert')}>
+        <Ionicons name="swap-horizontal-outline" size={18} color="#0F4C81" />
+        <View style={styles.actionTexte}>
+          <Text style={styles.actionTitre}>Demander un transfert</Text>
+          <Text style={styles.actionSous}>D'un compte vers un autre</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+      </Pressable>
+
+      <Pressable style={styles.action} onPress={() => router.push('/demandes/interim')}>
+        <Ionicons name="people-outline" size={18} color="#0F4C81" />
+        <View style={styles.actionTexte}>
+          <Text style={styles.actionTitre}>Déclarer un intérim</Text>
+          <Text style={styles.actionSous}>Confier mes droits pendant une absence</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+      </Pressable>
+
       <View style={styles.infoCard}>
         <InfoRow icon="id-card-outline" label="Matricule" value={user?.matricule ?? '—'} />
         {user?.telephone ? <InfoRow icon="call-outline" label="Téléphone" value={user.telephone} /> : null}
@@ -86,6 +120,7 @@ export default function CompteScreen() {
         <Ionicons name="log-out-outline" size={18} color="#B42318" />
         <Text style={styles.logoutText}>Se déconnecter</Text>
       </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -113,7 +148,8 @@ function InfoRow({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9', padding: 20 },
+  page: { flex: 1, backgroundColor: '#F1F5F9' },
+  container: { padding: 20, paddingBottom: 32, flexGrow: 1 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -173,7 +209,7 @@ const styles = StyleSheet.create({
   infoLabel: { color: '#475569', fontSize: 14, flex: 1 },
   infoValue: { color: '#0F172A', fontSize: 14, fontWeight: '600' },
   logout: {
-    marginTop: 'auto',
+    marginTop: 20,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#FECACA',
