@@ -48,8 +48,8 @@ type FormValues = z.infer<typeof schema>;
 
 /**
  * Un profil ne porte plus de catégorie : elle ne servait qu'à teinter cette
- * pastille et ne décidait de rien. Toutes les pastilles se ressemblent donc,
- * ce qui est honnête — rien ne distingue deux profils que leurs permissions.
+ * pastille et ne décidait de rien. Ce qui distingue deux profils se lit dans
+ * les colonnes — origine, rôles, permissions, périmètres — pas dans une couleur.
  */
 function ProfilBadge({ profil }: { profil: Profil }) {
   return (
@@ -147,12 +147,36 @@ function ProfilRow({
   onDelete: () => void;
 }) {
   const { data: perms } = useProfilPermissions(profil.id);
+  // Ce que le profil transporte VRAIMENT depuis les migrations 0067 et 0068.
+  // Deux profils générés de sources différentes étaient indiscernables : même
+  // pastille, même compte de permissions, et l'origine nulle part.
+  const { data: roles } = usePerimetreProfil(profil.id, 'roles');
+  const { data: ccs } = usePerimetreProfil(profil.id, 'cost-centers');
+  const { data: divisions } = usePerimetreProfil(profil.id, 'divisions');
+  const { data: natures } = usePerimetreProfil(profil.id, 'natures-operation');
+  const perimetres = (ccs?.length ?? 0) + (divisions?.length ?? 0) + (natures?.length ?? 0);
+
   return (
     <tr className={cn('border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]', selected && 'bg-[#FAFBFF]')}>
       <td className="px-4 py-3">
         <ProfilBadge profil={profil} />
+        {profil.description && (
+          <div className="mt-1 pl-1 text-[10px] text-[#94A3B8]">{profil.description}</div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-center text-xs tabular-nums text-[#0F172A]">
+        {roles?.length ? (
+          <span className="rounded-full bg-[#EFF6FF] px-2 py-0.5 font-semibold text-[#0F4C81]">
+            {roles.length}
+          </span>
+        ) : (
+          <span className="text-[#CBD5E1]">—</span>
+        )}
       </td>
       <td className="px-4 py-3 text-center text-xs tabular-nums text-[#0F172A]">{perms?.length ?? '—'}</td>
+      <td className="px-4 py-3 text-center text-xs tabular-nums text-[#64748B]">
+        {perimetres || <span className="text-[#CBD5E1]">—</span>}
+      </td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1.5">
           <button
@@ -437,7 +461,9 @@ function ProfilsPageInner() {
             <thead className="bg-[#F8FAFC]">
               <tr className="text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="libelle" state={sort.state} onSort={sort.setSort}>Profil</SortableHeader>
+                <th className="w-24 px-4 py-2.5 text-center font-semibold">Rôles</th>
                 <th className="w-32 px-4 py-2.5 text-center font-semibold">Permissions</th>
+                <th className="w-28 px-4 py-2.5 text-center font-semibold">Périmètres</th>
                 <th className="w-28 px-4 py-2.5 text-right">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -456,7 +482,7 @@ function ProfilsPageInner() {
               ))}
               {profils.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-sm text-[#64748B]">
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-[#64748B]">
                     Aucun profil. Cliquez sur « Nouveau profil » pour créer un paquet de permissions réutilisable.
                   </td>
                 </tr>
