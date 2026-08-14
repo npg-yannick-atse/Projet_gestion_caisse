@@ -285,7 +285,7 @@ export class BonsService {
     // Nature d'opération obligatoire sur chaque sous-bon (contrôle serveur, vaut aussi
     // pour l'API et le mobile ; le formulaire web l'impose déjà côté client).
     // Puis cloisonnement : l'utilisateur doit avoir la nature dans sa liste blanche
-    // (sec_user_nature_operation). Le périmètre s'applique à TOUS, administrateurs et
+    // (sec_user_nature_comptable). Le périmètre s'applique à TOUS, administrateurs et
     // super admin compris (aucun bypass) : sans nature attribuée, la création est bloquée.
     for (const sb of input.soubons) {
       if (!sb.natureComptableId) {

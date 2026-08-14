@@ -261,7 +261,9 @@ export class ProfilsService {
       case 'divisions':
         return { table: 'sec_profil_division_access', colonne: 'division_id' };
       case 'natures-operation':
-        return { table: 'sec_profil_nature_operation', colonne: 'nature_operation_id' };
+        // Table renommée par la migration 0070 (fusion des natures). La clé de
+        // l'API garde son ancien nom, que les écrans déjà déployés utilisent.
+        return { table: 'sec_profil_nature_comptable', colonne: 'nature_comptable_id' };
       case 'roles':
         return { table: 'sec_profil_role', colonne: 'role_id' };
     }

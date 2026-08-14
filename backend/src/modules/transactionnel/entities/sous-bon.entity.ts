@@ -1,4 +1,4 @@
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, AfterLoad } from 'typeorm';
 import { decimalToString } from '@common/transformers/decimal.transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditableEntity } from '@common/entities/base.entity';
@@ -70,8 +70,21 @@ export class SousBon extends AuditableEntity {
   @Column({ name: 'nature_comptable_id', type: 'bigint', nullable: true })
   natureComptableId?: string | null;
 
-  @Column({ name: 'nature_operation_id', type: 'bigint', nullable: true })
+  /**
+   * ALIAS de `natureComptableId`, NON PERSISTÉ : la colonne `nature_operation_id`
+   * a été supprimée par la migration 0070 avec la table qui la justifiait.
+   *
+   * Le nom survit dans les réponses parce que l'APK déjà installé le lit — le
+   * retirer viderait la colonne « Nature comptable » de tous les téléphones qui
+   * ne sont pas encore mis à jour, sans rien casser de visible côté serveur.
+   */
+  @ApiProperty({ required: false, deprecated: true, description: 'Alias de natureComptableId' })
   natureOperationId?: string | null;
+
+  @AfterLoad()
+  exposerNatureOperationId(): void {
+    this.natureOperationId = this.natureComptableId ?? null;
+  }
 
   @Column({ name: 'cost_center_id', type: 'bigint' })
   costCenterId!: string;

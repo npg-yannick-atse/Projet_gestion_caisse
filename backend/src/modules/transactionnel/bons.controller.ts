@@ -111,6 +111,13 @@ export class BonsController {
   async create(@Body() dto: CreateBonDto, @CurrentUser() user: JwtPayload) {
     return this.bonsService.createBon({
       ...dto,
+      // La fusion des natures (migration 0070) a renommé le champ, mais le web
+      // et surtout l'APK DÉJÀ INSTALLÉ envoient encore `natureOperationId`.
+      // Sans cette reprise, chaque création est refusée pour « nature requise ».
+      soubons: dto.soubons.map((sb) => ({
+        ...sb,
+        natureComptableId: sb.natureComptableId ?? sb.natureOperationId ?? null,
+      })),
       demandeurId: user.sub,
     }, user.sub);
   }
