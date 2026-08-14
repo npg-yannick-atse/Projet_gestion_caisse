@@ -42,7 +42,7 @@ const TABLE_BY_RESOURCE: Record<string, string> = {
   portefeuilles: 'fin_portefeuille',
   partenaires: 'ref_partenaire',
   'cost-centers': 'ref_cost_center',
-  'natures-operation': 'ref_nature_operation',
+  'natures-operation': 'ref_nature_comptable',
   'plan-comptable': 'ref_plan_comptable',
   bons: 'trx_bon',
 };

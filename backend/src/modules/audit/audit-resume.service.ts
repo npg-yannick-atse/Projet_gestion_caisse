@@ -41,8 +41,10 @@ const CIBLES: Record<string, { table: string; label: string }> = {
   partenaireId: { table: 'ref_partenaire', label: 'raison_sociale' },
   'cost-centers': { table: 'ref_cost_center', label: 'libelle' },
   costCenterId: { table: 'ref_cost_center', label: 'libelle' },
-  'natures-operation': { table: 'ref_nature_operation', label: 'libelle' },
-  natureOperationId: { table: 'ref_nature_operation', label: 'libelle' },
+  // La route garde son chemin historique, mais la table visée est désormais le
+  // plan comptable : `ref_nature_operation` a disparu (migration 0070).
+  'natures-operation': { table: 'ref_nature_comptable', label: 'libelle' },
+  natureComptableId: { table: 'ref_nature_comptable', label: 'libelle' },
   employes: { table: 'ref_employe', label: "nom + ' ' + prenoms" },
   employeId: { table: 'ref_employe', label: "nom + ' ' + prenoms" },
   'types-benefice': { table: 'ref_type_benefice', label: 'libelle' },

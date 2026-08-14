@@ -27,8 +27,6 @@ export class ReferentielService {
     @InjectRepository(TypeBon)
     private readonly typeBonRepo: Repository<TypeBon>,
     @InjectRepository(NatureComptable)
-    private readonly natureOperationRepo: Repository<NatureComptable>,
-    @InjectRepository(NatureComptable)
     private readonly natureComptableRepo: Repository<NatureComptable>,
     @InjectRepository(PlanComptable)
     private readonly planComptableRepo: Repository<PlanComptable>,
@@ -357,7 +355,7 @@ export class ReferentielService {
       ['utilisateur(s) (centre par défaut)', `SELECT COUNT(*) n FROM dbo.sec_user WHERE cost_center_id=@0 AND est_actif=1`],
       ['autorisation(s) utilisateur', `SELECT COUNT(*) n FROM dbo.sec_user_cost_center WHERE cost_center_id=@0`],
       ['nature(s) comptable(s)', `SELECT COUNT(*) n FROM dbo.ref_nature_comptable WHERE cost_center_id=@0 AND est_actif=1`],
-      ["nature(s) d'opération", `SELECT COUNT(*) n FROM dbo.ref_nature_operation WHERE cost_center_id=@0 AND est_actif=1`],
+      ['nature(s) comptable(s)', `SELECT COUNT(*) n FROM dbo.ref_nature_comptable WHERE cost_center_id=@0 AND est_actif=1`],
     ];
     const bloquants: string[] = [];
     for (const [label, sql] of checks) {
@@ -581,9 +579,9 @@ export class ReferentielService {
     Array<{ natureComptableId: string; costCenterId: string }>
   > {
     const rows: Array<{ natureComptableId: string; costCenterId: string }> =
-      await this.natureOperationRepo.manager.query(
-        `SELECT l.nature_operation_id AS natureComptableId, l.cost_center_id AS costCenterId
-         FROM dbo.ref_nature_operation_cost_center l`,
+      await this.natureComptableRepo.manager.query(
+        `SELECT l.nature_comptable_id AS natureComptableId, l.cost_center_id AS costCenterId
+         FROM dbo.ref_nature_comptable_cost_center l`,
       );
     return rows.map((r) => ({
       natureComptableId: String(r.natureComptableId),
@@ -596,9 +594,9 @@ export class ReferentielService {
     return this.costCenterRepo
       .createQueryBuilder('cc')
       .innerJoin(
-        'ref_nature_operation_cost_center',
+        'ref_nature_comptable_cost_center',
         'l',
-        'l.cost_center_id = cc.id AND l.nature_operation_id = :natureId',
+        'l.cost_center_id = cc.id AND l.nature_comptable_id = :natureId',
         { natureId },
       )
       .where('cc.deletedAt IS NULL')
@@ -608,12 +606,12 @@ export class ReferentielService {
 
   async naturesOperationDeCostCenter(costCenterId: string): Promise<NatureComptable[]> {
     await this.findCostCenter(costCenterId);
-    return this.natureOperationRepo
+    return this.natureComptableRepo
       .createQueryBuilder('n')
       .innerJoin(
-        'ref_nature_operation_cost_center',
+        'ref_nature_comptable_cost_center',
         'l',
-        'l.nature_operation_id = n.id AND l.cost_center_id = :costCenterId',
+        'l.nature_comptable_id = n.id AND l.cost_center_id = :costCenterId',
         { costCenterId },
       )
       .where('n.deletedAt IS NULL')
@@ -628,12 +626,12 @@ export class ReferentielService {
   ): Promise<CostCenter[]> {
     await this.findNatureComptable(natureId);
     await this.remplacerLiens(
-      'nature_operation_id',
+      'nature_comptable_id',
       natureId,
       costCenterIds,
       userId,
-      'ref_nature_operation_cost_center',
-      'nature_operation_id',
+      'ref_nature_comptable_cost_center',
+      'nature_comptable_id',
     );
     return this.costCentersDeNatureComptable(natureId);
   }
@@ -649,8 +647,8 @@ export class ReferentielService {
       costCenterId,
       natureIds,
       userId,
-      'ref_nature_operation_cost_center',
-      'nature_operation_id',
+      'ref_nature_comptable_cost_center',
+      'nature_comptable_id',
     );
     return this.naturesOperationDeCostCenter(costCenterId);
   }

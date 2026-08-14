@@ -28,7 +28,7 @@ function monter(
           ? { find: async () => natures }
           : { findOne: async () => null }, // TypeBon : pas de restitution client
       query: async (sql: string) =>
-        sql.includes('ref_nature_operation_cost_center') ? liens : [],
+        sql.includes('ref_nature_comptable_cost_center') ? liens : [],
     },
   });
   return service;

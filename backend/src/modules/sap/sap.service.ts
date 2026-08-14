@@ -604,16 +604,25 @@ export class SapService {
       comptesAjoutes++;
     }
 
-    // Nouvelle nature comptable pour chaque nouveau compte de charge (classe 6).
-    const inserted = await this.dataSource.query(`
-      INSERT INTO dbo.ref_nature_operation(code, libelle, nature_comptable_id, est_actif, created_at, version)
+    /**
+     * Tout nouveau compte de CHARGE (classe 6) devient utilisable sur un bon.
+     *
+     * Cette étape recopiait autrefois ces comptes dans `ref_nature_operation`,
+     * une seconde table qui n'était que leur miroir. Elle a disparu
+     * (migration 0070) : on lève désormais le drapeau sur le compte lui-même.
+     * Même règle, même résultat, une table de moins.
+     *
+     * Les classes 1 à 5 et 7 restent hors bon : on n'impute pas une dépense sur
+     * un compte de capital ou de produit.
+     */
+    const flagues = await this.dataSource.query(`
+      UPDATE dbo.ref_nature_comptable
+         SET utilisable_bon = 1
       OUTPUT INSERTED.id
-      SELECT nc.code_comptable_sap, nc.libelle, nc.id, 1, SYSUTCDATETIME(), 1
-      FROM dbo.ref_nature_comptable nc
-      WHERE nc.code_comptable_sap LIKE '6%'
-        AND NOT EXISTS (SELECT 1 FROM dbo.ref_nature_operation n1 WHERE n1.code = nc.code_comptable_sap)
-        AND NOT EXISTS (SELECT 1 FROM dbo.ref_nature_operation n2 WHERE n2.nature_comptable_id = nc.id)`);
-    const naturesAjoutees = Array.isArray(inserted) ? inserted.length : 0;
+       WHERE code_comptable_sap LIKE '6%'
+         AND utilisable_bon = 0
+         AND deleted_at IS NULL`);
+    const naturesAjoutees = Array.isArray(flagues) ? flagues.length : 0;
     return { comptesAjoutes, naturesAjoutees };
   }
 
@@ -819,8 +828,9 @@ export class SapService {
          FROM dbo.trx_ecriture_comptable e
          LEFT JOIN dbo.ref_cost_center cc ON cc.id = e.cost_center_id
          LEFT JOIN dbo.trx_sous_bon sb ON sb.id = e.reference_sous_bon_id
-         LEFT JOIN dbo.ref_nature_operation no ON no.id = sb.nature_operation_id
-         LEFT JOIN dbo.ref_nature_comptable nc ON nc.id = no.nature_comptable_id
+         -- Un saut de moins depuis la migration 0070 : le sous-bon désigne
+         -- directement sa nature comptable, sans passer par une table miroir.
+         LEFT JOIN dbo.ref_nature_comptable nc ON nc.id = sb.nature_comptable_id
         WHERE e.transaction_uuid = (SELECT transaction_uuid FROM dbo.trx_operation WHERE id = @0)
         ORDER BY e.id`,
       [id],

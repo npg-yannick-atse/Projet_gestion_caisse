@@ -184,9 +184,9 @@ export class BonsService {
       // qu'un seul se comporte exactement comme avant — il reste le seul choix.
       const ph = natureIds.map((_, i) => `@${i}`).join(', ');
       const liens: Array<{ natureId: string; costCenterId: string }> = await this.dataSource.query(
-        `SELECT nature_operation_id AS natureId, cost_center_id AS costCenterId
-         FROM dbo.ref_nature_operation_cost_center
-         WHERE nature_operation_id IN (${ph})`,
+        `SELECT nature_comptable_id AS natureId, cost_center_id AS costCenterId
+         FROM dbo.ref_nature_comptable_cost_center
+         WHERE nature_comptable_id IN (${ph})`,
         natureIds,
       );
       const ccParNature = new Map<string, Set<string>>();
