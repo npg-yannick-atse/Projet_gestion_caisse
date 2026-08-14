@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Building2, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
-import { usePartenaires } from '@/api/referentiel';
+import { usePartenaires, usePays } from '@/api/referentiel';
 import { useSyncClientsSap } from '@/api/sap';
 import { useMyPermissions } from '@/api/users';
 import { useAuthStore } from '@/stores/auth.store';
@@ -25,6 +25,14 @@ type CliSortCol = (typeof CLI_SORT_COLUMNS)[number];
 function ClientsPageInner() {
   const currentUser = useAuthStore((s) => s.user);
   const { data: myPerms } = useMyPermissions(currentUser?.id ?? null);
+  /**
+   * Le partenaire ne porte que le CODE ISO du pays (LAND1 de SAP). Le nom vient
+   * du référentiel : « CI » ne dit rien à qui lit la liste, « Côte d'Ivoire »
+   * si. On garde les deux colonnes, le code restant la clé d'échange avec SAP.
+   */
+  const { data: pays } = usePays();
+  const nomPays = (code?: string | null) =>
+    (pays ?? []).find((p) => p.code === code)?.libelle ?? null;
   const peutSynchroniser = (myPerms ?? []).includes('SAP_SYNCHRONISER');
 
   const sort = useTableSort<CliSortCol>('/clients', CLI_SORT_COLUMNS, {
@@ -124,20 +132,19 @@ function ClientsPageInner() {
             <thead className="bg-[#F8FAFC]">
               <tr className="text-left text-[10px] uppercase tracking-[0.7px] text-[#64748B]">
                 <SortableHeader column="code" state={sort.state} onSort={sort.setSort}>
-                  Code
+                  Code client
                 </SortableHeader>
                 <SortableHeader column="raisonSociale" state={sort.state} onSort={sort.setSort}>
                   Raison sociale
                 </SortableHeader>
-                <th className="px-4 py-2.5 font-semibold">N° client SAP</th>
-                <th className="px-4 py-2.5 font-semibold">Ville</th>
                 <th className="px-4 py-2.5 font-semibold">Pays</th>
+                <th className="px-4 py-2.5 font-semibold">Code pays</th>
               </tr>
             </thead>
             <tbody>
               {paged.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
                     <div className="mb-2 flex justify-center text-[#94A3B8]">
                       <Building2 className="h-8 w-8" />
                     </div>
@@ -153,9 +160,8 @@ function ClientsPageInner() {
                 <tr key={c.id} className="border-t border-[rgba(15,76,129,0.07)] hover:bg-[#FAFBFF]">
                   <td className="px-4 py-3 font-mono text-[#1A6DB5]">{c.code}</td>
                   <td className="px-4 py-3 font-medium text-[#0F172A]">{c.raisonSociale}</td>
-                  <td className="px-4 py-3 font-mono text-[#64748B]">{c.numeroClient ?? '—'}</td>
-                  <td className="px-4 py-3 text-[#475569]">{c.ville ?? '—'}</td>
-                  <td className="px-4 py-3 text-[#475569]">{c.pays ?? '—'}</td>
+                  <td className="px-4 py-3 text-[#475569]">{nomPays(c.pays) ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-[#64748B]">{c.pays ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
