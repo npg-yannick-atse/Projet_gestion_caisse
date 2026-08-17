@@ -184,6 +184,7 @@ function NaturesOperationPageInner() {
   const [form, setForm] = useState<{ editing: NatureOperation | null } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NatureOperation | null>(null);
   const [liaison, setLiaison] = useState<NatureOperation | null>(null);
+  const [confirmSync, setConfirmSync] = useState(false);
 
   const user = useAuthStore((s) => s.user);
   const { data: perms } = useMyPermissions(user?.id ?? null);
@@ -241,7 +242,7 @@ function NaturesOperationPageInner() {
               )}
               <button
                 type="button"
-                onClick={() => sync.mutate()}
+                onClick={() => setConfirmSync(true)}
                 disabled={sync.isPending}
                 title="Récupérer les nouveaux comptes/natures depuis SAP"
                 className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.2)] px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
@@ -415,6 +416,34 @@ function NaturesOperationPageInner() {
         error={remove.isError ? apiErrorMessage(remove.error, 'Désactivation impossible') : undefined}
         onCancel={() => { setPendingDelete(null); remove.reset(); }}
         onConfirm={() => { if (pendingDelete) remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) }); }}
+      />
+
+      {/* La synchronisation écrit en base et ne se défait pas d'un clic : elle
+          mérite qu'on la demande deux fois. Le second effet — rendre des
+          comptes utilisables sur un bon — est celui qu'on oublie. */}
+      <ConfirmDialog
+        open={confirmSync}
+        variant="default"
+        icon={RefreshCw}
+        title="Synchroniser le plan comptable depuis SAP ?"
+        description={
+          <>
+            Les comptes de SAP absents d'ici seront <strong>ajoutés</strong>. Rien n'est modifié
+            ni supprimé.
+            <br />
+            <br />
+            Les comptes de <strong>classe 6</strong> deviennent au passage utilisables sur un
+            bon : ils apparaîtront dans le choix des natures à la création.
+          </>
+        }
+        confirmLabel="Synchroniser"
+        busy={sync.isPending}
+        error={sync.isError ? apiErrorMessage(sync.error, 'Synchronisation impossible') : undefined}
+        onCancel={() => {
+          setConfirmSync(false);
+          sync.reset();
+        }}
+        onConfirm={() => sync.mutate(undefined, { onSuccess: () => setConfirmSync(false) })}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import { Panel, PanelHeader } from '@/components/ui/panel';
 import { SortableHeader } from '@/components/SortableHeader';
 import { useTableSort } from '@/hooks/useTableSort';
 import { RoleGuard } from '@/components/RoleGuard';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const PAGE_SIZES = [20, 50, 100] as const;
 const CLI_SORT_COLUMNS = ['code', 'raisonSociale'] as const;
@@ -55,6 +56,7 @@ function ClientsPageInner() {
   });
 
   const sync = useSyncClientsSap();
+  const [confirmSync, setConfirmSync] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(50);
   useEffect(() => {
@@ -73,7 +75,7 @@ function ClientsPageInner() {
           {peutSynchroniser && (
             <button
               type="button"
-              onClick={() => sync.mutate()}
+              onClick={() => setConfirmSync(true)}
               disabled={sync.isPending}
               className="ml-auto flex items-center gap-1.5 rounded-[9px] bg-[#0F4C81] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#1A6DB5] disabled:opacity-60"
             >
@@ -197,6 +199,33 @@ function ClientsPageInner() {
           </div>
         )}
       </Panel>
+
+      {/* La synchronisation écrit en base et ne se défait pas d'un clic : elle
+          mérite qu'on la demande deux fois. */}
+      <ConfirmDialog
+        open={confirmSync}
+        variant="default"
+        icon={RefreshCw}
+        title="Synchroniser les clients depuis SAP ?"
+        description={
+          <>
+            Les clients de SAP absents d'ici seront <strong>ajoutés</strong>. Rien n'est modifié
+            ni supprimé : un client déjà présent est laissé tel quel, y compris si son nom a
+            changé dans SAP.
+            <br />
+            <br />
+            Les clients <strong>marqués supprimés dans SAP sont écartés</strong>.
+          </>
+        }
+        confirmLabel="Synchroniser"
+        busy={sync.isPending}
+        error={sync.isError ? apiErrorMessage(sync.error, 'Synchronisation impossible') : undefined}
+        onCancel={() => {
+          setConfirmSync(false);
+          sync.reset();
+        }}
+        onConfirm={() => sync.mutate(undefined, { onSuccess: () => setConfirmSync(false) })}
+      />
     </div>
   );
 }

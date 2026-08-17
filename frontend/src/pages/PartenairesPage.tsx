@@ -223,6 +223,7 @@ export function PartenairesPage() {
   const sync = useSyncFournisseursSap();
   const [form, setForm] = useState<{ editing?: Partenaire } | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Partenaire | null>(null);
+  const [confirmSync, setConfirmSync] = useState(false);
 
   // Pagination client.
   const [page, setPage] = useState(1);
@@ -259,7 +260,7 @@ export function PartenairesPage() {
               )}
               <button
                 type="button"
-                onClick={() => sync.mutate()}
+                onClick={() => setConfirmSync(true)}
                 disabled={sync.isPending}
                 title="Récupérer les nouveaux fournisseurs depuis SAP"
                 className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.2)] px-3 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
@@ -440,6 +441,34 @@ export function PartenairesPage() {
         onConfirm={() => {
           if (pendingDelete) remove.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) });
         }}
+      />
+
+      {/* La synchronisation écrit en base et ne se défait pas d'un clic : elle
+          mérite qu'on la demande deux fois. Le texte dit ce qui va arriver —
+          combien de lignes peuvent entrer, et ce qui n'entrera jamais. */}
+      <ConfirmDialog
+        open={confirmSync}
+        variant="default"
+        icon={RefreshCw}
+        title="Synchroniser les fournisseurs depuis SAP ?"
+        description={
+          <>
+            Les fournisseurs de SAP absents d'ici seront <strong>ajoutés</strong>. Rien n'est
+            modifié ni supprimé : un fournisseur déjà présent est laissé tel quel, y compris si
+            son nom a changé dans SAP.
+            <br />
+            <br />
+            Les fournisseurs <strong>marqués supprimés dans SAP sont écartés</strong>.
+          </>
+        }
+        confirmLabel="Synchroniser"
+        busy={sync.isPending}
+        error={sync.isError ? apiErrorMessage(sync.error, 'Synchronisation impossible') : undefined}
+        onCancel={() => {
+          setConfirmSync(false);
+          sync.reset();
+        }}
+        onConfirm={() => sync.mutate(undefined, { onSuccess: () => setConfirmSync(false) })}
       />
     </div>
   );
