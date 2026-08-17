@@ -26,8 +26,13 @@ function fakeQb(rows: any[]) {
  * Construit le service avec un DataSource simulé.
  * `parEntite` associe un NOM d'entité à ses réponses : { find, raw }.
  */
-function build(parEntite: Record<string, { find?: any[]; raw?: any[] }> = {}) {
+function build(
+  parEntite: Record<string, { find?: any[]; raw?: any[] }> = {},
+  /** Lignes rendues par les requêtes brutes (natures via centres de coût). */
+  sql: any[] = [],
+) {
   const dataSource: any = {
+    query: jest.fn(async () => sql),
     getRepository: jest.fn((entity: any) => {
       const conf = parEntite[entity?.name] ?? {};
       return {

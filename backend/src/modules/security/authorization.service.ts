@@ -552,7 +552,50 @@ export class AuthorizationService {
       .getRepository(UserNatureComptable)
       .find({ where: { userId: userId as any } });
     const parProfil = await this.viaProfils(userId, ProfilNatureComptable, 'natureComptableId');
-    return new Set([...rows.map((r) => String(r.natureComptableId)), ...parProfil]);
+    const parCostCenter = await this.naturesViaCostCenters(userId);
+    return new Set([
+      ...rows.map((r) => String(r.natureComptableId)),
+      ...parProfil,
+      ...parCostCenter,
+    ]);
+  }
+
+  /**
+   * Natures rattachées aux CENTRES DE COÛT de l'utilisateur.
+   *
+   * Elles s'AJOUTENT aux natures personnelles : une nature liée au centre de
+   * coût de sa direction lui est acquise, sans qu'on ait à la lui attribuer
+   * une seconde fois. Auparavant la liaison ne faisait que RESTREINDRE — elle
+   * disait quel centre de coût une nature accepte, sans jamais donner accès à
+   * la nature elle-même, et il fallait tout attribuer deux fois.
+   *
+   * Trois provenances pour les centres de coût, les mêmes que pour la création
+   * d'un bon : ceux de sa direction, ceux qui lui sont assignés, ceux de ses
+   * profils.
+   */
+  private async naturesViaCostCenters(userId: string): Promise<string[]> {
+    const profilIds = await this.getProfilIds(userId);
+    // `@1` n'est employé que si des profils existent : une liste vide dans un
+    // IN(...) est une erreur de syntaxe SQL, pas un ensemble vide.
+    const clauseProfils = profilIds.length
+      ? `UNION SELECT cost_center_id FROM dbo.sec_profil_cost_center
+           WHERE profil_id IN (${profilIds.map((_, i) => `@${i + 1}`).join(', ')})`
+      : '';
+
+    const lignes: Array<{ natureId: string }> = await this.dataSource.query(
+      `SELECT DISTINCT l.nature_comptable_id AS natureId
+         FROM dbo.ref_nature_comptable_cost_center l
+        WHERE l.cost_center_id IN (
+                SELECT cost_center_id FROM dbo.sec_user_cost_center WHERE user_id = @0
+                UNION
+                SELECT cc.id FROM dbo.ref_cost_center cc
+                  JOIN dbo.sec_user u ON u.direction_id = cc.direction_id
+                 WHERE u.id = @0 AND cc.deleted_at IS NULL AND u.deleted_at IS NULL
+                ${clauseProfils}
+              )`,
+      [userId, ...profilIds],
+    );
+    return lignes.map((l) => String(l.natureId));
   }
 
   /** Vérifie que l'utilisateur a le droit d'utiliser cette nature (sinon Forbidden). */
