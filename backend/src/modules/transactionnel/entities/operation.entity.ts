@@ -13,7 +13,9 @@ export type TypeOperation =
   /** Versement du salaire d'un employé depuis une caisse ou un portefeuille. */
   | 'SALAIRE'
   /** Mensualité d'un crédit employé encaissée : l'argent revient dans la source. */
-  | 'REMBOURSEMENT_CREDIT';
+  | 'REMBOURSEMENT_CREDIT'
+  /** Part non dépensée d'un bon, rendue à la caisse (migration 0074). */
+  | 'REMBOURSEMENT_BON';
 
 @Entity({ name: 'trx_operation' })
 export class Operation {

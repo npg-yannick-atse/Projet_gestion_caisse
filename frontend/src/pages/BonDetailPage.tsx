@@ -28,6 +28,8 @@ import { StatutBadge } from '@/components/StatutBadge';
 import { SignaturePad } from '@/components/SignaturePad';
 import { PreparationDecaissementModal } from '@/components/PreparationDecaissementModal';
 import { EditBonModal } from '@/components/EditBonModal';
+import { RemboursementBonModal } from '@/components/RemboursementBonModal';
+import { useRemboursementsBon, useCreateRemboursementBon } from '@/api/remboursementsBon';
 
 function errMessage(error: unknown): string | null {
   if (error instanceof AxiosError) {
@@ -205,6 +207,22 @@ export function BonDetailPage() {
   // Annuler un bon DÉJÀ VALIDÉ requiert la permission BON_ANNULER_VALIDE (admins inclus).
   // Un bon au statut CREE reste annulable par son demandeur sans permission.
   const canAnnulerValide = isAdminRole || (myPermissions ?? []).includes('BON_ANNULER_VALIDE');
+  // Rendre à la caisse la part non dépensée : c'est le caissier qui reçoit
+  // l'argent, donc lui qui l'enregistre.
+  const canRembourser = isAdminRole || (myPermissions ?? []).includes('BON_REMBOURSER');
+  const remboursementsQuery = useRemboursementsBon(bonId);
+  const creerRemboursement = useCreateRemboursementBon(bonId);
+  const [remboursementSousBon, setRemboursementSousBon] = useState<SousBon | null>(null);
+
+  /** Total déjà rendu, par sous-bon — le reste à rendre s'en déduit. */
+  const renduParSousBon = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of remboursementsQuery.data ?? []) {
+      const cle = String(r.sousBonId);
+      map.set(cle, (map.get(cle) ?? 0) + Number(r.montant));
+    }
+    return map;
+  }, [remboursementsQuery.data]);
 
   const [commentaire, setCommentaire] = useState('');
   const [showSignModal, setShowSignModal] = useState(false);
@@ -222,6 +240,8 @@ export function BonDetailPage() {
   const soubons = sousBonsQuery.data ?? [];
   // Sous-bons encore décaissables (statut VALIDE) → cible du « Décaisser tout ».
   const sousBonsDecaissables = soubons.filter((sb) => sb.statut === 'VALIDE');
+  /** Ceux dont l'argent est sorti : eux seuls peuvent donner lieu à un retour. */
+  const soubonsDecaisses = soubons.filter((sb) => sb.statut === 'DECAISSE');
   // Montant réellement décaissé (montant ajusté par le caissier inclus) et reste à décaisser.
   const montantDecaisse = soubons.reduce((acc, sb) => {
     if (!['DECAISSE', 'COMPTABILISE'].includes(sb.statut)) return acc;
@@ -549,6 +569,71 @@ export function BonDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Retours à la caisse. Carte séparée parce que la colonne d'actions
+              du tableau ne s'affiche qu'au statut VALIDE, alors qu'un
+              remboursement n'arrive QU'APRÈS le décaissement. */}
+          {soubonsDecaisses.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Retours à la caisse</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-[11px] text-muted-foreground">
+                  Le bon garde son montant : ce qui a été autorisé ne change pas. Un retour dit ce
+                  qui n'a pas été dépensé et revient dans le tiroir.
+                </p>
+                {soubonsDecaisses.map((sb) => {
+                  const rendu = renduParSousBon.get(String(sb.id)) ?? 0;
+                  const fin = finaliseBySousBonId.get(String(sb.id));
+                  const sorti = Number(fin?.montantAjuste ?? sb.montant ?? 0);
+                  const reste = sorti - rendu;
+                  return (
+                    <div
+                      key={sb.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[rgba(15,76,129,0.08)] px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-[#0F172A]">{sb.libelle}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Décaissé {formatMontant(String(sorti))}
+                          {rendu > 0 && <> · rendu {formatMontant(String(rendu))}</>}
+                          {' · reste '}
+                          <strong className={reste > 0 ? 'text-[#047857]' : 'text-muted-foreground'}>
+                            {formatMontant(String(reste))}
+                          </strong>
+                        </div>
+                      </div>
+                      {canRembourser && reste > 0 && (
+                        <Button variant="outline" onClick={() => setRemboursementSousBon(sb)}>
+                          Rendre à la caisse
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {(remboursementsQuery.data ?? []).length > 0 && (
+                  <div className="border-t border-[rgba(15,76,129,0.07)] pt-2">
+                    <div className="mb-1 text-[10px] uppercase tracking-[0.6px] text-muted-foreground">
+                      Retours enregistrés
+                    </div>
+                    {(remboursementsQuery.data ?? []).map((r) => (
+                      <div key={r.id} className="flex items-baseline justify-between gap-2 py-1 text-[11px]">
+                        <span className="text-muted-foreground">
+                          {new Date(r.createdAt).toLocaleString('fr-FR')}
+                          {r.motif ? ` — ${r.motif}` : ''}
+                        </span>
+                        <span className="font-semibold tabular-nums text-[#047857]">
+                          {formatMontant(r.montant)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Actions</CardTitle>
@@ -815,6 +900,35 @@ export function BonDetailPage() {
           defaultBeneficiaire={bon.porteur ?? null}
           onClose={() => setPreparingSousBon(null)}
           onDone={() => setPreparingSousBon(null)}
+        />
+      )}
+
+      {/* Retour d'argent à la caisse sur un sous-bon décaissé */}
+      {remboursementSousBon && (
+        <RemboursementBonModal
+          sousBon={{
+            ...remboursementSousBon,
+            // Le montant RÉELLEMENT décaissé, pas celui demandé : le caissier a
+            // pu ajuster à la baisse en payant. C'est aussi ce que le serveur
+            // retient pour plafonner le retour.
+            montant: String(
+              finaliseBySousBonId.get(String(remboursementSousBon.id))?.montantAjuste ??
+                remboursementSousBon.montant,
+            ),
+          }}
+          dejaRendu={String(renduParSousBon.get(String(remboursementSousBon.id)) ?? 0)}
+          busy={creerRemboursement.isPending}
+          error={creerRemboursement.error}
+          onClose={() => {
+            setRemboursementSousBon(null);
+            creerRemboursement.reset();
+          }}
+          onSubmit={(montant, motif) =>
+            creerRemboursement.mutate(
+              { sousBonId: remboursementSousBon.id, montant, motif },
+              { onSuccess: () => setRemboursementSousBon(null) },
+            )
+          }
         />
       )}
 

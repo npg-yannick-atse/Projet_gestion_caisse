@@ -13,6 +13,9 @@ import { Operation } from './entities/operation.entity';
 import { Transfert } from './entities/transfert.entity';
 import { EcritureComptable } from './entities/ecriture-comptable.entity';
 import { Carnet } from './entities/carnet.entity';
+import { RemboursementBon } from './entities/remboursement-bon.entity';
+import { RemboursementsBonService } from './remboursements-bon.service';
+import { RemboursementsBonController } from './remboursements-bon.controller';
 import { BonManuel } from './entities/bon-manuel.entity';
 import { BonRecurrenceJob } from './jobs/bon-recurrence.job';
 import { BonsService } from './bons.service';
@@ -39,6 +42,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
       EcritureComptable,
       Carnet,
       BonManuel,
+      RemboursementBon,
     ]),
     SecurityModule,
     NotificationsModule,
@@ -50,10 +54,17 @@ import { BonsManuelsController } from './bons-manuels.controller';
     LedgerService,
     BonsManuelsService,
     BudgetMensuelService,
+    RemboursementsBonService,
     // Rappel quotidien des bons récurrents (@Cron 7h, fuseau Abidjan).
     BonRecurrenceJob,
   ],
-  controllers: [BonsController, BonsCaisseController, LedgerController, BonsManuelsController],
+  controllers: [
+    BonsController,
+    BonsCaisseController,
+    LedgerController,
+    BonsManuelsController,
+    RemboursementsBonController,
+  ],
   exports: [BonsService, BonsCaisseService, LedgerService, TypeOrmModule],
 })
 export class TransactionnelModule {}
