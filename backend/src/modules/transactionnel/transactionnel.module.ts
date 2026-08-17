@@ -13,6 +13,8 @@ import { Operation } from './entities/operation.entity';
 import { Transfert } from './entities/transfert.entity';
 import { EcritureComptable } from './entities/ecriture-comptable.entity';
 import { Carnet } from './entities/carnet.entity';
+import { RecuCaisse } from './entities/recu-caisse.entity';
+import { RecusCaisseController } from './recus-caisse.controller';
 import { RemboursementBon } from './entities/remboursement-bon.entity';
 import { RemboursementsBonService } from './remboursements-bon.service';
 import { RemboursementsBonController } from './remboursements-bon.controller';
@@ -43,6 +45,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
       Carnet,
       BonManuel,
       RemboursementBon,
+      RecuCaisse,
     ]),
     SecurityModule,
     NotificationsModule,
@@ -64,6 +67,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
     LedgerController,
     BonsManuelsController,
     RemboursementsBonController,
+    RecusCaisseController,
   ],
   exports: [BonsService, BonsCaisseService, LedgerService, TypeOrmModule],
 })

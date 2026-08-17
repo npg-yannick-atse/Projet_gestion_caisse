@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import {Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository, SelectQueryBuilder } from 'typeorm';
 import { Workbook } from 'exceljs';
@@ -93,6 +93,8 @@ export interface OperationQueryOptions {
 
 @Injectable()
 export class LedgerService {
+  private static readonly logger = new Logger('LedgerService');
+
   constructor(
     @InjectRepository(Operation)
     private readonly operationRepo: Repository<Operation>,
@@ -235,7 +237,66 @@ export class LedgerService {
       manager,
     );
 
+    /*
+     * UN REÇU POUR TOUTE ENTRÉE D'ARGENT EN CAISSE (migration 0075).
+     *
+     * Émis ici et nulle part ailleurs : les quatorze chemins qui écrivent le
+     * grand livre passent tous par cette méthode. Aucun ne peut donc créditer
+     * une caisse sans laisser de reçu — y compris ceux qu'on ajoutera demain.
+     *
+     * Le reçu suit L'ÉCRITURE, pas l'intention : c'est le crédit d'une caisse
+     * qui le déclenche, quel que soit le geste métier à l'origine.
+     */
+    if (compteCredit.typeCompte === 'CAISSE') {
+      await this.emettreRecu(
+        {
+          caisseId: String(compteCredit.compteId),
+          deviseId: String(compteCredit.deviseId),
+          montant,
+          transactionUuid,
+        },
+        manager,
+      );
+    }
+
     return [debitEcriture, creditEcriture];
+  }
+
+  /**
+   * Inscrit un reçu de réception. Numéro séquentiel, jamais réutilisé : deux
+   * papiers différents ne doivent pas porter la même référence.
+   *
+   * Le type d'entrée et le motif sont relus de l'opération qui partage le même
+   * `transaction_uuid`, quand elle existe — un reçu doit se lire seul, sans
+   * qu'on ait à retrouver ce qui l'a provoqué.
+   *
+   * Best-effort : un reçu qui échoue ne doit pas faire échouer le mouvement
+   * d'argent. Mieux vaut une entrée sans papier qu'un encaissement refusé.
+   */
+  private async emettreRecu(
+    input: { caisseId: string; deviseId: string; montant: string; transactionUuid: string },
+    manager?: EntityManager,
+  ): Promise<void> {
+    const runner = manager ?? this.ecritureRepo.manager;
+    try {
+      await runner.query(
+        `DECLARE @suivant INT = (
+           SELECT ISNULL(MAX(TRY_CONVERT(INT, SUBSTRING(numero, 5, 20))), 0) + 1
+             FROM dbo.trx_recu_caisse
+         );
+         INSERT INTO dbo.trx_recu_caisse
+           (numero, caisse_id, devise_id, montant, type_entree, transaction_uuid, motif, created_by_id)
+         SELECT
+           CONCAT('REC-', RIGHT(CONCAT('0000', @suivant), 4)),
+           @0, @1, @2,
+           o.type_operation, @3, o.motif, o.user_id
+           FROM (SELECT TOP 1 type_operation, motif, user_id
+                   FROM dbo.trx_operation WHERE transaction_uuid = @3) o`,
+        [input.caisseId, input.deviseId, input.montant, input.transactionUuid],
+      );
+    } catch (e) {
+      LedgerService.logger.warn(`Reçu de caisse non émis (${(e as Error).message}) — le mouvement reste enregistré.`);
+    }
   }
 
   /**
