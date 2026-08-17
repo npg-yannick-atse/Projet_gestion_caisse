@@ -22,9 +22,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  // Les specs sont exclues de la COMPILATION de l'application : vitest n'est
-  // pas une dépendance du projet, ses types ne sont donc pas résolus ici.
-  // Elles restent exécutables par `npx vitest run`.
-  "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
+  "include": ["src"]
 }
