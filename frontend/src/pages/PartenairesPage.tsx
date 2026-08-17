@@ -208,7 +208,13 @@ export function PartenairesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // Chaîne vide = tous les types. Le filtre part au SERVEUR : `type` devient un
+  // `WHERE type_partenaire = ?`. Trier les 2485 lignes en JavaScript aurait
+  // demandé de toutes les télécharger pour n'en montrer qu'une partie.
+  const [type, setType] = useState<TypePartenaire | ''>('');
+
   const { data: partenaires, isLoading, isError } = usePartenaires({
+    type: type || undefined,
     search: debouncedSearch || undefined,
     sortBy: sort.state.by ?? undefined,
     sortDir: sort.state.by ? sort.state.dir : undefined,
@@ -223,7 +229,7 @@ export function PartenairesPage() {
   const [pageSize, setPageSize] = useState<number>(20);
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, pageSize, sort.state.by, sort.state.dir]);
+  }, [debouncedSearch, type, pageSize, sort.state.by, sort.state.dir]);
   const list = partenaires ?? [];
   const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
   const pageSafe = Math.min(page, totalPages);
@@ -280,6 +286,23 @@ export function PartenairesPage() {
             placeholder="Rechercher (raison sociale, code, n° client)…"
             className="min-w-[200px] flex-1 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-[#F8FAFC] px-3 py-1.5 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5] focus:bg-white"
           />
+          {/* Filtre par type : envoyé au serveur, pas appliqué sur la liste
+              déjà reçue. « Mixte » a son entrée parce qu'un partenaire mixte
+              n'apparaît sous aucun des deux autres — la correspondance est
+              exacte, ici comme dans les cinq écrans qui utilisent ce filtre. */}
+          <label className="flex items-center gap-1.5 text-[11px] text-[#64748B]">
+            Type
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as TypePartenaire | '')}
+              className="rounded-[7px] border border-[rgba(15,76,129,0.12)] bg-white px-2 py-1 text-xs text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+            >
+              <option value="">Tous</option>
+              <option value="CLIENT">Clients</option>
+              <option value="FOURNISSEUR">Fournisseurs</option>
+              <option value="MIXTE">Mixtes</option>
+            </select>
+          </label>
           <label className="flex items-center gap-1.5 text-[11px] text-[#64748B]">
             Afficher
             <select
