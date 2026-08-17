@@ -13,6 +13,8 @@ import { Operation } from './entities/operation.entity';
 import { Transfert } from './entities/transfert.entity';
 import { EcritureComptable } from './entities/ecriture-comptable.entity';
 import { Carnet } from './entities/carnet.entity';
+import { ReajustementsService } from './reajustements.service';
+import { ReajustementsController } from './reajustements.controller';
 import { RecuCaisse } from './entities/recu-caisse.entity';
 import { RecusCaisseController } from './recus-caisse.controller';
 import { RemboursementBon } from './entities/remboursement-bon.entity';
@@ -58,6 +60,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
     BonsManuelsService,
     BudgetMensuelService,
     RemboursementsBonService,
+    ReajustementsService,
     // Rappel quotidien des bons récurrents (@Cron 7h, fuseau Abidjan).
     BonRecurrenceJob,
   ],
@@ -68,6 +71,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
     BonsManuelsController,
     RemboursementsBonController,
     RecusCaisseController,
+    ReajustementsController,
   ],
   exports: [BonsService, BonsCaisseService, LedgerService, TypeOrmModule],
 })

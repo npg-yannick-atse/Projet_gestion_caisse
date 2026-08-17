@@ -48,7 +48,30 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
    * Réajuste tous les portefeuilles à plafond mensuel non encore réinitialisés ce mois.
    * Renvoie le nombre de portefeuilles traités.
    */
+  /**
+   * Le jour du mois est-il venu ? (paramètre `BUDGET_RESET_JOUR`, 1 par défaut)
+   *
+   * Un « 31 » sur un mois de trente jours ne doit pas SAUTER le mois : on le
+   * ramène au dernier jour. Sans ce repli, février ne serait jamais réajusté.
+   *
+   * La comparaison est un « au-delà ou égal », pas une égalité : si personne
+   * n'allume le serveur le jour dit, la demande se produit au prochain passage
+   * plutôt que d'attendre le mois suivant.
+   */
+  private async jourVenu(): Promise<boolean> {
+    const [row] = await this.dataSource.query(
+      `SELECT valeur FROM dbo.app_parametre WHERE cle = 'BUDGET_RESET_JOUR'`,
+    );
+    const voulu = Math.max(1, Math.min(31, Number(row?.valeur ?? 1) || 1));
+    const maintenant = new Date();
+    const dernierJour = new Date(
+      Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    return maintenant.getUTCDate() >= Math.min(voulu, dernierJour);
+  }
+
   async reconcileAll(): Promise<number> {
+    if (!(await this.jourVenu())) return 0;
     const mois = this.currentMonth();
     const repo = this.dataSource.getRepository(Portefeuille);
     const cibles = await repo.find({ where: { estActif: true, budgetMensuel: Not(IsNull()) } });
@@ -89,12 +112,22 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
     return n;
   }
 
-  /** Réajuste un portefeuille à son plafond, en transaction, puis marque le mois traité. */
-  private async resetOne(pf: Portefeuille, mois: string, userId: string): Promise<void> {
+  /**
+   * Produit la DEMANDE de réajustement d'un portefeuille — sans toucher à l'argent.
+   *
+   * Le réajustement déplaçait autrefois les fonds tout seul : au premier passage
+   * du mois, il portait le portefeuille à son plafond en débitant sa caisse,
+   * sans que personne l'ait décidé. C'est ainsi que 999 milliards sont partis
+   * d'un portefeuille vers une caisse, à la surprise générale.
+   *
+   * Il PROPOSE désormais. L'écart est calculé et consigné avec le solde et le
+   * plafond qui l'ont produit — de quoi juger sans refaire l'addition — et
+   * l'exécution attend un accord explicite.
+   */
+  private async resetOne(pf: Portefeuille, mois: string, _userId: string): Promise<void> {
     const cap = Number(pf.budgetMensuel);
     // Disponible réel = solde initial + mouvements (même définition que
-    // getSoldeDetail et la garde de recharge inverse) : on réajuste le disponible
-    // EXACTEMENT au plafond, sinon un soldeInitial > 0 finance au-dessus du plafond.
+    // getSoldeDetail et la garde de recharge inverse).
     const soldeInitial = Number(pf.soldeInitial || 0);
     const solde =
       soldeInitial +
@@ -103,36 +136,45 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
       Number(await this.ledger.calculateBalance(String(pf.id), 'PORTEFEUILLE', String(pf.deviseId)));
     const delta = Number((cap - solde).toFixed(4));
 
-    await this.dataSource.transaction(async (manager) => {
-      if (delta !== 0) {
-        // Point de passage commun : il vérifie que la caisse détient bien la
-        // devise avant de la débiter. Une recharge impossible fait échouer le
-        // réajustement — `reconcileAll` la journalise et laisse le mois non
-        // marqué, donc la tentative se rejouera dès la caisse approvisionnée,
-        // plutôt que de creuser un solde négatif en silence.
-        // delta > 0 : recharge (caisse → portefeuille) ; delta < 0 : reprise.
-        await this.ledger.mouvementCaissePortefeuille(
-          {
-            caisseId: String(pf.caisseSourceId),
-            portefeuilleId: String(pf.id),
-            montant: Math.abs(delta).toFixed(4),
-            sens: delta > 0 ? 'CAISSE_VERS_PORTEFEUILLE' : 'PORTEFEUILLE_VERS_CAISSE',
-            typeOperation: 'AJUSTEMENT',
-            userId,
-            reference: `Reset budget ${mois}`,
-          },
-          manager,
-        );
-      }
-      // La réussite efface la raison précédente : ce que porte le portefeuille
-      // doit toujours être la situation ACTUELLE, jamais un vieux message.
-      await manager
+    // Déjà exactement au plafond : rien à proposer, le mois est réputé traité.
+    if (delta === 0) {
+      await this.dataSource
         .getRepository(Portefeuille)
         .update(
           { id: pf.id as any },
           { budgetResetMois: mois, budgetResetErreur: null, budgetResetTenteLe: new Date() },
         );
-    });
+      return;
+    }
+
+    // Une demande vivante existe déjà pour ce mois : on n'en empile pas une
+    // seconde à chaque passage horaire.
+    const [dejaLa] = await this.dataSource.query(
+      `SELECT TOP 1 id FROM dbo.trx_demande_reajustement
+        WHERE portefeuille_id = @0 AND mois = @1 AND statut IN ('EN_ATTENTE', 'APPROUVEE')`,
+      [String(pf.id), mois],
+    );
+    if (dejaLa) return;
+
+    await this.dataSource.query(
+      `INSERT INTO dbo.trx_demande_reajustement
+         (portefeuille_id, mois, montant, sens, devise_id, caisse_id, solde_constate, plafond)
+       VALUES (@0, @1, @2, @3, @4, @5, @6, @7)`,
+      [
+        String(pf.id),
+        mois,
+        Math.abs(delta).toFixed(4),
+        delta > 0 ? 'CAISSE_VERS_PORTEFEUILLE' : 'PORTEFEUILLE_VERS_CAISSE',
+        String(pf.deviseId),
+        String(pf.caisseSourceId),
+        solde.toFixed(4),
+        cap.toFixed(4),
+      ],
+    );
+
+    this.logger.log(
+      `Demande de réajustement créée : portefeuille ${pf.id}, ${mois}, ${Math.abs(delta).toFixed(4)}.`,
+    );
   }
 
   /** Premier utilisateur admin (acteur « système » des écritures de réajustement). */

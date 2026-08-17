@@ -1,15 +1,20 @@
 import { BudgetMensuelService } from './budget-mensuel.service';
 
 /**
- * Un réajustement mensuel manqué doit LAISSER SA RAISON sur le portefeuille.
+ * Le réajustement mensuel PROPOSE, il ne déplace plus l'argent.
  *
- * L'échec ne partait que dans un avertissement de journal côté serveur :
- * l'écran montrait un portefeuille à 0 en face d'un budget d'un milliard, sans
- * un mot. On redémarrait le backend en croyant débloquer la situation, et il
- * ne se passait rien de visible — le vrai motif étant que la caisse source,
- * vidée, ne pouvait pas financer la recharge.
+ * Il portait autrefois chaque portefeuille à son plafond en débitant sa caisse,
+ * tout seul, au premier passage du mois. C'est ainsi que 999 milliards sont
+ * partis d'un portefeuille vers une caisse, à la surprise générale. Il produit
+ * désormais une DEMANDE ; l'exécution attend un accord humain
+ * (cf. reajustement-validation.spec.ts).
+ *
+ * Ce fichier couvrait l'ancien comportement — la raison d'échec écrite sur le
+ * portefeuille au moment où le mouvement échouait. Ce moment n'existe plus ici,
+ * mais le filet reste : si la CRÉATION de la demande échoue, la raison
+ * s'inscrit toujours, pour qu'un portefeuille à 0 ne reste jamais muet.
  */
-function monter({ echec }: { echec?: string } = {}) {
+function monter({ jour = '1', echecInsert }: { jour?: string; echecInsert?: string } = {}) {
   const portefeuille = {
     id: '7',
     code: 'P_CI_XOF',
@@ -21,6 +26,7 @@ function monter({ echec }: { echec?: string } = {}) {
     estActif: true,
   };
   const majs: any[] = [];
+  const sql: string[] = [];
 
   const repo = {
     find: jest.fn(async () => [portefeuille]),
@@ -38,54 +44,62 @@ function monter({ echec }: { echec?: string } = {}) {
 
   const dataSource = {
     getRepository: jest.fn(() => repo),
+    query: jest.fn(async (q: string) => {
+      sql.push(q.replace(/\s+/g, ' ').trim());
+      if (q.includes('app_parametre')) return [{ valeur: jour }];
+      // Aucune demande vivante préexistante.
+      if (q.includes('SELECT TOP 1 id FROM dbo.trx_demande_reajustement')) return [];
+      if (q.includes('INSERT INTO dbo.trx_demande_reajustement') && echecInsert) {
+        throw new Error(echecInsert);
+      }
+      return [];
+    }),
     transaction: jest.fn(async (cb: any) => cb({ getRepository: jest.fn(() => repo) })),
   };
+  const ledger = { calculateBalance: jest.fn(async () => '0') };
 
-  const ledger = {
-    calculateBalance: jest.fn(async () => '0'),
-    mouvementCaissePortefeuille: jest.fn(async () => {
-      if (echec) throw new Error(echec);
-      return {};
-    }),
-  };
-
-  return { service: new BudgetMensuelService(dataSource as any, ledger as any), majs };
+  return { service: new BudgetMensuelService(dataSource as any, ledger as any), majs, sql };
 }
 
-describe('réajustement mensuel : la raison de l’échec est conservée', () => {
-  const messageCaisseVide =
-    'La caisse C_CI_01_XOF ne détient pas assez de XOF (disponible : 0.0000). Approvisionnez-la dans cette devise avant de recharger.';
-
-  it('écrit la raison sur le portefeuille quand la caisse est vide', async () => {
-    const { service, majs } = monter({ echec: messageCaisseVide });
-
-    const n = await service.reconcileAll();
-
-    expect(n).toBe(0);
-    const maj = majs.find((m) => m.valeurs.budgetResetErreur);
-    expect(maj?.valeurs.budgetResetErreur).toBe(messageCaisseVide);
-    expect(maj?.valeurs.budgetResetTenteLe).toBeInstanceOf(Date);
-    // Le mois N'EST PAS marqué : la tentative doit se rejouer à l'heure suivante.
-    expect(majs.some((m) => m.valeurs.budgetResetMois)).toBe(false);
-  });
-
-  it('efface la raison dès qu’un réajustement réussit', async () => {
-    const { service, majs } = monter();
+describe('réajustement mensuel : proposition, pas exécution', () => {
+  it('crée une demande au lieu de déplacer les fonds', async () => {
+    const { service, sql, majs } = monter();
 
     const n = await service.reconcileAll();
 
     expect(n).toBe(1);
-    const maj = majs.find((m) => m.valeurs.budgetResetMois);
-    // Sinon un vieux message resterait affiché sur un portefeuille désormais sain.
-    expect(maj?.valeurs.budgetResetErreur).toBeNull();
+    expect(sql.some((q) => q.includes('INSERT INTO dbo.trx_demande_reajustement'))).toBe(true);
+    // Le mois N'EST PAS marqué : rien n'a bougé, le portefeuille reste candidat.
+    expect(majs.some((m) => m.valeurs.budgetResetMois)).toBe(false);
   });
 
-  it('tronque un message trop long plutôt que de faire échouer l’écriture', async () => {
-    const { service, majs } = monter({ echec: 'x'.repeat(900) });
+  it('ne produit rien tant que le jour du mois n’est pas venu', async () => {
+    // Paramètre à 31 : au 17 du mois, il est trop tôt.
+    const { service, sql } = monter({ jour: '31' });
+
+    const n = await service.reconcileAll();
+
+    expect(n).toBe(0);
+    expect(sql.some((q) => q.includes('INSERT INTO dbo.trx_demande_reajustement'))).toBe(false);
+  });
+
+  it('inscrit la raison sur le portefeuille si la demande ne peut pas être créée', async () => {
+    const { service, majs } = monter({ echecInsert: 'Violation de contrainte' });
 
     await service.reconcileAll();
 
+    // Sans cette trace, un portefeuille à 0 resterait muet — c'est le défaut
+    // qui a fait redémarrer le backend en vain le 17/08/2026.
     const maj = majs.find((m) => m.valeurs.budgetResetErreur);
-    expect(maj?.valeurs.budgetResetErreur).toHaveLength(500);
+    expect(maj?.valeurs.budgetResetErreur).toBe('Violation de contrainte');
+    expect(maj?.valeurs.budgetResetTenteLe).toBeInstanceOf(Date);
+  });
+
+  it('tronque une raison trop longue plutôt que de faire échouer l’écriture', async () => {
+    const { service, majs } = monter({ echecInsert: 'x'.repeat(900) });
+
+    await service.reconcileAll();
+
+    expect(majs.find((m) => m.valeurs.budgetResetErreur)?.valeurs.budgetResetErreur).toHaveLength(500);
   });
 });
