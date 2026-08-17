@@ -140,22 +140,44 @@ export class ReferentielService {
     await this.divisionRepo.save(d);
   }
 
-  listPartenaires(
+  /**
+   * Pose le NOM du pays sur des partenaires (migration 0071).
+   *
+   * SAP ne donne qu'un code ISO : un écran qui affiche « GH » n'affiche rien à
+   * quelqu'un qui cherche « Ghana ». La résolution est faite ici, côté serveur,
+   * comme pour le portefeuille et la caisse d'un sous-bon.
+   */
+  private async nommerPays<T extends Partenaire>(partenaires: T[]): Promise<T[]> {
+    const ids = [...new Set(partenaires.map((p) => p.paysId).filter(Boolean).map(String))];
+    if (ids.length === 0) return partenaires;
+
+    const ph = ids.map((_, i) => `@${i}`).join(', ');
+    const lignes: Array<{ id: string; libelle: string }> = await this.partenaireRepo.manager.query(
+      `SELECT id, libelle FROM dbo.ref_pays WHERE id IN (${ph})`,
+      ids,
+    );
+    const noms = new Map(lignes.map((l) => [String(l.id), l.libelle]));
+    for (const p of partenaires) p.paysLibelle = p.paysId ? (noms.get(String(p.paysId)) ?? null) : null;
+    return partenaires;
+  }
+
+  async listPartenaires(
     type?: TypePartenaire,
     opts: { search?: string; sortBy?: string; sortDir?: 'asc' | 'desc'; limit?: number } = {},
   ): Promise<Partenaire[]> {
     const qb = this.partenaireRepo.createQueryBuilder('x').where('x.estActif = :a', { a: true });
     if (type) qb.andWhere('x.typePartenaire = :t', { t: type });
-    return this.applyRefList(
+    const lignes = await this.applyRefList(
       qb, 'x', opts, ['raisonSociale', 'code', 'sigle', 'numeroClient', 'numeroFournisseur'],
       { code: 'code', raisonSociale: 'raisonSociale' }, 'raisonSociale',
     );
+    return this.nommerPays(lignes);
   }
 
   async findPartenaire(id: string): Promise<Partenaire> {
     const p = await this.partenaireRepo.findOne({ where: { id } });
     if (!p) throw new NotFoundException(`Partenaire ${id} introuvable`);
-    return p;
+    return (await this.nommerPays([p]))[0];
   }
 
   async createPartenaire(dto: CreatePartenaireDto, userId: string): Promise<Partenaire> {

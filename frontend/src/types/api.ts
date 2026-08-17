@@ -450,7 +450,12 @@ export interface Partenaire {
   adresse?: string | null;
   telephone?: string | null;
   email?: string | null;
+  /** Code ISO tel que SAP l'a donné (« CI »). */
   pays?: string | null;
+  /** Pays du référentiel (migration 0071). */
+  paysId?: string | null;
+  /** Nom du pays, résolu par le serveur — « CI » ne dit rien à un lecteur. */
+  paysLibelle?: string | null;
   ville?: string | null;
   estActif: boolean;
 }

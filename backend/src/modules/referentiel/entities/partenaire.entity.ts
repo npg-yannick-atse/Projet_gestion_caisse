@@ -46,9 +46,26 @@ export class Partenaire extends AuditableEntity {
   @Column({ type: 'nvarchar', length: 200, nullable: true })
   email?: string | null;
 
-  @ApiProperty({ required: false })
+  /**
+   * Code ISO tel que SAP l'a donné (LFA1-LAND1 / KNA1-LAND1).
+   *
+   * Conservé en plus de `paysId` : c'est la trace de la source. Si le
+   * référentiel ignore un jour un code, on saura encore ce que SAP disait.
+   */
+  @ApiProperty({ required: false, description: 'Code ISO du pays, tel que reçu de SAP' })
   @Column({ type: 'nvarchar', length: 100, nullable: true })
   pays?: string | null;
+
+  @ApiProperty({ required: false, description: 'Pays du référentiel (migration 0071)' })
+  @Column({ name: 'pays_id', type: 'bigint', nullable: true })
+  paysId?: string | null;
+
+  /**
+   * Nom du pays, résolu par le SERVEUR — un écran qui affiche « GH » n'affiche
+   * rien à quelqu'un qui cherche « Ghana ». Non persisté.
+   */
+  @ApiProperty({ required: false, description: 'Libellé du pays, résolu côté serveur' })
+  paysLibelle?: string | null;
 
   @ApiProperty({ required: false })
   @Column({ type: 'nvarchar', length: 100, nullable: true })

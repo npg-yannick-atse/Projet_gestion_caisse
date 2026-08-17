@@ -309,6 +309,7 @@ export function PartenairesPage() {
                 <th className="px-4 py-2.5 font-semibold">Type</th>
                 <th className="px-4 py-2.5 font-semibold">N° client SAP</th>
                 <th className="px-4 py-2.5 font-semibold">N° fournisseur SAP</th>
+                <th className="px-4 py-2.5 font-semibold">Pays</th>
                 <th className="px-4 py-2.5">
                   <span className="sr-only">Actions</span>
                 </th>
@@ -317,7 +318,7 @@ export function PartenairesPage() {
             <tbody>
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[#64748B]">
                     Aucun partenaire.
                   </td>
                 </tr>
@@ -333,6 +334,12 @@ export function PartenairesPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-[#64748B]">{p.numeroClient ?? '—'}</td>
                     <td className="px-4 py-3 font-mono text-[#64748B]">{p.numeroFournisseur ?? '—'}</td>
+                    {/* Le NOM, résolu par le serveur. Un code ISO seul (« GH »)
+                        n'apprend rien à qui cherche « Ghana » ; on le garde en
+                        infobulle pour qui rapproche les données de SAP. */}
+                    <td className="px-4 py-3" title={p.pays ?? undefined}>
+                      {p.paysLibelle ?? p.pays ?? '—'}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button

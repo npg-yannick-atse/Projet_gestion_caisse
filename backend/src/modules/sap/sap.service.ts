@@ -629,23 +629,43 @@ export class SapService {
   /**
    * Synchronise les fournisseurs depuis SAP (LFA1) : ajoute comme partenaires
    * (type FOURNISSEUR) ceux dont le n° fournisseur n'existe pas encore. Par lots.
+   *
+   * LOEVM EST LU, ET C'EST L'ESSENTIEL. Sur la base observée, LFA1 comptait
+   * 1767 lignes dont 883 marquées supprimées — la moitié. Sans ce filtre, ces
+   * fournisseurs morts arrivaient mêlés aux vivants dans la liste de création
+   * d'un bon, sans rien pour les distinguer.
    */
-  async synchroniserFournisseurs(): Promise<{ ajoutes: number; totalSap: number }> {
-    const vendors = await this.withClient(async (c) => {
+  async synchroniserFournisseurs(): Promise<{ ajoutes: number; totalSap: number; ignoresSupprimes: number }> {
+    const lus = await this.withClient(async (c) => {
       const r = await c.call('RFC_READ_TABLE', {
         QUERY_TABLE: 'LFA1',
         DELIMITER: '|',
         ROWCOUNT: 0,
-        FIELDS: [{ FIELDNAME: 'LIFNR' }, { FIELDNAME: 'NAME1' }, { FIELDNAME: 'ORT01' }, { FIELDNAME: 'LAND1' }],
+        FIELDS: [
+          { FIELDNAME: 'LIFNR' },
+          { FIELDNAME: 'NAME1' },
+          { FIELDNAME: 'ORT01' },
+          { FIELDNAME: 'LAND1' },
+          { FIELDNAME: 'LOEVM' },
+        ],
       });
       return ((r as any)?.DATA ?? [])
         .map((d: any) => {
-          const [lifnr, name1, ort01, land1] = String(d.WA).split('|');
+          const [lifnr, name1, ort01, land1, loevm] = String(d.WA).split('|');
           const num = (lifnr ?? '').trim().replace(/^0+/, '') || (lifnr ?? '').trim();
-          return { num, nom: (name1 ?? '').trim(), ville: (ort01 ?? '').trim(), pays: (land1 ?? '').trim() };
+          return {
+            num,
+            nom: (name1 ?? '').trim(),
+            ville: (ort01 ?? '').trim(),
+            pays: (land1 ?? '').trim(),
+            supprime: (loevm ?? '').trim().toUpperCase() === 'X',
+          };
         })
         .filter((v: any) => v.num);
     });
+
+    const vendors = lus.filter((v: any) => !v.supprime);
+    const ignoresSupprimes = lus.length - vendors.length;
 
     const existingNums = new Set(
       (await this.dataSource.query(`SELECT numero_fournisseur f FROM dbo.ref_partenaire WHERE numero_fournisseur IS NOT NULL`)).map(
@@ -656,8 +676,18 @@ export class SapService {
       (await this.dataSource.query(`SELECT code FROM dbo.ref_partenaire`)).map((r: any) => String(r.code)),
     );
 
+    // Le code ISO de SAP devient un lien vers le référentiel (migration 0071).
+    // Un code inconnu laisse `pays_id` nul SANS écarter le fournisseur : un
+    // fournisseur sans pays se corrige, un fournisseur absent bloque un bon.
+    const paysParCode = new Map<string, string>(
+      (await this.dataSource.query(`SELECT id, code FROM dbo.ref_pays WHERE deleted_at IS NULL`)).map((r: any) => [
+        String(r.code).toUpperCase(),
+        String(r.id),
+      ]),
+    );
+
     const esc = (s: string) => (s ?? '').replace(/'/g, "''");
-    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string }> = [];
+    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string; paysId: string | null }> = [];
     for (const v of vendors) {
       if (existingNums.has(v.num)) continue;
       let code = v.num;
@@ -665,7 +695,14 @@ export class SapService {
       if (existingCodes.has(code)) continue;
       existingCodes.add(code);
       existingNums.add(v.num);
-      toInsert.push({ code, nom: (v.nom || code).slice(0, 255), num: v.num, ville: v.ville.slice(0, 100), pays: v.pays.slice(0, 100) });
+      toInsert.push({
+        code,
+        nom: (v.nom || code).slice(0, 255),
+        num: v.num,
+        ville: v.ville.slice(0, 100),
+        pays: v.pays.slice(0, 100),
+        paysId: paysParCode.get(v.pays.toUpperCase()) ?? null,
+      });
     }
 
     let ajoutes = 0;
@@ -674,15 +711,15 @@ export class SapService {
       const values = chunk
         .map(
           (v) =>
-            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'FOURNISSEUR', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
+            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'FOURNISSEUR', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, ${v.paysId ?? 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
         )
         .join(', ');
       await this.dataSource.query(
-        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_fournisseur, ville, pays, est_actif, created_at, version) VALUES ${values}`,
+        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_fournisseur, ville, pays, pays_id, est_actif, created_at, version) VALUES ${values}`,
       );
       ajoutes += chunk.length;
     }
-    return { ajoutes, totalSap: vendors.length };
+    return { ajoutes, totalSap: vendors.length, ignoresSupprimes };
   }
 
   /**
@@ -692,25 +729,42 @@ export class SapService {
    * clients absents (repérés par leur numéro SAP), sans jamais écraser une fiche
    * existante — un partenaire peut avoir été enrichi à la main côté application.
    */
-  async synchroniserClients(): Promise<{ ajoutes: number; totalSap: number }> {
-    const clients = await this.withClient(async (c) => {
+  async synchroniserClients(): Promise<{ ajoutes: number; totalSap: number; ignoresSupprimes: number }> {
+    const lus = await this.withClient(async (c) => {
       const r = await c.call('RFC_READ_TABLE', {
         QUERY_TABLE: 'KNA1',
         DELIMITER: '|',
         ROWCOUNT: 0,
-        FIELDS: [{ FIELDNAME: 'KUNNR' }, { FIELDNAME: 'NAME1' }, { FIELDNAME: 'ORT01' }, { FIELDNAME: 'LAND1' }],
+        FIELDS: [
+          { FIELDNAME: 'KUNNR' },
+          { FIELDNAME: 'NAME1' },
+          { FIELDNAME: 'ORT01' },
+          { FIELDNAME: 'LAND1' },
+          { FIELDNAME: 'LOEVM' },
+        ],
       });
       return ((r as any)?.DATA ?? [])
         .map((d: any) => {
-          const [kunnr, name1, ort01, land1] = String(d.WA).split('|');
+          const [kunnr, name1, ort01, land1, loevm] = String(d.WA).split('|');
           // Les numéros SAP sont cadrés à gauche par des zéros : on les retire
           // pour rester lisible, tout en gardant la valeur brute si elle n'est
           // faite que de zéros.
           const num = (kunnr ?? '').trim().replace(/^0+/, '') || (kunnr ?? '').trim();
-          return { num, nom: (name1 ?? '').trim(), ville: (ort01 ?? '').trim(), pays: (land1 ?? '').trim() };
+          return {
+            num,
+            nom: (name1 ?? '').trim(),
+            ville: (ort01 ?? '').trim(),
+            pays: (land1 ?? '').trim(),
+            supprime: (loevm ?? '').trim().toUpperCase() === 'X',
+          };
         })
         .filter((v: any) => v.num);
     });
+
+    // Même oubli que pour les fournisseurs : 62 clients marqués supprimés dans
+    // SAP étaient déjà entrés en base avant ce filtre.
+    const clients = lus.filter((v: any) => !v.supprime);
+    const ignoresSupprimes = lus.length - clients.length;
 
     const existingNums = new Set(
       (
@@ -723,8 +777,16 @@ export class SapService {
       (await this.dataSource.query(`SELECT code FROM dbo.ref_partenaire`)).map((r: any) => String(r.code)),
     );
 
+    // Comme pour les fournisseurs : le code ISO devient un lien (migration 0071).
+    const paysParCode = new Map<string, string>(
+      (await this.dataSource.query(`SELECT id, code FROM dbo.ref_pays WHERE deleted_at IS NULL`)).map((r: any) => [
+        String(r.code).toUpperCase(),
+        String(r.id),
+      ]),
+    );
+
     const esc = (s: string) => (s ?? '').replace(/'/g, "''");
-    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string }> = [];
+    const toInsert: Array<{ code: string; nom: string; num: string; ville: string; pays: string; paysId: string | null }> = [];
     for (const v of clients) {
       if (existingNums.has(v.num)) continue;
       // Le code doit rester unique : en cas de collision avec un fournisseur
@@ -740,6 +802,7 @@ export class SapService {
         num: v.num,
         ville: v.ville.slice(0, 100),
         pays: v.pays.slice(0, 100),
+        paysId: paysParCode.get(v.pays.toUpperCase()) ?? null,
       });
     }
 
@@ -749,15 +812,15 @@ export class SapService {
       const values = chunk
         .map(
           (v) =>
-            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'CLIENT', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
+            `(NEWID(), N'${esc(v.code)}', N'${esc(v.nom)}', 'CLIENT', N'${esc(v.num)}', ${v.ville ? `N'${esc(v.ville)}'` : 'NULL'}, ${v.pays ? `N'${esc(v.pays)}'` : 'NULL'}, ${v.paysId ?? 'NULL'}, 1, SYSUTCDATETIME(), 1)`,
         )
         .join(', ');
       await this.dataSource.query(
-        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_client, ville, pays, est_actif, created_at, version) VALUES ${values}`,
+        `INSERT INTO dbo.ref_partenaire(uuid, code, raison_sociale, type_partenaire, numero_client, ville, pays, pays_id, est_actif, created_at, version) VALUES ${values}`,
       );
       ajoutes += chunk.length;
     }
-    return { ajoutes, totalSap: clients.length };
+    return { ajoutes, totalSap: clients.length, ignoresSupprimes };
   }
 
   private async getCostCenterMap(): Promise<Map<string, string>> {
