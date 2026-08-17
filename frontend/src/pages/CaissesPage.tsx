@@ -889,7 +889,30 @@ function WalletCard({
 function RecusSection({ caisseId }: { caisseId: string }) {
   const { data: recus, isLoading } = useRecusCaisse(caisseId, 50);
   if (isLoading) return null;
-  if (!recus || recus.length === 0) return null;
+
+  /*
+   * L'ABSENCE SE DIT. La section disparaissait entièrement quand aucun reçu
+   * n'existait : on ne pouvait pas distinguer « cette caisse n'a rien reçu » de
+   * « les reçus ne sont pas affichés ici », et la fonctionnalité restait
+   * introuvable tant qu'elle n'avait pas servi.
+   *
+   * Le texte dit aussi qu'aucun bouton ne manque : un reçu constate une entrée
+   * d'argent, il ne se saisit pas.
+   */
+  if (!recus || recus.length === 0) {
+    return (
+      <div className="border-t border-[rgba(15,76,129,0.07)] p-[18px]">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
+          Reçus de réception
+        </div>
+        <p className="rounded-[9px] bg-[#F8FAFC] px-3 py-2.5 text-[11px] text-[#64748B]">
+          Aucune entrée d'argent enregistrée sur cette caisse. Les reçus sont émis{' '}
+          <strong>automatiquement</strong> — encaissement, recharge, retour d'un bon, reprise de
+          budget — et deviennent imprimables ici. Il n'y a rien à saisir.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-[rgba(15,76,129,0.07)] p-[18px]">
