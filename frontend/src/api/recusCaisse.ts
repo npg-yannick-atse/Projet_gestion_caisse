@@ -34,84 +34,27 @@ export function useRecusCaisse(caisseId?: string, limit = 100) {
   });
 }
 
-const LIBELLE_ENTREE: Record<string, string> = {
-  REMBOURSEMENT_BON: "Retour d'un bon non dépensé",
-  ENCAISSEMENT: 'Encaissement',
-  AJUSTEMENT: 'Ajustement de budget',
-  RECHARGE: 'Recharge',
-  TRANSFERT: 'Transfert',
-  REMBOURSEMENT_CREDIT: 'Remboursement de crédit',
-  SALAIRE: 'Salaire',
-  CREDIT: 'Crédit',
-};
-
 /**
- * Ouvre le reçu dans une fenêtre d'impression.
+ * Ouvre le reçu au format PDF, fabriqué par le SERVEUR.
  *
- * Même facture que le bon : en-tête NPG, numéro, et DEUX signatures — celui qui
- * remet et celui qui reçoit. Un reçu qu'une seule partie signe ne prouve rien.
+ * Le fichier est identique quel que soit le poste, alors que l'impression
+ * navigateur dépendait des marges, en-têtes et polices de chaque machine. Une
+ * pièce comptable doit se retrouver à l'identique dans six mois.
+ *
+ * Passe par  et NON par un lien direct : la route est authentifiée, et une
+ * fenêtre ouverte sur l'URL ne porterait pas le jeton — on récupérerait une
+ * page 401 au lieu du reçu.
  */
-export function imprimerRecu(recu: RecuCaisse): boolean {
-  const montant = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2 }).format(
-    Number(recu.montant),
-  );
-  const nature = LIBELLE_ENTREE[recu.typeEntree ?? ''] ?? recu.typeEntree ?? 'Entrée en caisse';
-  const esc = (v?: string | null) =>
-    (v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+export async function ouvrirRecuPdf(recu: RecuCaisse): Promise<boolean> {
+  const { data } = await api.get<Blob>(`/recus-caisse/${recu.id}/pdf`, { responseType: 'blob' });
+  const url = URL.createObjectURL(data);
+  const fenetre = window.open(url, '_blank');
+  // Révocation différée : libérer l'URL trop tôt laisserait un onglet vide.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return !!fenetre;
+}
 
-  const html = `<!doctype html>
-<html lang="fr"><head><meta charset="utf-8" /><title>Reçu ${esc(recu.numero)}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0F172A;padding:32px;font-size:12px;}
-  .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0F4C81;padding-bottom:16px;margin-bottom:20px;}
-  .brand{font-weight:700;color:#0F4C81;font-size:18px;}
-  .sub{color:#64748B;font-size:11px;margin-top:2px;}
-  .meta{text-align:right;font-size:11px;color:#64748B;}
-  h1{font-size:22px;color:#0F4C81;margin-bottom:4px;}
-  .infos{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0;}
-  .info-label{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#64748B;margin-bottom:2px;}
-  .info-value{font-size:13px;font-weight:600;}
-  .montant{margin:24px 0;display:flex;justify-content:center;}
-  .montant-box{background:#0F4C81;color:#fff;padding:14px 28px;border-radius:8px;font-weight:700;font-size:20px;}
-  .sign{margin-top:56px;display:grid;grid-template-columns:1fr 1fr;gap:48px;}
-  .sign-box{border-top:1px solid #94A3B8;padding-top:6px;font-size:11px;color:#64748B;}
-  .footer{margin-top:32px;text-align:center;color:#94A3B8;font-size:10px;}
-  @media print { body { padding:20px; } }
-</style></head><body>
-  <div class="head">
-    <div>
-      <div class="brand">Fond de Caisse — NPG Gandour</div>
-      <div class="sub">Reçu de réception</div>
-    </div>
-    <div class="meta">Émis le ${new Date(recu.createdAt).toLocaleString('fr-FR')}</div>
-  </div>
-
-  <h1>Reçu n° ${esc(recu.numero)}</h1>
-  <div class="sub">${esc(nature)}</div>
-
-  <div class="montant"><div class="montant-box">${montant} ${esc(recu.deviseCode)}</div></div>
-
-  <div class="infos">
-    <div><div class="info-label">Caisse</div><div class="info-value">${esc(recu.caisseLibelle)}</div></div>
-    <div><div class="info-label">Reçu par</div><div class="info-value">${esc(recu.encaissePar) || '—'}</div></div>
-    <div><div class="info-label">Remis par</div><div class="info-value">${esc(recu.remisPar) || '—'}</div></div>
-    <div><div class="info-label">Motif</div><div class="info-value">${esc(recu.motif) || '—'}</div></div>
-  </div>
-
-  <div class="sign">
-    <div class="sign-box">Signature de la personne qui remet</div>
-    <div class="sign-box">Signature du caissier</div>
-  </div>
-
-  <div class="footer">Document généré par Fond de Caisse — NPG Gandour</div>
-  <script>window.addEventListener('load', () => { setTimeout(() => window.print(), 250); });</script>
-</body></html>`;
-
-  const w = window.open('', '_blank', 'width=900,height=1000');
-  if (!w) return false;
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  return true;
+/** Compatibilité : le nom d'avant, conservé pour les appelants existants. */
+export function imprimerRecu(recu: RecuCaisse): void {
+  void ouvrirRecuPdf(recu);
 }

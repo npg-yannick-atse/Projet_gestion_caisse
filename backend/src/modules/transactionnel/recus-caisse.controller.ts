@@ -1,9 +1,11 @@
-import { Controller, Get, NotFoundException, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard';
 import { RecuCaisse } from './entities/recu-caisse.entity';
+import { RecuPdfService } from './recu-pdf.service';
 
 /**
  * Consultation des reçus de réception.
@@ -19,6 +21,7 @@ export class RecusCaisseController {
   constructor(
     @InjectRepository(RecuCaisse)
     private readonly repo: Repository<RecuCaisse>,
+    private readonly pdf_: RecuPdfService,
   ) {}
 
   /** Résout les libellés en BASE — l'écran d'impression ne doit rien recomposer. */
@@ -56,6 +59,28 @@ export class RecusCaisseController {
     if (caisseId) qb.where('r.caisse_id = :c', { c: caisseId });
     qb.take(limit ? Math.min(Number(limit), 500) : 100);
     return this.nommer(await qb.getMany());
+  }
+
+  @Get(':id/pdf')
+  @ApiOperation({
+    summary: 'Le reçu au format PDF',
+    description:
+      "Fabriqué par le serveur : le fichier est identique quel que soit le poste, alors que " +
+      "l'impression navigateur dépend des marges, en-têtes et polices de chaque machine.",
+  })
+  async pdf(@Param('id') id: string, @Res() res: Response) {
+    const recu = await this.repo.findOne({ where: { id: id as any } });
+    if (!recu) throw new NotFoundException(`Reçu ${id} introuvable`);
+    const [avecLibelles] = await this.nommer([recu]);
+    const fichier = await this.pdf_.generer(avecLibelles);
+
+    // `inline` : le navigateur l'affiche au lieu de le télécharger d'office —
+    // on vérifie un reçu bien plus souvent qu'on ne l'archive, et le
+    // téléchargement reste à un clic.
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${avecLibelles.numero}.pdf"`);
+    res.setHeader('Content-Length', String(fichier.length));
+    res.end(fichier);
   }
 
   @Get(':id')

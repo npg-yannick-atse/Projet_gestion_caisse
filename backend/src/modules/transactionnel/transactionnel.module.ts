@@ -17,6 +17,7 @@ import { ReajustementsService } from './reajustements.service';
 import { ReajustementsController } from './reajustements.controller';
 import { RecuCaisse } from './entities/recu-caisse.entity';
 import { RecusCaisseController } from './recus-caisse.controller';
+import { RecuPdfService } from './recu-pdf.service';
 import { RemboursementBon } from './entities/remboursement-bon.entity';
 import { RemboursementsBonService } from './remboursements-bon.service';
 import { RemboursementsBonController } from './remboursements-bon.controller';
@@ -61,6 +62,7 @@ import { BonsManuelsController } from './bons-manuels.controller';
     BudgetMensuelService,
     RemboursementsBonService,
     ReajustementsService,
+    RecuPdfService,
     // Rappel quotidien des bons récurrents (@Cron 7h, fuseau Abidjan).
     BonRecurrenceJob,
   ],
