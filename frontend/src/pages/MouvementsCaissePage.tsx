@@ -131,6 +131,32 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
     if (d) setEncDeviseId(d);
   };
 
+  /**
+   * Caisses proposées à l'encaissement : celles qui déclarent la devise
+   * choisie, ou toutes tant qu'aucune ne l'est.
+   *
+   * Le filtre se fait ici et non en base : `openCaisses` n'est pas une liste de
+   * données mais le PÉRIMÈTRE de l'utilisateur, déjà chargé en un seul appel.
+   * Interroger le serveur à chaque changement de devise pour restreindre un
+   * menu déroulant coûterait un aller-retour sans rien garantir de plus.
+   */
+  const caissesEncaissement = useMemo(
+    () => (encDeviseId ? caissesPourDevise(encDeviseId) : openCaisses),
+    [encDeviseId, openCaisses, caissesPourDevise],
+  );
+
+  /**
+   * Une caisse déjà choisie qui ne colle plus à la devise est ABANDONNÉE.
+   * Sans cela, elle resterait sélectionnée tout en ayant disparu du menu :
+   * l'écran afficherait un choix vide et enverrait pourtant l'ancienne caisse.
+   */
+  useEffect(() => {
+    if (!encCaisseId || !encDeviseId) return;
+    if (!caissesEncaissement.some((c) => String(c.id) === String(encCaisseId))) {
+      setEncCaisseId('');
+    }
+  }, [encDeviseId, caissesEncaissement, encCaisseId]);
+
   /** Choisir une devise présélectionne la caisse s'il n'y a qu'une candidate. */
   const choisirDeviseEnc = (id: string) => {
     setEncDeviseId(id);
@@ -443,13 +469,23 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   onChange={(e) => choisirCaisseEnc(e.target.value)}
                 >
                   <option value="">— Choisir —</option>
-                  {openCaisses.map((c) => (
+                  {/* Une devise choisie RESTREINT les caisses proposées : offrir
+                      une caisse en euros pour un encaissement en francs, c'est
+                      offrir une erreur. La liste reste entière tant qu'aucune
+                      devise n'est choisie, l'ordre de saisie étant libre. */}
+                  {caissesEncaissement.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.code} — {c.libelle}
                     </option>
                   ))}
                 </select>
                 <AucuneCaisseMessage caisses={caisses} openCaisses={openCaisses} estAdmin={perimeter?.isAdmin} />
+                {encDeviseId && caissesEncaissement.length === 0 && (
+                  <p className="text-[11px] text-[#B45309]">
+                    Aucune caisse ouverte ne déclare des {codeOf(encDeviseId)}. Ouvrez-en une, ou
+                    changez de devise.
+                  </p>
+                )}
                 {/* Plusieurs caisses déclarent cette devise : on ne peut pas trancher
                     à la place du caissier, l'argent est dans un coffre précis. */}
                 {!encCaisseId && encDeviseId && caissesPourDevise(encDeviseId).length > 1 && (
