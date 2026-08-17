@@ -66,6 +66,14 @@ function WalletCard({ pf, deviseCode, color }: { pf: Portefeuille; deviseCode: s
         <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.7px] text-white/60">{pf.libelle}</div>
         <div className="font-display text-[22px] font-bold leading-none">{data ? formatMontant(data.solde) : '…'}</div>
         <div className="mt-[3px] text-[11px] text-white/50">{deviseCode} • Solde disponible</div>
+        {/* Un solde à 0 face à un budget mensuel non nul a une raison : elle
+            s'affiche ici plutôt que de rester dans le journal du serveur. */}
+        {pf.budgetResetErreur && (
+          <div className="mt-2 rounded-[8px] bg-[#7F1D1D]/60 px-2 py-1.5 text-[10px] leading-snug">
+            <div className="font-semibold">Alimentation mensuelle en échec</div>
+            <div className="mt-0.5 text-white/85">{pf.budgetResetErreur}</div>
+          </div>
+        )}
       </div>
     </div>
   );

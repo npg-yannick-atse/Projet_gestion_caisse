@@ -436,6 +436,9 @@ export interface Portefeuille {
   /** Plafond budgétaire mensuel (réajusté chaque mois, sans report). Null = pas de plafond mensuel. */
   budgetMensuel?: string | null;
   budgetResetMois?: string | null;
+  /** Pourquoi le dernier réajustement mensuel a échoué (null = tout va bien). */
+  budgetResetErreur?: string | null;
+  budgetResetTenteLe?: string | null;
   estActif: boolean;
 }
 

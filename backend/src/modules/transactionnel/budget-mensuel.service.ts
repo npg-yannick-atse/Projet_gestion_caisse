@@ -67,7 +67,22 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
         await this.resetOne(pf, mois, systemUserId);
         n++;
       } catch (e) {
-        this.logger.warn(`réajustement du portefeuille ${pf.id} échoué : ${(e as Error).message}`);
+        const raison = (e as Error).message;
+        this.logger.warn(`réajustement du portefeuille ${pf.id} échoué : ${raison}`);
+        /*
+         * L'ÉCHEC S'ÉCRIT. Il ne partait que dans ce journal : l'écran montrait
+         * un portefeuille à 0 en face d'un budget d'un milliard, sans un mot,
+         * et l'on redémarrait le backend en croyant débloquer la situation.
+         *
+         * Écrit HORS de la transaction de `resetOne` — celle-ci a été annulée,
+         * y consigner l'erreur l'aurait effacée avec le reste.
+         */
+        await repo
+          .update(
+            { id: pf.id as any },
+            { budgetResetErreur: raison.slice(0, 500), budgetResetTenteLe: new Date() },
+          )
+          .catch(() => undefined);
       }
     }
     if (n > 0) this.logger.log(`Budget mensuel ${mois} : ${n} portefeuille(s) réajusté(s).`);
@@ -109,7 +124,14 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
           manager,
         );
       }
-      await manager.getRepository(Portefeuille).update({ id: pf.id as any }, { budgetResetMois: mois });
+      // La réussite efface la raison précédente : ce que porte le portefeuille
+      // doit toujours être la situation ACTUELLE, jamais un vieux message.
+      await manager
+        .getRepository(Portefeuille)
+        .update(
+          { id: pf.id as any },
+          { budgetResetMois: mois, budgetResetErreur: null, budgetResetTenteLe: new Date() },
+        );
     });
   }
 

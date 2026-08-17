@@ -759,6 +759,21 @@ function WalletCard({
               Aucun gestionnaire
             </div>
           )}
+
+          {/* Réajustement manqué : la raison s'affiche ICI, sur la carte, à côté
+              du solde qu'elle explique. Elle ne vivait que dans le journal du
+              serveur — on voyait un portefeuille à 0 face à un budget d'un
+              milliard, sans un mot, et l'on redémarrait le backend en vain. */}
+          {pf.budgetResetErreur && (
+            <div className="mt-2 rounded-[8px] bg-[#7F1D1D]/60 px-2 py-1.5 text-[10px] leading-snug text-white">
+              <div className="flex items-center gap-1 font-semibold">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                Alimentation mensuelle en échec
+              </div>
+              <div className="mt-0.5 text-white/85">{pf.budgetResetErreur}</div>
+              <div className="mt-0.5 text-white/60">Nouvelle tentative automatique dans l'heure.</div>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 gap-1">
           {fp.canManagePf && (
