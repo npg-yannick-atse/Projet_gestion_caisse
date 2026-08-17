@@ -32,14 +32,19 @@ function ParamRow({ cle, libelle, valeur }: { cle: string; libelle?: string | nu
         <div className="text-sm text-[#0F172A]">{libelle ?? cle}</div>
         <div className="font-mono text-[10px] text-[#94A3B8]">{cle}</div>
       </td>
-      <td className="px-4 py-3">
+      {/* La valeur occupe la moitié de la largeur : `w-40` coupait tout ce qui
+          dépassait 160 pixels — la liste des rôles à prévenir et l'URL de l'API
+          des taux étaient illisibles sans cliquer dedans et faire défiler.
+          `title` donne la valeur entière au survol, pour les cas extrêmes. */}
+      <td className="w-1/2 px-4 py-3">
         <input
           value={val}
+          title={val}
           onChange={(e) => {
             setVal(e.target.value);
             setSaved(false);
           }}
-          className="h-9 w-40 rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#1A6DB5]"
+          className="h-9 w-full min-w-[240px] rounded-[9px] border border-[rgba(15,76,129,0.1)] bg-white px-3 font-mono text-sm text-[#0F172A] outline-none focus:border-[#1A6DB5]"
         />
       </td>
       <td className="px-4 py-3 text-right">
