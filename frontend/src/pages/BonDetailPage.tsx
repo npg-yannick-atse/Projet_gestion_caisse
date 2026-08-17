@@ -554,7 +554,11 @@ export function BonDetailPage() {
               <CardTitle className="text-base">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {bon.statut === 'CREE' && isValidateur && (isAdminRole || bon.demandeurId !== currentUser?.id) && (
+              {/* Plus de condition sur le demandeur : un validateur valide ses
+                  propres bons depuis le 17/08/2026. L'écran écartait le bloc
+                  sans rien dire — on cliquait « Valider » et la page restait
+                  muette. Le serveur portait la même règle, elle a été levée. */}
+              {bon.statut === 'CREE' && isValidateur && (
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <Label htmlFor="porteur">

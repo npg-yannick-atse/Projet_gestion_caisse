@@ -1444,10 +1444,21 @@ export class BonsService {
 
     const isAdmin = await this.authz.isAdmin(validateurId);
 
-    // 2) On ne valide pas son propre bon (sauf admin).
-    if (!isAdmin && String(bon.demandeurId) === String(validateurId)) {
-      throw new ForbiddenException('Vous ne pouvez pas valider votre propre bon.');
-    }
+    /*
+     * 2) VALIDER SON PROPRE BON EST AUTORISÉ — décision métier du 17/08/2026.
+     *
+     * La règle inverse existait ici : celui qui demande ne doit pas approuver,
+     * c'est la séparation des tâches habituelle sur une caisse. Elle a été
+     * levée volontairement : NPG ne compte que deux validateurs, et un bon
+     * restait bloqué dès que son demandeur était le seul disponible dans sa
+     * direction. Porter le rôle de validateur suffit désormais.
+     *
+     * CE QUI SUBSISTE : la permission BON_VALIDER, et la règle de direction
+     * ci-dessous. Et la trace — `trx_validation_bon` garde le validateur, donc
+     * un bon approuvé par son propre demandeur reste identifiable après coup
+     * (validateur_id = demandeur_id).
+     */
+
 
     // 3) Même direction que le demandeur (cf. Dossier : « signataires de la même
     //    direction »). Filet de sécurité : ignoré si une direction est inconnue.
