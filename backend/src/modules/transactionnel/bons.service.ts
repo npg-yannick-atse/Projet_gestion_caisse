@@ -525,13 +525,23 @@ export class BonsService {
     const ptf = await this.dataSource
       .getRepository(Portefeuille)
       .findOne({ where: { id: portefeuilleId as any } });
-    const solde = Number(
+    /*
+     * `soldeInitial` FAIT PARTIE DU SOLDE. Il manquait ici, et le portefeuille
+     * paraissait vide tant qu'aucun mouvement ne l'avait alimenté : un
+     * portefeuille créé avec 1 000 000 refusait le moindre décaissement.
+     *
+     * L'affichage (getSoldeDetail) et la recharge l'additionnaient déjà ; seules
+     * les deux gardes de décaissement l'ignoraient. L'écran annonçait donc un
+     * solde que le serveur ne reconnaissait pas.
+     */
+    const ledger = Number(
       await this.ledger.calculateBalance(
         portefeuilleId,
         'PORTEFEUILLE',
         ptf ? String(ptf.deviseId) : undefined,
       ),
     );
+    const solde = Number(ptf?.soldeInitial || 0) + ledger;
     if (solde - Number(montant) >= 0) return;
     const bon = await this.findOne(bonId);
     if (bon.statutExtension === 'APPROUVEE' && bon.extensionMode === 'DECOUVERT') return;
@@ -544,7 +554,8 @@ export class BonsService {
             ? "l'extension a été approuvée en mode recharge ; rechargez d'abord le portefeuille"
             : "aucune demande d'extension n'a été formulée";
     throw new BadRequestException(
-      `Solde du portefeuille insuffisant pour ce décaissement : ${raison}.`,
+      `Solde du portefeuille insuffisant pour ce décaissement : ${raison}. ` +
+        `Disponible : ${solde.toFixed(4)}, demandé : ${Number(montant).toFixed(4)}.`,
     );
   }
 

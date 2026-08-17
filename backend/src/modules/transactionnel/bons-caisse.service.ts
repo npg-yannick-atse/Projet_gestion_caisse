@@ -61,15 +61,20 @@ export class BonsCaisseService {
     const ptf = await this.dataSource
       .getRepository(Portefeuille)
       .findOne({ where: { id: portefeuilleId as any } });
-    const solde = Number(
+    // `soldeInitial` fait partie du solde — même oubli qu'au décaissement du
+    // bon, corrigé en même temps. Un portefeuille créé avec un solde initial et
+    // aucun mouvement paraissait vide et refusait tout.
+    const ledger = Number(
       await this.ledger.calculateBalance(portefeuilleId, 'PORTEFEUILLE', ptf ? String(ptf.deviseId) : undefined),
     );
+    const solde = Number(ptf?.soldeInitial || 0) + ledger;
     if (solde - Number(montant) >= 0) return;
     const bon = await this.bonRepo.findOne({ where: { id: bonId } });
     if (bon?.statutExtension === 'APPROUVEE' && bon.extensionMode === 'DECOUVERT') return;
     throw new BadRequestException(
       'Solde du portefeuille insuffisant pour ce décaissement : une extension de budget ' +
-        '(approuvée en mode découvert) ou une recharge préalable est nécessaire.',
+        '(approuvée en mode découvert) ou une recharge préalable est nécessaire. ' +
+        `Disponible : ${solde.toFixed(4)}, demandé : ${Number(montant).toFixed(4)}.`,
     );
   }
 
