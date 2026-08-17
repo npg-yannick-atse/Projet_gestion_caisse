@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   AlertTriangle,
+  Check,
   ChevronDown,
   ChevronRight,
   Download,
@@ -17,6 +18,7 @@ import {
   useDeviseReference,
   useHistoriqueTaux,
   useCreateTaux,
+  useApercuImportTaux,
   useImporterTaux,
   useDeleteTaux,
 } from '@/api/tauxChange';
@@ -191,18 +193,44 @@ function TauxForm({ onDone }: { onDone: () => void }) {
 
 /* -------------------------------------------------------------------------- */
 
-function RapportImport({ rapport, onClose }: { rapport: RapportImportTaux; onClose: () => void }) {
+/**
+ * Rapport d'import — d'abord un APERÇU, ensuite le résultat.
+ *
+ * Tant que `simulation` est vrai, rien n'a été écrit : le tableau dit ce qui
+ * changerait, et c'est le bouton de confirmation qui applique. Un taux gouverne
+ * la conversion de tous les montants qui s'y appuient ensuite ; le regarder
+ * avant de l'accepter est le seul moyen d'arrêter une cotation aberrante.
+ */
+function RapportImport({
+  rapport,
+  onClose,
+  onConfirmer,
+  confirmation,
+}: {
+  rapport: RapportImportTaux;
+  onClose: () => void;
+  onConfirmer: () => void;
+  confirmation: boolean;
+}) {
+  const aAppliquer = rapport.lignes.filter((l) => l.statut === 'IMPORTE').length;
+
   return (
     <Panel>
       <PanelHeader
-        title="Import des taux"
-        badge={`${rapport.importes} mis à jour`}
+        title={rapport.simulation ? "Aperçu de l'import" : 'Import des taux'}
+        badge={rapport.simulation ? `${aAppliquer} à appliquer` : `${rapport.importes} mis à jour`}
       >
         <button type="button" onClick={onClose} className="ml-auto text-[#64748B] hover:text-[#0F172A]">
           <X className="h-4 w-4" />
         </button>
       </PanelHeader>
       <div className="space-y-2 p-[18px]">
+        {rapport.simulation && (
+          <p className="rounded-[9px] bg-[#FFFBEB] px-3 py-2 text-[11px] text-[#92400E]">
+            <strong>Rien n'est encore enregistré.</strong> Voici ce qui changerait si vous
+            confirmez.
+          </p>
+        )}
         {rapport.fraicheurApi && (
           <p className="text-[11px] text-[#64748B]">
             Cotation annoncée par la source : <strong>{rapport.fraicheurApi}</strong>
@@ -229,6 +257,32 @@ function RapportImport({ rapport, onClose }: { rapport: RapportImportTaux; onClo
             ))}
           </tbody>
         </table>
+
+        {/* La confirmation ne s'affiche que s'il y a quelque chose à appliquer :
+            un aperçu tout en « inchangé » n'a rien à confirmer. */}
+        {rapport.simulation && (
+          <div className="flex items-center justify-end gap-2 border-t border-[rgba(15,76,129,0.07)] pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-[11px] font-medium text-[#475569] transition hover:bg-[#F1F5F9]"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmer}
+              disabled={aAppliquer === 0 || confirmation}
+              title={aAppliquer === 0 ? 'Aucun taux à appliquer' : undefined}
+              className="flex items-center gap-1.5 rounded-[9px] bg-[#047857] px-3.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-[#065F46] disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" />
+              {aAppliquer === 0
+                ? 'Rien à appliquer'
+                : `Confirmer — ${aAppliquer} taux`}
+            </button>
+          </div>
+        )}
       </div>
     </Panel>
   );
@@ -279,6 +333,7 @@ export function TauxChangePage() {
 
   const { data: taux, isLoading, isError } = useTauxCourants();
   const { data: reference } = useDeviseReference();
+  const apercu = useApercuImportTaux();
   const importer = useImporterTaux();
   const remove = useDeleteTaux();
 
@@ -286,9 +341,23 @@ export function TauxChangePage() {
   const [rapport, setRapport] = useState<RapportImportTaux | null>(null);
   const [deplie, setDeplie] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TauxCourant | null>(null);
+  const [confirmImport, setConfirmImport] = useState(false);
 
-  const lancerImport = () =>
-    importer.mutate(undefined, { onSuccess: (r) => setRapport(r) });
+  // Le bouton ne fait plus qu'INTERROGER la source. L'écriture attend la
+  // confirmation posée sur le rapport : on découvrait autrefois la cotation une
+  // fois enregistrée, sans autre recours que de ressaisir l'ancien taux.
+  const lancerApercu = () => {
+    setRapport(null);
+    apercu.mutate(undefined, { onSuccess: (r) => setRapport(r) });
+  };
+
+  const appliquerImport = () =>
+    importer.mutate(undefined, {
+      onSuccess: (r) => {
+        setRapport(r);
+        setConfirmImport(false);
+      },
+    });
 
   return (
     <div className="flex flex-col gap-4">
@@ -303,7 +372,14 @@ export function TauxChangePage() {
         </div>
       )}
 
-      {rapport && <RapportImport rapport={rapport} onClose={() => setRapport(null)} />}
+      {rapport && (
+        <RapportImport
+          rapport={rapport}
+          onClose={() => setRapport(null)}
+          onConfirmer={() => setConfirmImport(true)}
+          confirmation={importer.isPending}
+        />
+      )}
 
       <Panel>
         <PanelHeader title="Taux de change" badge={`${taux?.length ?? 0}`}>
@@ -316,12 +392,16 @@ export function TauxChangePage() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
-                onClick={lancerImport}
-                disabled={importer.isPending}
+                onClick={lancerApercu}
+                disabled={apercu.isPending || importer.isPending}
                 className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.15)] px-3.5 py-1.5 text-[11px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF] disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
-                {importer.isPending ? 'Import en cours…' : 'Importer maintenant'}
+                {apercu.isPending
+                  ? 'Consultation de la source…'
+                  : importer.isPending
+                    ? 'Enregistrement…'
+                    : 'Importer maintenant'}
               </button>
               <button
                 type="button"
@@ -334,6 +414,11 @@ export function TauxChangePage() {
           )}
         </PanelHeader>
 
+        {apercu.isError && (
+          <div className="border-b border-[rgba(15,76,129,0.07)] bg-[#FEF2F2] px-[18px] py-2.5 text-xs text-[#B91C1C]">
+            {apiErrorMessage(apercu.error, 'Consultation de la source impossible')}
+          </div>
+        )}
         {importer.isError && (
           <div className="border-b border-[rgba(15,76,129,0.07)] bg-[#FEF2F2] px-[18px] py-2.5 text-xs text-[#B91C1C]">
             {apiErrorMessage(importer.error, 'Import impossible')}
@@ -475,6 +560,44 @@ export function TauxChangePage() {
         onCancel={() => {
           setPendingDelete(null);
           remove.reset();
+        }}
+      />
+
+      {/* Dernier arrêt avant écriture. La modale rappelle les deux devises et
+          leur variation : c'est le chiffre qui doit décider, pas le geste. */}
+      <ConfirmDialog
+        open={confirmImport}
+        variant="success"
+        icon={Check}
+        title="Enregistrer ces taux ?"
+        description={
+          <>
+            Les taux affichés deviennent ceux en vigueur. Le taux précédent n'est pas effacé : il
+            est clôturé, et reste disponible pour reconvertir une opération ancienne.
+            <br />
+            <br />
+            {rapport?.lignes
+              .filter((l) => l.statut === 'IMPORTE')
+              .map((l) => (
+                <span key={l.devise} className="block tabular-nums">
+                  <strong>
+                    {l.devise} → {rapport.deviseReference}
+                  </strong>{' '}
+                  {l.taux}
+                  {l.variation && l.variation !== '0.00'
+                    ? ` (${Number(l.variation) > 0 ? '+' : ''}${l.variation} %)`
+                    : ''}
+                </span>
+              ))}
+          </>
+        }
+        confirmLabel="Enregistrer"
+        busy={importer.isPending}
+        error={importer.isError ? apiErrorMessage(importer.error, 'Import impossible') : undefined}
+        onConfirm={appliquerImport}
+        onCancel={() => {
+          setConfirmImport(false);
+          importer.reset();
         }}
       />
     </div>

@@ -416,6 +416,8 @@ export interface RapportImportTaux {
   lignes: LigneImportTaux[];
   importes: number;
   echecs: number;
+  /** Vrai quand rien n'a été écrit : le rapport dit ce qui arriverait. */
+  simulation: boolean;
 }
 
 export type ProprietaireType = 'USER' | 'DIRECTION';

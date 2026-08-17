@@ -32,6 +32,14 @@ export interface RapportImport {
   lignes: LigneImport[];
   importes: number;
   echecs: number;
+  /**
+   * Vrai quand RIEN n'a été écrit : le rapport décrit ce qui arriverait.
+   *
+   * L'écran s'en sert pour choisir entre « voici ce qui a changé » et « voici
+   * ce qui changerait » — deux phrases qu'il ne faut pas confondre quand il
+   * s'agit de taux de change.
+   */
+  simulation: boolean;
 }
 
 /**
@@ -73,9 +81,11 @@ export class TauxApiService {
    * Import déclenché par un humain depuis l'écran des taux : mêmes droits que la
    * saisie manuelle, puisque le résultat est le même — un taux qui change.
    */
-  async importerManuel(userId: string): Promise<RapportImport> {
+  async importerManuel(userId: string, simulation = false): Promise<RapportImport> {
+    // L'aperçu exige le MÊME droit que l'import : il interroge la source
+    // extérieure et dévoile les cotations. Seule l'écriture diffère.
     await this.authz.assertPermission(userId, 'TAUX_GERER', 'importer les taux de change');
-    return this.executerImport(userId);
+    return this.executerImport(userId, simulation);
   }
 
   /**
@@ -86,7 +96,7 @@ export class TauxApiService {
    * dit déjà d'où vient la ligne. Toute voie ouverte à un humain doit passer par
    * `importerManuel`.
    */
-  async executerImport(userId: string | null): Promise<RapportImport> {
+  async executerImport(userId: string | null, simulation = false): Promise<RapportImport> {
     const reference = await this.tauxChange.deviseReference();
     const codes = ((await this.parametres.get(K_DEVISES)) ?? 'USD')
       .split(',')
@@ -99,6 +109,7 @@ export class TauxApiService {
       lignes: [],
       importes: 0,
       echecs: 0,
+      simulation,
     };
 
     if (codes.length === 0) {
@@ -110,7 +121,7 @@ export class TauxApiService {
 
     for (const code of codes) {
       try {
-        rapport.lignes.push(await this.importerUne(code, reference, userId, rapport));
+        rapport.lignes.push(await this.importerUne(code, reference, userId, rapport, simulation));
       } catch (e: any) {
         this.logger.warn(`Import ${code} → ${reference.code} : ${e?.message ?? e}`);
         rapport.lignes.push({
@@ -131,6 +142,7 @@ export class TauxApiService {
     reference: Devise,
     userId: string | null,
     rapport: RapportImport,
+    simulation: boolean,
   ): Promise<LigneImport> {
     const devise = await this.deviseRepo.findOne({ where: { code } });
     if (!devise) {
@@ -174,16 +186,20 @@ export class TauxApiService {
 
     const variation = ancien !== null && ancien !== 0 ? ((nouveau - ancien) / ancien) * 100 : null;
 
-    await this.tauxChange.ecrirePeriode(
-      {
-        deviseSourceId: devise.id,
-        deviseCibleId: reference.id,
-        taux: nouveau.toFixed(8),
-        source: 'API',
-        motif: `Import automatique — cotation du ${cotation.miseAJour ?? 'jour'}`,
-      },
-      userId,
-    );
+    // SEUL point d'écriture de l'import. En simulation on s'arrête ici : la
+    // ligne renvoyée décrit ce qui arriverait, et la base n'a pas bougé.
+    if (!simulation) {
+      await this.tauxChange.ecrirePeriode(
+        {
+          deviseSourceId: devise.id,
+          deviseCibleId: reference.id,
+          taux: nouveau.toFixed(8),
+          source: 'API',
+          motif: `Import automatique — cotation du ${cotation.miseAJour ?? 'jour'}`,
+        },
+        userId,
+      );
+    }
 
     return {
       devise: code,

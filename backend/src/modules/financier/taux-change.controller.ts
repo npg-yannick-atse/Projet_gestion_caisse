@@ -66,6 +66,19 @@ export class TauxChangeController {
     return this.service.enregistrer(dto, user.sub);
   }
 
+  @Post('importer/apercu')
+  @ApiOperation({
+    summary: "Voir ce que l'import changerait, SANS rien écrire",
+    description:
+      "Interroge l'API de cotation et renvoie le même rapport que l'import, avec " +
+      '`simulation: true`. Aucune période de taux n\'est créée. Un taux gouverne des ' +
+      'conversions de montants : mieux vaut le regarder avant de l\'accepter. ' +
+      'Exige la permission TAUX_GERER, comme l\'import — la cotation est dévoilée.',
+  })
+  apercuImport(@CurrentUser() user: JwtPayload) {
+    return this.tauxApi.importerManuel(user.sub, true);
+  }
+
   @Post('importer')
   @ApiOperation({
     summary: "Rapatrier les taux depuis l'API de cotation, maintenant",

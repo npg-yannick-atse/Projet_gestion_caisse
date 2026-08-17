@@ -49,6 +49,12 @@ export async function importerTaux(): Promise<RapportImportTaux> {
   return data;
 }
 
+/** Interroge la source SANS rien écrire : le rapport dit ce qui arriverait. */
+export async function apercuImportTaux(): Promise<RapportImportTaux> {
+  const { data } = await api.post<RapportImportTaux>('/taux-change/importer/apercu');
+  return data;
+}
+
 export async function deleteTaux(id: string): Promise<void> {
   await api.delete(`/taux-change/${id}`);
 }
@@ -89,6 +95,14 @@ export function useCreateTaux() {
 export function useImporterTaux() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: importerTaux, onSuccess: () => invalidateTaux(qc) });
+}
+
+/**
+ * Aperçu : n'invalide RIEN. Aucune période n'a été écrite, et rafraîchir la
+ * liste des taux laisserait croire le contraire.
+ */
+export function useApercuImportTaux() {
+  return useMutation({ mutationFn: apercuImportTaux });
 }
 
 export function useDeleteTaux() {
