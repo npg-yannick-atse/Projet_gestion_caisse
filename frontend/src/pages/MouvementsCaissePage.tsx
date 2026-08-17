@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Calendar, CalendarRange, Landmark, Plus, Repeat, TrendingUp, Wallet, X } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
+import { RetourBonCaisseModal } from '@/components/RetourBonCaisseModal';
 import { listPartenaires } from '@/api/referentiel';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
@@ -49,6 +50,7 @@ export type MouvementMode = 'ENCAISSEMENT' | 'RECHARGE';
  */
 export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initialMode?: MouvementMode }) {
   const [mode, setMode] = useState<MouvementMode>(initialMode);
+  const [retourOuvert, setRetourOuvert] = useState(false);
 
   // Données partagées.
   const { data: perimeter } = useMyBonPerimeter();
@@ -389,8 +391,27 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
           >
             <Plus className="h-4 w-4" /> {isEnc ? 'Nouvel encaissement' : 'Nouvelle recharge'}
           </button>
+          {/* Le retour d'un bon EST une entrée d'argent, et le caissier qui la
+              reçoit est ici. Ce n'est pas pour autant un encaissement libre :
+              il se rattache à un sous-bon, d'où un geste à part plutôt qu'un
+              troisième onglet — le basculeur ne connaît que deux états, et lui
+              en ajouter un troisième dérèglerait toute la page. */}
+          {isEnc && (
+            <button
+              type="button"
+              onClick={() => setRetourOuvert(true)}
+              title="Enregistrer l'argent non dépensé d'un bon déjà décaissé"
+              className="flex items-center gap-1.5 rounded-[9px] border border-[rgba(15,76,129,0.2)] px-3.5 py-2 text-xs font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+            >
+              <ArrowDownToLine className="h-4 w-4" /> Retour d'un bon
+            </button>
+          )}
         </div>
       </div>
+
+      {retourOuvert && (
+        <RetourBonCaisseModal caisseId={encCaisseId || undefined} onClose={() => setRetourOuvert(false)} />
+      )}
 
       {/* Statistiques du mode courant */}
       <div className="grid gap-3 sm:grid-cols-3">

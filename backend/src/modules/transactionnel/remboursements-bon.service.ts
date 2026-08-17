@@ -48,6 +48,52 @@ export class RemboursementsBonService {
   }
 
   /**
+   * Sous-bons sur lesquels il RESTE quelque chose à rendre.
+   *
+   * Sert à l'écran Mouvements : le caissier qui reçoit l'argent y est déjà, et
+   * n'a pas à retrouver le bon puis le sous-bon à la main. Le calcul est fait
+   * EN BASE — décaissé moins déjà rendu — pour ne renvoyer que ce qui est
+   * réellement remboursable, plutôt que de faire trier l'écran.
+   */
+  async listerRemboursables(caisseId?: string): Promise<
+    Array<{
+      sousBonId: string;
+      bonId: string;
+      numero: string;
+      libelle: string;
+      caisseId: string;
+      deviseId: string;
+      deviseCode: string;
+      decaisse: string;
+      rendu: string;
+      reste: string;
+    }>
+  > {
+    return this.repo.query(
+      `SELECT sb.id AS sousBonId, b.id AS bonId, b.numero, sb.libelle,
+              sb.caisse_id AS caisseId, sb.devise_id AS deviseId, dv.code AS deviseCode,
+              ISNULL(sortie.total, 0) AS decaisse,
+              ISNULL(retour.total, 0) AS rendu,
+              ISNULL(sortie.total, 0) - ISNULL(retour.total, 0) AS reste
+         FROM dbo.trx_sous_bon sb
+         JOIN dbo.trx_bon b     ON b.id = sb.bon_id
+         JOIN dbo.fin_devise dv ON dv.id = sb.devise_id
+         OUTER APPLY (SELECT SUM(d.montant) AS total
+                        FROM dbo.trx_decaissement d
+                        JOIN dbo.trx_bon_caisse bc ON bc.id = d.bon_caisse_id
+                       WHERE bc.sous_bon_source_id = sb.id) sortie
+         OUTER APPLY (SELECT SUM(r.montant) AS total
+                        FROM dbo.trx_remboursement_bon r
+                       WHERE r.sous_bon_id = sb.id) retour
+        WHERE sb.statut = 'DECAISSE'
+          AND ISNULL(sortie.total, 0) - ISNULL(retour.total, 0) > 0
+          ${caisseId ? 'AND sb.caisse_id = @0' : ''}
+        ORDER BY b.numero DESC, sb.id`,
+      caisseId ? [caisseId] : [],
+    );
+  }
+
+  /**
    * Enregistre un remboursement.
    *
    * Trois refus, dans cet ordre : un sous-bon non décaissé (rien n'est sorti,

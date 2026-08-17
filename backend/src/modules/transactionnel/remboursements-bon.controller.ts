@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -43,6 +43,17 @@ export class RemboursementsBonController {
   })
   creer(@Body() dto: CreateRemboursementBonDto, @CurrentUser() user: JwtPayload) {
     return this.service.creer(dto, user.sub);
+  }
+
+  @Get('remboursables')
+  @ApiOperation({
+    summary: "Sous-bons sur lesquels il reste quelque chose à rendre",
+    description:
+      'Décaissé moins déjà rendu, calculé en base. Filtre facultatif par caisse — le caissier ' +
+      'ne voit alors que ce qui peut rentrer dans la sienne.',
+  })
+  remboursables(@Query('caisseId') caisseId?: string) {
+    return this.service.listerRemboursables(caisseId);
   }
 
   @Get('bon/:bonId')
