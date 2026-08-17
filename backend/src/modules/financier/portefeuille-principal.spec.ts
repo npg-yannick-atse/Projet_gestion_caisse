@@ -98,3 +98,44 @@ describe('portefeuille principal', () => {
     expect(existant.estPrincipal).toBe(false);
   });
 });
+
+describe('portefeuille principal : ni plafond ni solde initial', () => {
+  it('naît à zéro et sans budget mensuel', async () => {
+    // Il alimente la caisse, il n'en reçoit pas : lui poser un plafond le
+    // ferait entrer dans le réajustement, donc réclamer de l'argent à la
+    // caisse qu'il est censé financer.
+    const { service, enregistres } = monter();
+
+    await service.create(
+      { ...base, estPrincipal: true, soldeInitial: '5000000', budgetMensuel: '900000' },
+      '2',
+    );
+
+    expect(enregistres[0].estPrincipal).toBe(true);
+    expect(enregistres[0].soldeInitial).toBe('0');
+    expect(enregistres[0].budgetMensuel).toBeNull();
+  });
+
+  it('perd son plafond en devenant principal', async () => {
+    const existant = {
+      id: '7',
+      caisseSourceId: '4',
+      estPrincipal: false,
+      proprietaireType: 'USER',
+      budgetMensuel: '900000',
+    };
+    const { service } = monter(existant);
+
+    await service.update('7', { estPrincipal: true }, '2');
+
+    expect(existant.budgetMensuel).toBeNull();
+  });
+
+  it('un portefeuille ordinaire garde son plafond', async () => {
+    const { service, enregistres } = monter();
+
+    await service.create({ ...base, estPrincipal: false, budgetMensuel: '900000' }, '2');
+
+    expect(enregistres[0].budgetMensuel).toBe('900000');
+  });
+});

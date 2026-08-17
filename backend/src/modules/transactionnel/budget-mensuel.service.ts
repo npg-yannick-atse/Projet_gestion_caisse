@@ -74,7 +74,21 @@ export class BudgetMensuelService implements OnModuleInit, OnModuleDestroy {
     if (!(await this.jourVenu())) return 0;
     const mois = this.currentMonth();
     const repo = this.dataSource.getRepository(Portefeuille);
-    const cibles = await repo.find({ where: { estActif: true, budgetMensuel: Not(IsNull()) } });
+    /*
+     * LES PORTEFEUILLES PRINCIPAUX SONT EXCLUS.
+     *
+     * Un principal est la RÉSERVE qui alimente sa caisse ; il n'en reçoit pas.
+     * Le réajuster reviendrait à le remplir depuis la caisse qu'il est censé
+     * remplir — un circuit fermé. C'était bel et bien le cas : P_CI_XOF,
+     * marqué principal, réclamait un milliard à la caisse qu'il devait
+     * financer, et le log répétait toutes les heures qu'elle était trop pauvre.
+     *
+     * Le filtre est posé EN BASE, dans la clause `where` : un principal ne doit
+     * même pas être chargé.
+     */
+    const cibles = await repo.find({
+      where: { estActif: true, budgetMensuel: Not(IsNull()), estPrincipal: false },
+    });
     const aTraiter = cibles.filter((p) => p.budgetResetMois !== mois && p.budgetMensuel != null);
     if (aTraiter.length === 0) return 0;
 

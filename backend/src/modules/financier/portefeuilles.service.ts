@@ -48,8 +48,15 @@ export class PortefeuillesService {
     }
     // Portefeuille de DIRECTION : le budget mensuel est hérité (non saisi) du centre
     // de coût de la direction. Portefeuille USER : budget saisi manuellement.
-    const budgetMensuel =
-      dto.proprietaireType === 'DIRECTION' && dto.proprietaireId
+    /*
+     * Un portefeuille PRINCIPAL n'a AUCUN plafond mensuel : ce n'est pas une
+     * enveloppe de dépense mais la réserve qui alimente la caisse. Lui en poser
+     * un le ferait entrer dans le réajustement, donc réclamer de l'argent à la
+     * caisse qu'il est censé financer.
+     */
+    const budgetMensuel = dto.estPrincipal
+      ? null
+      : dto.proprietaireType === 'DIRECTION' && dto.proprietaireId
         ? await this.budgetDirection(String(dto.proprietaireId))
         : dto.budgetMensuel
           ? dto.budgetMensuel
@@ -74,7 +81,13 @@ export class PortefeuillesService {
        * Le champ ne promettait rien de tenable ; il disparaît de l'écran, et le
        * serveur l'ignore — un appel direct à l'API ne doit pas le rétablir.
        */
-      soldeInitial: dto.proprietaireType === 'DIRECTION' ? '0' : (dto.soldeInitial ?? '0'),
+      /*
+       * Un portefeuille PRINCIPAL naît à zéro, comme un portefeuille de
+       * direction. Il est la RÉSERVE qui alimente sa caisse, pas une enveloppe
+       * de dépense : son argent viendra d'un apport, geste qui reste à écrire.
+       */
+      soldeInitial:
+        dto.estPrincipal || dto.proprietaireType === 'DIRECTION' ? '0' : (dto.soldeInitial ?? '0'),
       estPrincipal: dto.estPrincipal ?? false,
       budgetMensuel,
       estActif: true,
@@ -151,7 +164,13 @@ export class PortefeuillesService {
     }
     // Budget mensuel : hérité du centre de coût pour un portefeuille de DIRECTION
     // (non modifiable), saisi manuellement pour un portefeuille USER (chaîne vide => null).
-    if (pf.proprietaireType === 'DIRECTION') {
+    // Un principal reste SANS plafond, quoi qu'on lui envoie : il alimente la
+    // caisse, il n'en reçoit pas. La promotion en principal efface donc le
+    // plafond qu'il pouvait porter avant.
+    const devientPrincipal = dto.estPrincipal ?? pf.estPrincipal;
+    if (devientPrincipal) {
+      pf.budgetMensuel = null;
+    } else if (pf.proprietaireType === 'DIRECTION') {
       pf.budgetMensuel = pf.proprietaireId ? await this.budgetDirection(String(pf.proprietaireId)) : null;
     } else if (dto.budgetMensuel !== undefined) {
       pf.budgetMensuel = dto.budgetMensuel ? dto.budgetMensuel : null;

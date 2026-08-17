@@ -481,6 +481,9 @@ function NewPortefeuilleModal({
   });
 
   const proprietaireType = watch('proprietaireType');
+  // Cocher « principal » retire plafond et solde initial : la case gouverne
+  // l'affichage, pour qu'on ne saisisse pas des montants qui seront ignorés.
+  const estPrincipalChoisi = watch('estPrincipal') ?? false;
   const selectedGestionnaire = watch('gestionnaireId') ?? '';
   const selectedDevise = watch('deviseId') ?? '';
 
@@ -583,7 +586,16 @@ function NewPortefeuilleModal({
             un portefeuille créé à 1 000 milliards face à un plafond de 1
             milliard s'est vu retirer 999 milliards, renvoyés en caisse. Le
             champ ne promettait donc rien de tenable. */}
-        {proprietaireType === 'DIRECTION' ? (
+        {estPrincipalChoisi ? (
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Solde initial et budget mensuel</Label>
+            <Input disabled placeholder="Sans objet pour un portefeuille principal" />
+            <p className="text-[11px] text-[#94A3B8]">
+              Un principal n'est pas une enveloppe de dépense : il ne se plafonne pas et naît vide.
+              Son alimentation reste à définir.
+            </p>
+          </div>
+        ) : proprietaireType === 'DIRECTION' ? (
           <div className="space-y-1 sm:col-span-2">
             <Label>Solde initial et budget mensuel</Label>
             <Input disabled placeholder="Hérités du centre de coût de la direction" />
@@ -606,16 +618,18 @@ function NewPortefeuilleModal({
             </div>
           </>
         )}
-        {/* Un seul principal par caisse : cocher ici destitue le précédent, la
-            base l'impose par un index unique. La case dit ce qu'elle fera
-            plutôt que de laisser découvrir le remplacement après coup. */}
+        {/* Le principal n'est pas un portefeuille ordinaire : c'est la RÉSERVE
+            qui alimente la caisse, en amont d'elle. Il n'a donc ni plafond ni
+            solde initial, et le réajustement mensuel l'ignore — sinon il
+            réclamerait de l'argent à la caisse qu'il est censé financer. */}
         <label className="flex items-start gap-2 sm:col-span-2">
           <input type="checkbox" className="mt-0.5" {...register('estPrincipal')} />
           <span>
             <span className="text-sm font-medium text-[#0F172A]">Portefeuille principal de cette caisse</span>
             <span className="block text-[11px] text-[#64748B]">
-              Proposé par défaut dans les écrans. Un seul par caisse — s'il en existe déjà un, il
-              perdra cette qualité.
+              La réserve qui alimente la caisse, en amont d'elle. Sans plafond mensuel ni solde
+              initial — il naît vide. Un seul par caisse : s'il en existe déjà un, il perdra cette
+              qualité.
             </span>
           </span>
         </label>
