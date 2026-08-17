@@ -50,7 +50,6 @@ function useFinancePerms() {
   };
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useRecusCaisse, imprimerRecu } from '@/api/recusCaisse';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -878,83 +877,6 @@ function WalletCard({
 // SECTION PORTEFEUILLES (dépliée sous une caisse)
 // ============================================================
 
-/**
- * Reçus de réception d'une caisse.
- *
- * Toute sortie d'argent laissait une pièce — le bon, imprimé et signé. Les
- * ENTRÉES n'en laissaient aucune : celui qui apporte n'avait rien à garder, le
- * caissier rien à opposer. Chaque crédit de la caisse produit désormais un reçu
- * numéroté, imprimable avec DEUX signatures — celui qui remet, celui qui reçoit.
- */
-function RecusSection({ caisseId }: { caisseId: string }) {
-  const { data: recus, isLoading } = useRecusCaisse(caisseId, 50);
-  if (isLoading) return null;
-
-  /*
-   * L'ABSENCE SE DIT. La section disparaissait entièrement quand aucun reçu
-   * n'existait : on ne pouvait pas distinguer « cette caisse n'a rien reçu » de
-   * « les reçus ne sont pas affichés ici », et la fonctionnalité restait
-   * introuvable tant qu'elle n'avait pas servi.
-   *
-   * Le texte dit aussi qu'aucun bouton ne manque : un reçu constate une entrée
-   * d'argent, il ne se saisit pas.
-   */
-  if (!recus || recus.length === 0) {
-    return (
-      <div className="border-t border-[rgba(15,76,129,0.07)] p-[18px]">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
-          Reçus de réception
-        </div>
-        <p className="rounded-[9px] bg-[#F8FAFC] px-3 py-2.5 text-[11px] text-[#64748B]">
-          Aucune entrée d'argent enregistrée sur cette caisse. Les reçus sont émis{' '}
-          <strong>automatiquement</strong> — encaissement, recharge, retour d'un bon, reprise de
-          budget — et deviennent imprimables ici. Il n'y a rien à saisir.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="border-t border-[rgba(15,76,129,0.07)] p-[18px]">
-      <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.6px] text-[#64748B]">
-          Reçus de réception
-        </span>
-        <span className="text-[10px] text-[#94A3B8]">{recus.length} dernier(s)</span>
-      </div>
-      <div className="space-y-1">
-        {recus.map((r) => (
-          <div
-            key={r.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-[9px] border border-[rgba(15,76,129,0.07)] px-3 py-1.5"
-          >
-            <div className="min-w-0">
-              <span className="font-mono text-[11px] font-semibold text-[#0F172A]">{r.numero}</span>
-              <span className="ml-2 text-[11px] text-[#64748B]">
-                {new Date(r.createdAt).toLocaleString('fr-FR')}
-                {r.motif ? ` — ${r.motif}` : ''}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="tabular-nums text-[12px] font-semibold text-[#047857]">
-                +{formatMontant(r.montant)} {r.deviseCode ?? ''}
-              </span>
-              <button
-                type="button"
-                onClick={() => imprimerRecu(r)}
-                title="Imprimer le reçu"
-                className="rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2 py-0.5 text-[10px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
-              >
-                Imprimer
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; deviseId: string }) {
   const { data: portefeuilles, isLoading } = usePortefeuilles(caisseId);
   const { data: devises } = useDevises();
@@ -1382,7 +1304,6 @@ export function CaissesPage() {
             onEdit={() => setEditCaisse(caisse)}
           />
           <PortefeuillesSection caisseId={caisse.id} deviseId={caisse.deviseId} />
-          <RecusSection caisseId={caisse.id} />
         </div>
       ))}
     </div>

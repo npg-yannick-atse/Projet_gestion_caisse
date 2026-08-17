@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Calendar, CalendarRange, Landmark, Plus, Repeat, TrendingUp, Wallet, X } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { RetourBonCaisseModal } from '@/components/RetourBonCaisseModal';
+import { RecusCaisseSection } from '@/components/RecusCaisseSection';
 import { listPartenaires } from '@/api/referentiel';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
@@ -412,6 +413,11 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
       {retourOuvert && (
         <RetourBonCaisseModal caisseId={encCaisseId || undefined} onClose={() => setRetourOuvert(false)} />
       )}
+
+      {/* Les reçus vivent ICI, sur l'écran où le caissier encaisse : c'est là
+          qu'il doit retrouver la pièce de ce qu'il vient de recevoir, sans
+          changer d'écran. Restreints à la caisse choisie quand il y en a une. */}
+      {isEnc && <RecusCaisseSection caisseId={encCaisseId || undefined} />}
 
       {/* Statistiques du mode courant */}
       <div className="grid gap-3 sm:grid-cols-3">
