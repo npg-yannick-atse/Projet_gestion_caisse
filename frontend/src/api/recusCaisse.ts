@@ -7,6 +7,8 @@ export interface RecuCaisse {
   caisseId: string;
   deviseId: string;
   montant: string;
+  /** Partagé avec l'opération qui l'a produit : c'est ce qui les relie. */
+  transactionUuid: string;
   typeEntree?: string | null;
   remisPar?: string | null;
   motif?: string | null;

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, Calendar, CalendarRange, Landmark, Plus, Repeat, TrendingUp, Wallet, X } from 'lucide-react';
 import { usePortefeuilles, useDevises } from '@/api/financierRef';
 import { RetourBonCaisseModal } from '@/components/RetourBonCaisseModal';
-import { RecusCaisseSection } from '@/components/RecusCaisseSection';
+import { useRecusCaisse, imprimerRecu } from '@/api/recusCaisse';
 import { listPartenaires } from '@/api/referentiel';
 import { useOperations } from '@/api/ledger';
 import { useMyBonPerimeter } from '@/api/bons';
@@ -79,6 +79,18 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
 
   const encaissement = useEncaissement();
   const recharge = useRecharge();
+
+  /*
+   * Reçus, indexés par `transactionUuid` — la clé que l'opération et son reçu
+   * partagent. C'est ce qui permet de poser le reçu SUR LA LIGNE du mouvement
+   * qui l'a produit, plutôt que dans une liste séparée qu'il faudrait
+   * rapprocher à l'œil.
+   */
+  const { data: recus } = useRecusCaisse(undefined, 200);
+  const recuParTransaction = useMemo(
+    () => new Map((recus ?? []).map((r) => [String(r.transactionUuid), r])),
+    [recus],
+  );
 
   // Formulaire de saisie en modale (déclenché par un bouton).
   const [formOpen, setFormOpen] = useState(false);
@@ -413,11 +425,6 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
       {retourOuvert && (
         <RetourBonCaisseModal caisseId={encCaisseId || undefined} onClose={() => setRetourOuvert(false)} />
       )}
-
-      {/* Les reçus vivent ICI, sur l'écran où le caissier encaisse : c'est là
-          qu'il doit retrouver la pièce de ce qu'il vient de recevoir, sans
-          changer d'écran. Restreints à la caisse choisie quand il y en a une. */}
-      {isEnc && <RecusCaisseSection caisseId={encCaisseId || undefined} />}
 
       {/* Statistiques du mode courant */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -884,12 +891,13 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
               <SortableHeader column="montant" state={sort.state} onSort={sort.setSort}>Montant</SortableHeader>
               <th className="px-4 py-2.5 font-semibold">{isEnc ? 'Client' : 'Référence'}</th>
               <th className="px-4 py-2.5 font-semibold">Motif</th>
+              <th className="px-4 py-2.5 font-semibold">Reçu</th>
             </tr>
           </thead>
           <tbody>
             {(ops ?? []).length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-[#64748B]">
+                <td colSpan={5} className="px-4 py-10 text-center text-[#64748B]">
                   {dateFrom || dateTo
                     ? 'Aucun mouvement pour ces dates.'
                     : isEnc
@@ -915,6 +923,27 @@ export function MouvementsCaissePage({ initialMode = 'ENCAISSEMENT' }: { initial
                   )}
                 </td>
                 <td className="px-4 py-3 text-[#64748B]">{o.motif || '—'}</td>
+                {/* Le reçu SUR LA LIGNE du mouvement qui l'a produit : c'est là
+                    qu'on le cherche, pas dans une liste séparée qu'il faudrait
+                    rapprocher à l'œil. Le lien est le `transactionUuid`, que
+                    l'opération et son reçu partagent.
+                    Un tiret quand il n'y en a pas : une sortie d'argent
+                    n'engendre aucun reçu, et une entrée antérieure à la mise en
+                    service n'en a jamais eu. */}
+                <td className="px-4 py-3">
+                  {recuParTransaction.get(String(o.transactionUuid)) ? (
+                    <button
+                      type="button"
+                      onClick={() => imprimerRecu(recuParTransaction.get(String(o.transactionUuid))!)}
+                      title="Imprimer le reçu de réception"
+                      className="inline-flex items-center gap-1 rounded-[7px] border border-[rgba(15,76,129,0.15)] px-2.5 py-1 text-[10px] font-medium text-[#0F4C81] transition hover:bg-[#EFF6FF]"
+                    >
+                      {recuParTransaction.get(String(o.transactionUuid))!.numero}
+                    </button>
+                  ) : (
+                    <span className="text-[#CBD5E1]">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
