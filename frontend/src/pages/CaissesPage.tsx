@@ -318,24 +318,39 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
           {errors.libelle && <p className="text-sm text-destructive">{errors.libelle.message}</p>}
         </div>
 
+        {/* Un portefeuille de DIRECTION n'a pas de solde initial saisissable :
+            il est alimenté à son plafond au début de chaque mois, et tout
+            excédent repart en caisse au réajustement. */}
         <div className="space-y-1.5">
           <Label htmlFor="pf-edit-solde">Solde initial</Label>
-          <Input
-            id="pf-edit-solde"
-            inputMode="decimal"
-            placeholder="0"
-            disabled={soldeLocked}
-            {...register('soldeInitial')}
-          />
-          {soldeLocked && (
-            <p className="text-[11px] text-[#B45309]">
-              {!fp.canEditSoldeInitial
-                ? 'Modification réservée aux administrateurs (permission dédiée).'
-                : 'Verrouillé : des écritures existent sur ce portefeuille — passez par un ajustement.'}
-            </p>
-          )}
-          {errors.soldeInitial && (
-            <p className="text-sm text-destructive">{errors.soldeInitial.message}</p>
+          {portefeuille.proprietaireType === 'DIRECTION' ? (
+            <>
+              <Input id="pf-edit-solde" disabled readOnly value="" placeholder="Non applicable" />
+              <p className="text-[11px] text-[#B45309]">
+                Sans objet pour un portefeuille de direction : il est alimenté chaque mois à
+                hauteur du budget du centre de coût.
+              </p>
+            </>
+          ) : (
+            <>
+              <Input
+                id="pf-edit-solde"
+                inputMode="decimal"
+                placeholder="0"
+                disabled={soldeLocked}
+                {...register('soldeInitial')}
+              />
+              {soldeLocked && (
+                <p className="text-[11px] text-[#B45309]">
+                  {!fp.canEditSoldeInitial
+                    ? 'Modification réservée aux administrateurs (permission dédiée).'
+                    : 'Verrouillé : des écritures existent sur ce portefeuille — passez par un ajustement.'}
+                </p>
+              )}
+              {errors.soldeInitial && (
+                <p className="text-sm text-destructive">{errors.soldeInitial.message}</p>
+              )}
+            </>
           )}
         </div>
 
@@ -543,26 +558,35 @@ function NewPortefeuilleModal({
           </select>
           <GestionnaireRoleWarning userId={selectedGestionnaire} />
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="pf-solde">Solde initial (optionnel)</Label>
-          <Input id="pf-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="pf-budget">Budget mensuel {proprietaireType === 'USER' && '(optionnel)'}</Label>
-          {proprietaireType === 'DIRECTION' ? (
-            <>
-              <Input id="pf-budget" disabled placeholder="Hérité du centre de coût" />
-              <p className="text-[11px] text-[#94A3B8]">
-                Hérité automatiquement du budget mensuel du centre de coût de la direction (non modifiable ici).
-              </p>
-            </>
-          ) : (
-            <>
+        {/* Portefeuille de DIRECTION : ni solde initial ni budget ne se
+            saisissent. Les deux viennent du centre de coût, et un solde initial
+            posé à la main était REPRIS dès le passage du réajustement mensuel —
+            un portefeuille créé à 1 000 milliards face à un plafond de 1
+            milliard s'est vu retirer 999 milliards, renvoyés en caisse. Le
+            champ ne promettait donc rien de tenable. */}
+        {proprietaireType === 'DIRECTION' ? (
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Solde initial et budget mensuel</Label>
+            <Input disabled placeholder="Hérités du centre de coût de la direction" />
+            <p className="text-[11px] text-[#94A3B8]">
+              Le plafond vient du budget mensuel du centre de coût, et le portefeuille est
+              alimenté à ce plafond au début de chaque mois. Saisir un solde initial ici serait
+              sans effet : l'excédent repartirait en caisse au premier réajustement.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <Label htmlFor="pf-solde">Solde initial (optionnel)</Label>
+              <Input id="pf-solde" inputMode="decimal" placeholder="0" {...register('soldeInitial')} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pf-budget">Budget mensuel (optionnel)</Label>
               <Input id="pf-budget" inputMode="decimal" placeholder="Plafond / mois" {...register('budgetMensuel')} />
               {errors.budgetMensuel && <p className="text-xs text-destructive">{errors.budgetMensuel.message}</p>}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={create.isPending}>
             {create.isPending ? 'Création…' : 'Créer'}

@@ -62,7 +62,19 @@ export class PortefeuillesService {
       proprietaireType: dto.proprietaireType,
       proprietaireId: dto.proprietaireId as any,
       gestionnaireId: dto.gestionnaireId ? (dto.gestionnaireId as any) : null,
-      soldeInitial: dto.soldeInitial ?? '0',
+      /*
+       * Portefeuille de DIRECTION : solde initial forcé à zéro.
+       *
+       * Il est alimenté à son plafond au début de chaque mois par le
+       * réajustement du budget, qui ramène le disponible EXACTEMENT au plafond
+       * du centre de coût. Un solde initial saisi à la main y était donc repris
+       * aussitôt : un portefeuille créé à 1 000 milliards face à un plafond de
+       * 1 milliard s'est vu retirer 999 milliards, renvoyés en caisse.
+       *
+       * Le champ ne promettait rien de tenable ; il disparaît de l'écran, et le
+       * serveur l'ignore — un appel direct à l'API ne doit pas le rétablir.
+       */
+      soldeInitial: dto.proprietaireType === 'DIRECTION' ? '0' : (dto.soldeInitial ?? '0'),
       budgetMensuel,
       estActif: true,
       createdById: userId as any,
@@ -94,7 +106,13 @@ export class PortefeuillesService {
     //  2) Verrou d'intégrité : figé dès qu'une écriture existe sur le portefeuille —
     //     changer l'amorce réécrirait rétroactivement tout l'historique de solde.
     //     Pour corriger un solde après activité, passer par une opération d'ajustement.
-    if (dto.soldeInitial !== undefined && Number(dto.soldeInitial) !== Number(pf.soldeInitial || 0)) {
+    // Même règle qu'à la création : un portefeuille de DIRECTION n'a pas de
+    // solde initial propre, le réajustement mensuel le reprendrait.
+    if (
+      pf.proprietaireType !== 'DIRECTION' &&
+      dto.soldeInitial !== undefined &&
+      Number(dto.soldeInitial) !== Number(pf.soldeInitial || 0)
+    ) {
       await this.authz.assertPermissionStrict(
         userId,
         'PORTEFEUILLE_SOLDE_INITIAL',
