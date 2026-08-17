@@ -230,6 +230,7 @@ const editPortefeuilleSchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
+  estPrincipal: z.boolean().optional(),
 });
 type EditPortefeuilleFormValues = z.infer<typeof editPortefeuilleSchema>;
 
@@ -281,6 +282,7 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
       // soldeInitial est un DECIMAL : selon le driver il peut arriver en nombre → on force la string.
       soldeInitial: portefeuille.soldeInitial != null ? String(portefeuille.soldeInitial) : '',
       budgetMensuel: portefeuille.budgetMensuel != null ? String(portefeuille.budgetMensuel) : '',
+      estPrincipal: portefeuille.estPrincipal ?? false,
     },
   });
 
@@ -298,6 +300,7 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
           gestionnaireId: values.gestionnaireId ? values.gestionnaireId : undefined,
           soldeInitial: values.soldeInitial || undefined,
           budgetMensuel: values.budgetMensuel || undefined,
+          estPrincipal: values.estPrincipal ?? false,
         },
       },
       { onSuccess: () => onClose() },
@@ -402,6 +405,19 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
           <GestionnaireRoleWarning userId={selectedGestionnaire} />
         </div>
 
+        {/* Cocher ici destitue le principal actuel de la caisse : la place est
+            unique, garantie par un index en base. Décocher ne promeut personne
+            — mieux vaut aucun principal qu'un désigné au hasard. */}
+        <label className="flex items-start gap-2 sm:col-span-2">
+          <input type="checkbox" className="mt-0.5" {...register('estPrincipal')} />
+          <span>
+            <span className="text-sm font-medium text-[#0F172A]">Portefeuille principal de cette caisse</span>
+            <span className="block text-[11px] text-[#64748B]">
+              Un seul par caisse — s'il en existe déjà un, il perdra cette qualité.
+            </span>
+          </span>
+        </label>
+
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={update.isPending}>
             {update.isPending ? 'Enregistrement…' : 'Enregistrer'}
@@ -433,6 +449,7 @@ const createPortefeuilleSchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
+  estPrincipal: z.boolean().optional(),
 });
 type CreatePortefeuilleFormValues = z.infer<typeof createPortefeuilleSchema>;
 
@@ -474,6 +491,7 @@ function NewPortefeuilleModal({
         gestionnaireId: values.gestionnaireId || undefined,
         soldeInitial: values.soldeInitial || undefined,
         budgetMensuel: values.budgetMensuel || undefined,
+        estPrincipal: values.estPrincipal ?? false,
       },
       {
         onSuccess: () => onDone(),
@@ -587,6 +605,19 @@ function NewPortefeuilleModal({
             </div>
           </>
         )}
+        {/* Un seul principal par caisse : cocher ici destitue le précédent, la
+            base l'impose par un index unique. La case dit ce qu'elle fera
+            plutôt que de laisser découvrir le remplacement après coup. */}
+        <label className="flex items-start gap-2 sm:col-span-2">
+          <input type="checkbox" className="mt-0.5" {...register('estPrincipal')} />
+          <span>
+            <span className="text-sm font-medium text-[#0F172A]">Portefeuille principal de cette caisse</span>
+            <span className="block text-[11px] text-[#64748B]">
+              Proposé par défaut dans les écrans. Un seul par caisse — s'il en existe déjà un, il
+              perdra cette qualité.
+            </span>
+          </span>
+        </label>
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={create.isPending}>
             {create.isPending ? 'Création…' : 'Créer'}
@@ -730,6 +761,14 @@ function WalletCard({
             {isInactive && (
               <span className="rounded-full bg-[#FEF3F2] px-1.5 py-0.5 text-[9px] font-semibold text-[#B42318]">
                 Désactivé
+              </span>
+            )}
+            {pf.estPrincipal && (
+              <span
+                className="rounded-full bg-[#FEF9C3] px-1.5 py-0.5 text-[9px] font-semibold text-[#854D0E]"
+                title="Portefeuille principal de cette caisse — proposé par défaut."
+              >
+                Principal
               </span>
             )}
           </div>

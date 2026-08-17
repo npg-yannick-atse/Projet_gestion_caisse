@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNotEmpty, IsNumberString, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ProprietaireType } from '../entities/portefeuille.entity';
 import { IsMontant } from '@common/validators/montant.validator';
@@ -49,4 +49,9 @@ export class CreatePortefeuilleDto {
   @IsOptional()
   @IsMontant()
   budgetMensuel?: string;
+
+  @ApiProperty({ required: false, default: false, description: 'Portefeuille principal de sa caisse (un seul par caisse)' })
+  @IsOptional()
+  @IsBoolean()
+  estPrincipal?: boolean;
 }

@@ -75,11 +75,34 @@ export class PortefeuillesService {
        * serveur l'ignore — un appel direct à l'API ne doit pas le rétablir.
        */
       soldeInitial: dto.proprietaireType === 'DIRECTION' ? '0' : (dto.soldeInitial ?? '0'),
+      estPrincipal: dto.estPrincipal ?? false,
       budgetMensuel,
       estActif: true,
       createdById: userId as any,
     });
+    // Désigner un nouveau principal destitue l'ancien : la place est unique.
+    if (portefeuille.estPrincipal) await this.destituerPrincipal(String(dto.caisseSourceId));
     return this.portefeuilleRepo.save(portefeuille);
+  }
+
+  /**
+   * Destitue le principal actuel d'une caisse, s'il y en a un et que ce n'est
+   * pas celui qu'on désigne.
+   *
+   * Indispensable : la base porte un index unique filtré sur (caisse,
+   * est_principal = 1). Sans cette destitution, désigner un second principal
+   * partirait en violation d'unicité SQL brute au lieu de faire ce qu'on
+   * attend — remplacer. « Principal » est une place, pas une étiquette qu'on
+   * distribue.
+   */
+  private async destituerPrincipal(caisseSourceId: string, saufId?: string): Promise<void> {
+    const qb = this.portefeuilleRepo
+      .createQueryBuilder()
+      .update(Portefeuille)
+      .set({ estPrincipal: false })
+      .where('caisse_source_id = :c AND est_principal = 1 AND deleted_at IS NULL', { c: caisseSourceId });
+    if (saufId) qb.andWhere('id <> :id', { id: saufId });
+    await qb.execute();
   }
 
   async update(id: string, dto: UpdatePortefeuilleDto, userId: string): Promise<Portefeuille> {
@@ -134,6 +157,13 @@ export class PortefeuillesService {
       pf.budgetMensuel = dto.budgetMensuel ? dto.budgetMensuel : null;
     }
     if (dto.estActif !== undefined) pf.estActif = dto.estActif;
+    // Comme à la création : promouvoir destitue l'ancien principal de la caisse.
+    // Retirer la désignation ne promeut personne — mieux vaut aucune caisse
+    // principale qu'une désignée au hasard.
+    if (dto.estPrincipal !== undefined && dto.estPrincipal !== pf.estPrincipal) {
+      if (dto.estPrincipal) await this.destituerPrincipal(String(pf.caisseSourceId), String(pf.id));
+      pf.estPrincipal = dto.estPrincipal;
+    }
     pf.updatedById = userId as any;
     return this.portefeuilleRepo.save(pf);
   }

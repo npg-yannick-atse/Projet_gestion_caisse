@@ -439,6 +439,8 @@ export interface Portefeuille {
   /** Pourquoi le dernier réajustement mensuel a échoué (null = tout va bien). */
   budgetResetErreur?: string | null;
   budgetResetTenteLe?: string | null;
+  /** Portefeuille principal de sa caisse (un seul par caisse). */
+  estPrincipal?: boolean;
   estActif: boolean;
 }
 
@@ -598,6 +600,8 @@ export interface CreatePortefeuillePayload {
   gestionnaireId?: string;
   soldeInitial?: string;
   budgetMensuel?: string;
+  /** Portefeuille principal de sa caisse (un seul par caisse). */
+  estPrincipal?: boolean;
 }
 
 export interface UpdateCaissePayload {
@@ -620,6 +624,8 @@ export interface UpdatePortefeuillePayload {
   soldeInitial?: string;
   budgetMensuel?: string;
   estActif?: boolean;
+  /** Portefeuille principal de sa caisse (un seul par caisse). */
+  estPrincipal?: boolean;
 }
 
 export type TypeOperation =

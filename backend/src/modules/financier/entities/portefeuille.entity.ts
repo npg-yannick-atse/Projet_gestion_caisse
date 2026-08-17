@@ -78,6 +78,18 @@ export class Portefeuille extends AuditableEntity {
   @Column({ name: 'budget_reset_tente_le', type: 'datetime2', precision: 3, nullable: true })
   budgetResetTenteLe?: Date | null;
 
+  /**
+   * Portefeuille principal de sa caisse (migration 0073). UN SEUL par caisse,
+   * garanti par un index unique filtré — l'écran n'est pas le seul garde-fou.
+   *
+   * Ne change aucun flux d'argent : c'est une désignation, pas un circuit. Elle
+   * sert à proposer le bon portefeuille par défaut plutôt qu'à faire chercher
+   * dans une liste où six portefeuilles de direction se ressemblent.
+   */
+  @ApiProperty({ default: false, description: 'Portefeuille principal de sa caisse (un seul par caisse)' })
+  @Column({ name: 'est_principal', type: 'bit', default: false })
+  estPrincipal!: boolean;
+
   @ApiProperty({ default: true })
   @Column({ name: 'est_actif', type: 'bit', default: true })
   estActif!: boolean;

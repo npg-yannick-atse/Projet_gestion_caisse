@@ -58,4 +58,9 @@ export class UpdatePortefeuilleDto {
   @IsOptional()
   @IsBoolean()
   estActif?: boolean;
+
+  @ApiProperty({ required: false, description: 'Portefeuille principal de sa caisse (un seul par caisse)' })
+  @IsOptional()
+  @IsBoolean()
+  estPrincipal?: boolean;
 }
