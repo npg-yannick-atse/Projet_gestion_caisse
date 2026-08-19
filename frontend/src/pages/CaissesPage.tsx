@@ -50,6 +50,7 @@ function useFinancePerms() {
   };
 }
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { PortefeuillePrincipalCard } from '@/components/PortefeuillePrincipalCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -965,15 +966,18 @@ function PortefeuillesSection({ caisseId, deviseId }: { caisseId: string; devise
 
       {isLoading && <div className="text-xs text-[#64748B]">Chargement…</div>}
 
-      {portefeuilles && portefeuilles.length === 0 && (
+      {portefeuilles && portefeuilles.filter((p) => !p.estPrincipal).length === 0 && (
         <div className="rounded-md border border-dashed border-[rgba(15,76,129,0.15)] bg-white p-4 text-center text-xs text-[#94A3B8]">
-          Aucun portefeuille rattaché à cette caisse.
+          Aucun portefeuille de dépense rattaché à cette caisse.
         </div>
       )}
 
-      {portefeuilles && portefeuilles.length > 0 && (
+      {portefeuilles && portefeuilles.filter((p) => !p.estPrincipal).length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {portefeuilles.map((pf) => (
+          {/* Le PRINCIPAL est écarté : il a sa place à part, en amont de la
+              caisse. L'afficher aussi ici le montrerait deux fois, et parmi les
+              portefeuilles de dépense — ce qu'il n'est pas. */}
+          {portefeuilles.filter((pf) => !pf.estPrincipal).map((pf) => (
             <WalletCard
               key={pf.id}
               pf={pf}
@@ -1257,6 +1261,8 @@ export function CaissesPage() {
   }, [qc]);
 
   const openCount = caisses?.filter((c) => c.statut === 'OUVERTE').length ?? 0;
+  // Le code de devise sert à étiqueter la réserve de chaque caisse.
+  const { data: devisesListe } = useDevises();
 
   // Ordre STABLE par identifiant (immuable) : modifier un champ d'une caisse
   // ne la fait jamais « passer en bas », quel que soit le champ édité.
@@ -1323,13 +1329,18 @@ export function CaissesPage() {
         </Panel>
       )}
 
-      {/* Une LIGNE par caisse : la caisse (verte) à gauche, SES portefeuilles (bleus)
-          à droite, le tout dans la MÊME div. Tout est affiché d'emblée. */}
+      {/* Une LIGNE par caisse, dans le SENS DE L'ARGENT : la réserve (violette)
+          qui alimente, puis la caisse (verte), puis les portefeuilles de dépense
+          (bleus). La place à l'écran dit le circuit. */}
       {orderedCaisses.map((caisse) => (
         <div
           key={caisse.id}
-          className="grid items-start gap-3 rounded-[16px] border border-[rgba(15,76,129,0.12)] bg-white p-3 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]"
+          className="grid items-start gap-3 rounded-[16px] border border-[rgba(15,76,129,0.12)] bg-white p-3 lg:grid-cols-[minmax(0,240px)_minmax(0,320px)_minmax(0,1fr)]"
         >
+          <PortefeuillePrincipalCard
+            caisseId={caisse.id}
+            deviseCode={(devisesListe ?? []).find((d) => d.id === caisse.deviseId)?.code ?? ''}
+          />
           <CaisseCard
             caisse={caisse}
             selected={false}
