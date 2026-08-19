@@ -35,6 +35,9 @@ function monter(pfExistant?: any) {
       return { id: '9', ...x };
     }),
     createQueryBuilder: jest.fn(() => qb),
+    // Un principal tire sa devise et son propriétaire de SA CAISSE : le service
+    // l'interroge, la doublure doit donc répondre.
+    manager: { query: jest.fn(async () => [{ id: '4', deviseId: '1' }]) },
   };
 
   const service = new PortefeuillesService(
@@ -137,5 +140,41 @@ describe('portefeuille principal : ni plafond ni solde initial', () => {
     await service.create({ ...base, estPrincipal: false, budgetMensuel: '900000' }, '2');
 
     expect(enregistres[0].budgetMensuel).toBe('900000');
+  });
+});
+
+describe('portefeuille principal : la caisse est propriétaire, et donne sa devise', () => {
+  it("n'exige aucun propriétaire : il est déduit de la caisse", async () => {
+    // Le demander obligerait à prétendre qu'une réserve de caisse appartient à
+    // quelqu'un — et le portefeuille entrerait dans l'enveloppe de la direction
+    // citée, alors que personne ne dépense depuis lui.
+    const { service, enregistres } = monter();
+
+    await service.create(
+      { code: 'P_PRINC', libelle: 'Réserve', caisseSourceId: '4', estPrincipal: true },
+      '2',
+    );
+
+    expect(enregistres[0].proprietaireType).toBe('CAISSE');
+    expect(String(enregistres[0].proprietaireId)).toBe('4');
+  });
+
+  it('prend la devise de sa caisse, même si on en envoie une autre', async () => {
+    // Une réserve dans une autre monnaie ne pourrait pas alimenter sa caisse :
+    // le grand livre refuse un mouvement dont la caisse ne détient pas la devise.
+    const { service, enregistres } = monter();
+
+    await service.create({ ...base, estPrincipal: true, deviseId: '3' }, '2');
+
+    expect(String(enregistres[0].deviseId)).toBe('1');
+  });
+
+  it('laisse un portefeuille ordinaire choisir son propriétaire et sa devise', async () => {
+    const { service, enregistres } = monter();
+
+    await service.create({ ...base, estPrincipal: false, deviseId: '3' }, '2');
+
+    expect(enregistres[0].proprietaireType).toBe('USER');
+    expect(String(enregistres[0].deviseId)).toBe('3');
   });
 });

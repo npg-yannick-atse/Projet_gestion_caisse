@@ -22,18 +22,23 @@ export class CreatePortefeuilleDto {
   caisseSourceId!: string;
 
   @ApiProperty({ description: 'Devise (fin_devise) — doit correspondre à la caisse source' })
-  @IsNotEmpty()
+  // Idem : un principal prend la devise de sa caisse — une réserve dans une
+  // autre monnaie ne pourrait pas l'alimenter.
+  @IsOptional()
   @IsNumberString()
-  deviseId!: string;
+  deviseId?: string;
 
-  @ApiProperty({ enum: ['USER', 'DIRECTION'] })
+  // Facultatif pour un portefeuille PRINCIPAL : la caisse en est le propriétaire,
+  // et le serveur le déduit. Exigé pour tous les autres.
+  @ApiProperty({ enum: ['USER', 'DIRECTION'], required: false })
+  @IsOptional()
   @IsIn(['USER', 'DIRECTION'])
-  proprietaireType!: ProprietaireType;
+  proprietaireType?: ProprietaireType;
 
   @ApiProperty({ description: 'Identifiant du propriétaire (utilisateur ou direction)' })
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumberString()
-  proprietaireId!: string;
+  proprietaireId?: string;
 
   @ApiProperty({ required: false, description: 'Identifiant du gestionnaire de portefeuille' })
   @IsOptional()

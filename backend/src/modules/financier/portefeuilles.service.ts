@@ -46,6 +46,33 @@ export class PortefeuillesService {
           : `Un portefeuille avec le code ${dto.code} existe déjà`,
       );
     }
+    /*
+     * PORTEFEUILLE PRINCIPAL : la caisse est son propriétaire, et sa devise.
+     *
+     * Il n'appartient ni à une personne ni à une direction — c'est la réserve
+     * de SA caisse. Le dire autrement l'aurait fait apparaître dans l'enveloppe
+     * de la direction désignée, alors que personne ne dépense depuis lui.
+     *
+     * La devise est celle de la caisse, sans discussion : une réserve dans une
+     * autre monnaie ne pourrait pas l'alimenter — le grand livre refuse un
+     * mouvement dont la caisse ne détient pas la devise.
+     *
+     * On ne demande donc RIEN à l'écran : tout se déduit de la caisse.
+     */
+    let proprietaireType = dto.proprietaireType;
+    let proprietaireId = dto.proprietaireId;
+    let deviseId = dto.deviseId;
+    if (dto.estPrincipal) {
+      const caisse = await this.portefeuilleRepo.manager.query(
+        `SELECT id, devise_id AS deviseId FROM dbo.fin_caisse WHERE id = @0`,
+        [String(dto.caisseSourceId)],
+      );
+      if (!caisse[0]) throw new NotFoundException(`Caisse ${dto.caisseSourceId} introuvable`);
+      proprietaireType = 'CAISSE' as any;
+      proprietaireId = String(caisse[0].id);
+      deviseId = String(caisse[0].deviseId);
+    }
+
     // Portefeuille de DIRECTION : le budget mensuel est hérité (non saisi) du centre
     // de coût de la direction. Portefeuille USER : budget saisi manuellement.
     /*
@@ -65,9 +92,9 @@ export class PortefeuillesService {
       code: dto.code,
       libelle: dto.libelle,
       caisseSourceId: dto.caisseSourceId as any,
-      deviseId: dto.deviseId as any,
-      proprietaireType: dto.proprietaireType,
-      proprietaireId: dto.proprietaireId as any,
+      deviseId: deviseId as any,
+      proprietaireType: proprietaireType,
+      proprietaireId: proprietaireId as any,
       gestionnaireId: dto.gestionnaireId ? (dto.gestionnaireId as any) : null,
       /*
        * Portefeuille de DIRECTION : solde initial forcé à zéro.

@@ -440,17 +440,25 @@ function EditPortefeuilleModal({ portefeuille, onClose }: { portefeuille: Portef
 const createPortefeuilleSchema = z.object({
   code: z.string().trim().min(1, 'Requis'),
   libelle: z.string().trim().min(1, 'Requis'),
-  proprietaireType: z.enum(['USER', 'DIRECTION']),
-  proprietaireId: z.string().trim().min(1, 'Propriétaire requis'),
+  proprietaireType: z.enum(['USER', 'DIRECTION']).optional(),
+  proprietaireId: z.string().optional(),
   gestionnaireId: z.string().optional(),
-  deviseId: z.string().trim().min(1, 'Devise requise'),
+  deviseId: z.string().optional(),
   soldeInitial: z.string().optional(),
   budgetMensuel: z
     .string()
     .optional()
     .refine((v) => !v || /^\d+(\.\d{1,4})?$/.test(v), 'Montant invalide'),
   estPrincipal: z.boolean().optional(),
-});
+})
+  // Un principal tient son propriétaire ET sa devise de sa caisse : les exiger
+  // obligerait à saisir ce que le serveur va de toute façon remplacer.
+  .superRefine((v, ctx) => {
+    if (v.estPrincipal) return;
+    if (!v.proprietaireType) ctx.addIssue({ code: 'custom', path: ['proprietaireType'], message: 'Requis' });
+    if (!v.proprietaireId?.trim()) ctx.addIssue({ code: 'custom', path: ['proprietaireId'], message: 'Propriétaire requis' });
+    if (!v.deviseId?.trim()) ctx.addIssue({ code: 'custom', path: ['deviseId'], message: 'Devise requise' });
+  });
 type CreatePortefeuilleFormValues = z.infer<typeof createPortefeuilleSchema>;
 
 function NewPortefeuilleModal({
@@ -515,6 +523,16 @@ function NewPortefeuilleModal({
           <Input id="pf-libelle" {...register('libelle')} />
           {errors.libelle && <p className="text-xs text-destructive">{errors.libelle.message}</p>}
         </div>
+        {estPrincipalChoisi ? (
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Devise</Label>
+            <Input disabled placeholder="Celle de la caisse" />
+            <p className="text-[11px] text-[#94A3B8]">
+              Une réserve dans une autre monnaie ne pourrait pas alimenter sa caisse : le grand
+              livre refuse un mouvement dont la caisse ne détient pas la devise.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-1 sm:col-span-2">
           <Label htmlFor="pf-devise">Devise</Label>
           <select id="pf-devise" className={selectClass} {...register('deviseId')}>
@@ -533,6 +551,20 @@ function NewPortefeuilleModal({
           )}
           {errors.deviseId && <p className="text-xs text-destructive">{errors.deviseId.message}</p>}
         </div>
+        )}
+        {/* Un principal appartient à SA CAISSE : ni personne ni direction à
+            désigner. Le demander obligerait à prétendre le contraire, et le
+            portefeuille apparaîtrait dans l'enveloppe de la direction citée. */}
+        {estPrincipalChoisi ? (
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Propriétaire</Label>
+            <Input disabled placeholder="La caisse elle-même" />
+            <p className="text-[11px] text-[#94A3B8]">
+              Un portefeuille principal appartient à sa caisse. Il n'entre donc dans l'enveloppe
+              de personne — on ne dépense pas depuis la réserve.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-1 sm:col-span-2">
           <Label>Propriétaire</Label>
           <div className="flex gap-2">
@@ -564,6 +596,7 @@ function NewPortefeuilleModal({
           </div>
           {errors.proprietaireId && <p className="text-xs text-destructive">{errors.proprietaireId.message}</p>}
         </div>
+        )}
         <div className="space-y-1 sm:col-span-2">
           <Label htmlFor="pf-gest" className="flex items-center gap-1.5">
             <UserCog className="h-3.5 w-3.5 text-[#1A6DB5]" />

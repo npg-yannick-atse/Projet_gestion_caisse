@@ -594,9 +594,10 @@ export interface CreatePortefeuillePayload {
   code: string;
   libelle: string;
   caisseSourceId: string;
-  deviseId: string;
-  proprietaireType: ProprietaireType;
-  proprietaireId: string;
+  /** Déduits de la caisse pour un portefeuille principal — donc facultatifs. */
+  deviseId?: string;
+  proprietaireType?: ProprietaireType;
+  proprietaireId?: string;
   gestionnaireId?: string;
   soldeInitial?: string;
   budgetMensuel?: string;
